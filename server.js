@@ -10,7 +10,7 @@ import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
-const DATA = join(ROOT, 'data');          // 산초의 모든 상태는 이 폴더 안 텍스트 파일이다. 지우면 초기화.
+const DATA = process.env.SANCHO_DATA || join(ROOT, 'data');   // 산초의 모든 상태는 이 폴더 안 텍스트 파일이다. 지우면 초기화. (SANCHO_DATA 로 위치 변경)
 const JOURNAL = join(DATA, 'journal');
 mkdirSync(JOURNAL, { recursive: true });
 const PORT = Number(process.env.SANCHO_PORT || 8790);
@@ -35,7 +35,7 @@ function findClaude() {
     return out.split(/\r?\n/).map((s) => s.trim()).find(Boolean) || null;
   } catch { return null; }
 }
-const CLAUDE = findClaude();
+const CLAUDE = process.env.SANCHO_CLAUDE || findClaude();   // SANCHO_CLAUDE: 다른 경로의 claude, 또는 시험용 가짜 두뇌(.js)
 let CLAUDE_VERSION = '';
 try { if (CLAUDE) CLAUDE_VERSION = execFileSync(CLAUDE, ['--version'], { encoding: 'utf8' }).trim(); } catch {}
 
@@ -77,14 +77,19 @@ function claude실행({ prompt, resume, onEvent }) {
   if (s.allowHome) args.push('--add-dir', homedir());
   if (resume) args.push('--resume', resume);
   const env = { ...process.env };
-  delete env.CLAUDECODE; delete env.CLAUDE_CODE_ENTRYPOINT;   // Claude Code 안에서 산초를 시험할 때 "중첩 실행" 으로 막히지 않게
-  const proc = spawn(CLAUDE, args, { cwd: DATA, env, windowsHide: true });
+  // Claude Code 세션 안(데스크톱 앱 등)에서 산초를 띄우면 세션 전용 환경변수가 상속돼 자식 claude 가 "중첩 실행"에 걸리거나
+  // 자기 로그인을 못 찾는다(2026-09-12 실측: Not logged in). 그 경우에만 관련 변수를 전부 지운다. 평소 실행엔 아무 영향 없다.
+  if (env.CLAUDECODE || env.CLAUDE_CODE_CHILD_SESSION) for (const k of Object.keys(env)) if (/^CLAUDE/.test(k) || k === 'ANTHROPIC_BASE_URL') delete env[k];
+  const [cmd, pre] = CLAUDE.endsWith('.js') ? [process.execPath, [CLAUDE]] : [CLAUDE, []];   // .js 면 node 로 실행(selftest 의 가짜 두뇌)
+  const proc = spawn(cmd, [...pre, ...args], { cwd: DATA, env, windowsHide: true });
   proc.stdin.on('error', () => {});
   proc.stdin.end(prompt);                                     // 지시문은 표준입력으로 — 길이 제한·따옴표 문제가 없다
 
   let buf = '', err = '', done = false;
   const emit = (e) => { try { onEvent(e); } catch {} };
   const 요약 = (input) => String(input?.command || input?.file_path || input?.pattern || input?.query || input?.url || input?.description || '').slice(0, 120);
+  const 친절한오류 = (t) => /not logged in/i.test(t) ? `Claude Code 에 로그인이 안 돼 있어요. 터미널에서 claude 를 실행한 뒤 /login 으로 한 번만 로그인하면 됩니다. (${t})`
+    : /limit/i.test(t) ? `구독 사용 한도에 닿았어요. 한도 창이 풀리면 다시 시도해 주세요. (${t})` : t;
   function handle(line) {
     let ev; try { ev = JSON.parse(line); } catch { return; }
     if (ev.type === 'system' && ev.subtype === 'init') emit({ t: 'init', session: ev.session_id, model: ev.model });
@@ -95,7 +100,7 @@ function claude실행({ prompt, resume, onEvent }) {
       }
     } else if (ev.type === 'result') {
       done = true;
-      emit({ t: 'done', ok: !ev.is_error, session: ev.session_id, text: ev.is_error ? String(ev.result || ev.subtype || '오류') : '', cost: ev.total_cost_usd, ms: ev.duration_ms });
+      emit({ t: 'done', ok: !ev.is_error, session: ev.session_id, text: ev.is_error ? 친절한오류(String(ev.result || ev.subtype || '오류')) : '', cost: ev.total_cost_usd, ms: ev.duration_ms });
     }
   }
   proc.stdout.setEncoding('utf8');
@@ -109,7 +114,7 @@ function claude실행({ prompt, resume, onEvent }) {
   proc.on('error', (e) => { done = true; emit({ t: 'done', ok: false, text: `실행 실패: ${e.message}` }); });
   proc.on('close', (code) => {
     if (buf.trim()) handle(buf.trim());
-    if (!done) emit({ t: 'done', ok: false, text: (err.trim() || `Claude Code 가 코드 ${code} 로 끝났어요(중지됐거나 로그인 문제일 수 있어요)`).slice(-1500) });
+    if (!done) emit({ t: 'done', ok: false, text: 친절한오류((err.trim() || `Claude Code 가 코드 ${code} 로 끝났어요(■ 로 중지됐거나 로그인 문제일 수 있어요)`).slice(-1500)) });
   });
   return proc;
 }

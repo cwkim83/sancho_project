@@ -1,22 +1,24 @@
 # 산초 — 다음 할 일 (자동 재개용)
 
 상태: 진행중
-마지막 갱신: 2026-09-12 00:55 (Claude, 집 PC 세션)
+마지막 갱신: 2026-09-12 00:50 (Claude, 집 PC 세션)
 
 ## 목표
 파이스처럼 동작하는 개인 AI 비서 '산초' 초판. 두뇌 = 이 PC 의 Claude Code(`claude -p`, 구독 로그인). 관문·API 키 없음.
 화면은 안 예뻐도 됨. 강의용(대표에게 바이브 코딩으로 만드는 법 가르치기) → 코드가 작고 읽기 쉬워야 함. 의존 패키지 0.
 
 ## 남은 일 (위에서부터)
-- [ ] 1. server.js · public/index.html 첫 판 작성
-- [ ] 2. `claude -p` 연기 시험(--model haiku) — 플래그(stream-json, --append-system-prompt-file, --resume) 동작 확인, 안 되는 플래그는 server.js 에서 고침
-- [ ] 3. 서버 띄우고(.claude/launch.json → 8790) 브라우저로 확인: 채팅 → "기억해" 가 memory.md 에 적히나 → "매일 07:00 …" 이 schedule.json 에 들어가나 → '지금' 버튼 → journal/ 에 결과 → 알림 패널
-- [ ] 4. ■ 중지 버튼 동작 확인(작업 중 누르면 프로세스 종료)
-- [ ] 5. README.md 마무리(강의용 설명), git 커밋
-- [ ] 6. 작업기록.md 에 부장님 아침 보고 작성, 상태: 완료
+- [x] 1. server.js · public/index.html 첫 판 작성 (커밋 e3987f1)
+- [x] 2. `claude -p` 연기 시험 — stream-json / --append-system-prompt-file / stdin 지시문 전부 동작 확인.
+      ⚠️ 단, 이 PC 의 `claude.exe`(2.1.201) 는 **로그인이 안 돼 있다**(`claude auth status` → loggedIn false; 데스크톱 앱 로그인과 별개).
+      진짜 답 시험은 부장님이 터미널에서 `claude` → `/login` 한 뒤에만 가능. 그래서 3번은 가짜 두뇌로 대신한다.
+- [ ] 3. `node selftest.js` 통과시키기 — 가짜 두뇌(selftest.js -p)로 채팅 SSE·대화 id·기록·예약 tick·일지·■중지 검사. 한도 안 씀.
+- [ ] 4. 브라우저 확인(.claude/launch.json → 8790): 화면 렌더, 채팅 시 "로그인 안 됨" 안내가 빨간 말풍선으로 뜨는지, 예약 패널
+- [ ] 5. README 에 "설치돼 있어도 로그인은 따로" 강조, git 커밋
+- [ ] 6. 작업기록.md 에 부장님 아침 보고 작성(할 일: `claude` → `/login` 한 번, 그 뒤 산초시작.bat), 상태: 완료
 
 ## 재개 규칙
 - 체크 안 된 것부터 위에서 순서대로. 한 단계 끝날 때마다 체크·"마지막 갱신" 갱신·git 커밋(원격 push 없음).
 - 한도(rate limit) 오류가 나면 그냥 끝낸다. 예약된 재개(매시 17분 크론, 05:35 예약 작업)가 다시 부른다.
 - 다른 Claude 가 20~30분 내에 이 파일을 갱신했으면 손대지 않는다.
-- 파이스 레포 · 맥북은 건드리지 않는다.
+- 파이스 레포 · 맥북은 건드리지 않는다. 진짜 claude -p 호출은 로그인이 없어 실패하니 시도하지 않는다.
