@@ -235,4 +235,8 @@ createServer(async (req, res) => {
     if (route === 'POST /api/chat') return 채팅(req, res);
     send(res, 404, { error: 'not found' });
   } catch (e) { send(res, 500, { error: String(e?.message || e) }); }
+}).on('error', (e) => {
+  if (e.code !== 'EADDRINUSE') throw e;
+  console.log(`산초가 이미 켜져 있어요 → 브라우저에서 http://127.0.0.1:${PORT} 를 여세요`);   // 산초시작.bat 을 두 번 눌러도 놀라지 않게
+  process.exit(0);
 }).listen(PORT, '127.0.0.1', () => console.log(`산초 → http://127.0.0.1:${PORT}   두뇌: ${CLAUDE ? CLAUDE_VERSION : 'Claude Code 를 찾지 못했어요 (README 참고)'}`));
