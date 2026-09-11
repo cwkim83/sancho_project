@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>산초</title>
+<style>
+  body{margin:0;font:14px/1.5 system-ui,'Malgun Gothic',sans-serif;background:#f4f4f2;color:#222;display:flex;height:100vh}
+  #chat{flex:3;display:flex;flex-direction:column;border-right:1px solid #ddd;background:#fff;min-width:0}
+  #side{flex:2;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:12px;min-width:0}
+  .panel{background:#fff;border:1px solid #ddd;border-radius:8px;padding:10px}
+  .panel h3{margin:0 0 6px;font-size:13px;color:#555}
+  #log{flex:1;overflow:auto;padding:16px}
+  .msg{max-width:85%;margin:6px 0;padding:8px 12px;border-radius:10px;white-space:pre-wrap;word-break:break-word}
+  .user{margin-left:auto;background:#dbeafe}
+  .bot{background:#f1f1ef}
+  .err{background:#fee2e2}
+  .tool{font-size:12px;color:#777;margin:2px 0 2px 8px}
+  #bar{display:flex;gap:8px;padding:10px;border-top:1px solid #ddd}
+  textarea{flex:1;resize:none;height:44px;padding:8px;font:inherit}
+  button{padding:6px 12px;font:inherit;cursor:pointer;border:1px solid #bbb;background:#fafafa;border-radius:6px}
+  #send.stop{background:#c0392b;color:#fff;border-color:#c0392b}
+  .row{display:flex;justify-content:space-between;gap:6px;align-items:center;padding:4px 0;border-top:1px dashed #eee}
+  .small{font-size:12px;color:#666}
+  label{margin-left:8px}
+  pre{white-space:pre-wrap;margin:0;font:12px/1.4 ui-monospace,Consolas,monospace;max-height:220px;overflow:auto}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#c33;margin-right:6px}
+  .dot.ok{background:#2a2}
+</style>
+</head>
+<body>
+<div id="chat">
+  <div id="log"></div>
+  <div id="bar">
+    <textarea id="in" placeholder="산초에게 말하기 (Enter 전송, Shift+Enter 줄바꿈)"></textarea>
+    <button id="send" title="전송">↑</button>
+    <button id="new" title="이어가던 대화를 끊고 새로 시작 (기억·예약은 그대로)">새 대화</button>
+  </div>
+</div>
+<div id="side">
+  <div class="panel"><h3>상태</h3><div id="status"></div>
+    <div class="small" style="margin-top:6px">
+      모델 <select id="model"><option value="sonnet">sonnet</option><option value="opus">opus</option><option value="haiku">haiku</option></select>
+      <label><input type="checkbox" id="allowShell"> 명령 실행 허용</label>
+      <label><input type="checkbox" id="allowHome"> 내 홈 폴더 접근 허용</label>
+    </div>
+  </div>
+  <div class="panel"><h3>예약 <span class="small">— 채팅으로 "매일 7시에 …해줘"</span></h3><div id="sched"></div></div>
+  <div class="panel"><h3>알림 <span class="small">— 예약 실행 결과</span></h3><pre id="journal"></pre></div>
+  <div class="panel"><h3>기억 <span class="small">— 채팅으로 "기억해: …"</span></h3><pre id="memory"></pre></div>
+</div>
+<script>
+const $ = (s) => document.querySelector(s);
+const log = $('#log'), input = $('#in'), sendBtn = $('#send');
+let busy = false;
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function add(cls, text) { const d = document.createElement('div'); d.className = cls; d.textContent = text; log.appendChild(d); log.scrollTop = log.scrollHeight; return d; }
+function 버튼(생각중) { busy = 생각중; sendBtn.classList.toggle('stop', 생각중); sendBtn.textContent = 생각중 ? '■' : '↑'; sendBtn.title = 생각중 ? '중지 — 지금 하는 일을 즉시 끊습니다' : '전송'; }
+async function api(path, body) {
+  const r = await fetch(path, { method: body ? 'POST' : 'GET', headers: { 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  return r.json();
+}
+
+async function send() {
+  const text = input.value.trim();
+  if (!text || busy) return;
+  input.value = ''; add('msg user', text); 버튼(true);
+  const r = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) });
+  if (!r.ok) { const e = await r.json().catch(() => ({})); add('msg bot err', e.error || ('오류 ' + r.status)); 버튼(false); return; }
+  const 생각 = add('tool', '… 생각 중');
+  const reader = r.body.getReader(), dec = new TextDecoder();
+  let buf = '', bot = null;
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i;
+    while ((i = buf.indexOf('\n\n')) >= 0) {
+      const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
+      if (!chunk.startsWith('data: ')) continue;
+      let e; try { e = JSON.parse(chunk.slice(6)); } catch { continue; }
+      if (e.t === 'text') { if (!bot) bot = add('msg bot', ''); bot.textContent += (bot.textContent ? '\n\n' : '') + e.text; }
+      else if (e.t === 'tool') add('tool', '🔧 ' + e.name + (e.input ? ' · ' + e.input : ''));
+      else if (e.t === 'done') { if (!e.ok) add('msg bot err', '⚠️ ' + e.text); else if (e.ms) add('tool', '✓ ' + (e.ms / 1000).toFixed(1) + '초'); }
+      log.scrollTop = log.scrollHeight;
+    }
+  }
+  생각.remove(); 버튼(false); refresh();
+}
+sendBtn.onclick = () => busy ? api('/api/stop', {}) : send();
+input.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
+$('#new').onclick = async () => { await api('/api/new', {}); log.innerHTML = ''; add('tool', '새 대화를 시작했어요. (기억·예약은 그대로)'); };
+for (const id of ['model', 'allowShell', 'allowHome']) {
+  $('#' + id).onchange = async (e) => { const v = e.target.type === 'checkbox' ? e.target.checked : e.target.value; await api('/api/settings', { [id]: v }); refresh(); };
+}
+$('#sched').onclick = async (e) => {
+  const run = e.target.dataset.run, del = e.target.dataset.del;
+  if (run) { const r = await api('/api/schedule/run', { id: run }); if (r.error) alert(r.error); }
+  if (del && confirm('이 예약을 지울까요?')) await api('/api/schedule/remove', { id: del });
+  refresh();
+};
+
+async function refresh() {
+  const s = await api('/api/state');
+  $('#status').innerHTML = `<span class="dot ${s.claude.ok ? 'ok' : ''}"></span>${s.claude.ok ? 'Claude Code ' + esc(s.claude.version) : 'Claude Code 없음 — README 참고'}`
+    + (s.busy ? ` · <b>작업 중 (${esc(s.busy)})</b>` : '') + (s.session ? '<div class="small">대화 이어가는 중 · 끊으려면 "새 대화"</div>' : '');
+  $('#model').value = s.settings.model; $('#allowShell').checked = !!s.settings.allowShell; $('#allowHome').checked = !!s.settings.allowHome;
+  $('#sched').innerHTML = s.schedules.length
+    ? s.schedules.map((j) => `<div class="row"><div><b>${esc(j.time)}</b> ${j.repeat === 'once' ? esc(j.date || '한 번') : '매일'} · ${esc(j.prompt).slice(0, 80)}<div class="small">${j.lastRun ? '마지막 실행 ' + esc(j.lastRun) : '아직 실행 안 함'}</div></div><div><button data-run="${esc(j.id)}">지금</button> <button data-del="${esc(j.id)}">삭제</button></div></div>`).join('')
+    : '<div class="small">없음</div>';
+  $('#journal').textContent = s.journal.map((j) => `# ${j.date}\n${j.text}`).join('\n') || '아직 없음';
+  $('#memory').textContent = s.memory || '아직 없음';
+  if (!log.dataset.loaded) { log.dataset.loaded = 1; for (const h of s.history) add('msg ' + (h.role === 'user' ? 'user' : 'bot'), h.text); }
+}
+refresh();
+setInterval(refresh, 10000);
+</script>
+</body>
+</html>
