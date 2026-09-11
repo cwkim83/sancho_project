@@ -88,7 +88,10 @@ async function send() {
   생각.remove(); 버튼(false); refresh();
 }
 sendBtn.onclick = () => busy ? api('/api/stop', {}) : send();
-input.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
+input.onkeydown = (e) => {
+  if (e.isComposing || e.keyCode === 229) return;   // 한글 조합 중 Enter 는 글자 확정용 — 보내지 않는다
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+};
 $('#new').onclick = async () => { await api('/api/new', {}); log.innerHTML = ''; add('tool', '새 대화를 시작했어요. (기억·예약은 그대로)'); };
 for (const id of ['model', 'allowShell', 'allowHome']) {
   $('#' + id).onchange = async (e) => { const v = e.target.type === 'checkbox' ? e.target.checked : e.target.value; await api('/api/settings', { [id]: v }); refresh(); };

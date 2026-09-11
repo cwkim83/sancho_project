@@ -33,6 +33,8 @@ data/  =  산초의 기억 (전부 텍스트 파일)
 
 1. **Node.js 18 이상** — https://nodejs.org
 2. **Claude Code** — https://code.claude.com/docs/en/quickstart 대로 설치한 뒤 터미널에서 `claude` 를 한 번 실행해 **본인 Claude 구독으로 로그인**합니다. (Pro 이상)
+   - ⚠️ 데스크톱 앱(Claude 앱)에 로그인돼 있어도 **터미널의 `claude` 는 따로 로그인**해야 합니다. 확인은 `claude auth status` → `"loggedIn": true`.
+   - 로그인이 안 돼 있으면 산초 채팅에 "Claude Code 에 로그인이 안 돼 있어요" 라고 뜹니다. 그때 터미널에서 `claude` → `/login`.
 3. 이 폴더에서 **`산초시작.bat`** 더블클릭 (Mac: 터미널에서 `node server.js`) → 브라우저가 http://127.0.0.1:8790 으로 열립니다.
 
 ## 사용

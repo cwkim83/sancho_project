@@ -94,6 +94,7 @@ function claude실행({ prompt, resume, onEvent }) {
     let ev; try { ev = JSON.parse(line); } catch { return; }
     if (ev.type === 'system' && ev.subtype === 'init') emit({ t: 'init', session: ev.session_id, model: ev.model });
     else if (ev.type === 'assistant') {
+      if (ev.message?.model === '<synthetic>') return;   // Claude Code 가 만든 오류 문구(로그인 안 됨 등) — result 에 다시 오니 여기선 건너뛴다
       for (const c of ev.message?.content || []) {
         if (c.type === 'text' && c.text) emit({ t: 'text', text: c.text });
         else if (c.type === 'tool_use') emit({ t: 'tool', name: c.name, input: 요약(c.input) });
@@ -194,12 +195,12 @@ async function 채팅(req, res) {
     prompt: text, resume: 상태().session,
     onEvent: (e) => {
       if (finished) return;
-      if (e.t === 'init' && e.session) 상태저장({ session: e.session });
       if (e.t === 'text') answer += (answer ? '\n\n' : '') + e.text;
       sse(e);
       if (e.t === 'done') {
         finished = true; 현재 = null;
-        if (!e.ok && /session|resume/i.test(e.text)) 상태저장({ session: null });   // 이어가기 실패면 다음엔 새 대화로
+        if (e.ok && e.session) 상태저장({ session: e.session });                    // 성공한 답만 이어간다(실패한 실행의 id 를 resume 하면 또 실패)
+        else if (!e.ok && /session|resume/i.test(e.text)) 상태저장({ session: null });   // 이어가기 자체가 실패면 다음엔 새 대화로
         기록추가('assistant', e.ok ? answer : `⚠️ ${e.text}`);
         res.end();
       }
