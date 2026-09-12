@@ -95,7 +95,7 @@ function claude실행({ prompt, resume, onEvent }) {
   const args = ['-p', '--output-format', 'stream-json', '--verbose', '--model', 모델ID[s.model] || s.model,
     '--append-system-prompt-file', p('.system.md'),
     '--allowedTools', 'Read', 'Glob', 'Grep', 'Edit', 'Write', 'WebSearch', 'WebFetch'];
-  if (s.allowShell || s.allowSelfEdit) args.push('Bash');
+  if (s.allowShell || s.allowSelfEdit) args.push('Bash', 'PowerShell');   // Windows 의 Claude Code 는 PowerShell 도구도 먼저 집는다(2026-09-13 실측)
   if (s.allowApps) args.push(...연결앱);                 // --allowedTools 목록에 이어 붙는다(다른 플래그보다 앞이어야 함)
   if (노력.includes(s.effort)) args.push('--effort', s.effort);
   if (s.allowHome) args.push('--add-dir', homedir());
