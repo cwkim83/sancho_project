@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const DATA = process.env.SANCHO_DATA || join(ROOT, 'data');   // 산초의 모든 상태는 이 폴더 안 텍스트 파일이다. 지우면 초기화. (SANCHO_DATA 로 위치 변경)
 const JOURNAL = join(DATA, 'journal');
-mkdirSync(JOURNAL, { recursive: true });
+for (const d of [JOURNAL, join(DATA, 'uploads'), join(DATA, 'wiki'), join(DATA, '.claude', 'skills')]) mkdirSync(d, { recursive: true });   // 첨부 · 위키 · 스킬(Claude Code 가 cwd/.claude/skills 를 읽는다)
 const PORT = Number(process.env.SANCHO_PORT || 8790);
 
 // ---------- 파일 도우미 ----------
@@ -23,7 +23,11 @@ const readText = (file) => { try { return readFileSync(file, 'utf8'); } catch { 
 const ymd = (d) => d.toLocaleDateString('sv-SE');      // YYYY-MM-DD (현지 날짜)
 const hhmm = (d) => d.toTimeString().slice(0, 5);      // HH:MM
 
-const 기본설정 = { name: '산초', model: 'sonnet', allowShell: false, allowHome: false, allowSelfEdit: false };
+const 기본설정 = { name: '산초', model: 'sonnet', effort: 'high', allowShell: false, allowHome: false, allowSelfEdit: false, allowApps: false };
+const 모델ID = { sonnet: 'sonnet', opus: 'opus', haiku: 'haiku', fable: 'claude-fable-5-1' };   // 화면 이름 → claude --model 값
+const 노력 = ['low', 'medium', 'high', 'xhigh', 'max'];                                            // claude --effort 값(2.1.269 실측)
+const 연결앱 = ['mcp__claude_ai_Gmail', 'mcp__claude_ai_Google_Calendar', 'mcp__claude_ai_Google_Drive', 'mcp__claude_ai_Microsoft_365'];   // claude.ai 커넥터 서버 이름(공백·점 → _)
+const ls = (dir, filter = () => true) => { try { return readdirSync(dir).filter(filter); } catch { return []; } };
 const 설정 = () => ({ ...기본설정, ...readJson(p('settings.json'), {}) });
 const 상태 = () => ({ session: null, runs: {}, sessions: [], ...readJson(p('state.json'), {}) });   // session: 지금 대화 id, sessions: 대화 목록 [{id,title,ts}], runs: 예약별 마지막 실행 날짜
 const 상태저장 = (patch) => writeJson(p('state.json'), { ...상태(), ...patch });
@@ -56,6 +60,11 @@ function 시스템프롬프트() {
    - 삭제 요청이면 그 항목을 배열에서 뺀다. 추가·삭제 뒤엔 결과를 한 줄로 알린다.
    - 예약 시각이 되면 ${s.name} 서버가 prompt 를 너에게 보내 실행하고 결과를 journal/ 에 쌓아 주인에게 보여준다.
 3) journal/ — 예약 실행 결과가 날짜별(YYYY-MM-DD.md) 로 쌓인다. 필요하면 읽어 참고한다.
+4) .claude/skills/<이름>/SKILL.md — 스킬(다시 쓸 절차). 주인이 "이거 스킬로 저장해" 하면 방금 한 절차를 SKILL.md 로 저장한다(맨 위 --- name: 이름 / description: 한 줄 --- 머리말, 그 아래 단계). URL 이나 GitHub 의 SKILL.md 를 가져오라 하면 WebFetch 로 받아 저장한다. 저장된 스킬은 다음 대화부터 자동으로 쓸 수 있다.
+5) wiki/<주제>.md — 조사·정리한 지식. 나중에도 쓸 내용이면 여기 저장·갱신하고, 관련 질문엔 먼저 여기를 본다.
+6) history.jsonl — 지난 대화 기록. "전에 말한 …" 을 찾을 땐 Grep 한다.
+7) uploads/ — 주인이 채팅에 올린 파일. 말 끝에 [첨부 파일] 목록이 붙으면 Read 로 읽고 답한다(이미지·PDF 도 Read 로 볼 수 있다).
+배달: 주인이 예약 결과를 메일 등으로 받고 싶다고 하면 prompt 에 "결과를 <채널>로 보내라" 를 넣는다. ${s.allowApps ? '연결된 앱(Gmail·Google 캘린더·드라이브·Microsoft 365) 도구를 쓸 수 있다.' : '연결된 앱(Gmail 등) 도구는 꺼져 있다. 필요하면 주인에게 설정에서 켜달라고 말한다.'}
 ${(s.allowShell || s.allowSelfEdit) ? '명령 실행(Bash)이 허용돼 있다. 파괴적인 명령은 실행 전에 주인에게 확인한다.' : '명령 실행(Bash)은 꺼져 있다. 필요하면 주인에게 대시보드 설정에서 켜달라고 말한다.'}
 ${s.allowHome ? `주인의 홈 폴더(${homedir()})를 읽고 고칠 수 있다.` : '이 데이터 폴더 밖의 파일은 건드릴 수 없다.'}
 ${s.allowSelfEdit ? 자기수정안내(s) : ''}
@@ -80,10 +89,12 @@ let 현재 = null;   // 진행 중인 실행 { proc, kind, startedAt } — 한 �
 function claude실행({ prompt, resume, onEvent }) {
   const s = 설정();
   writeFileSync(p('.system.md'), 시스템프롬프트());
-  const args = ['-p', '--output-format', 'stream-json', '--verbose', '--model', s.model,
+  const args = ['-p', '--output-format', 'stream-json', '--verbose', '--model', 모델ID[s.model] || s.model,
     '--append-system-prompt-file', p('.system.md'),
     '--allowedTools', 'Read', 'Glob', 'Grep', 'Edit', 'Write', 'WebSearch', 'WebFetch'];
   if (s.allowShell || s.allowSelfEdit) args.push('Bash');
+  if (s.allowApps) args.push(...연결앱);                 // --allowedTools 목록에 이어 붙는다(다른 플래그보다 앞이어야 함)
+  if (노력.includes(s.effort)) args.push('--effort', s.effort);
   if (s.allowHome) args.push('--add-dir', homedir());
   if (s.allowSelfEdit) args.push('--add-dir', ROOT);   // 자기 코드를 고칠 수 있게 산초 폴더를 열어준다
   if (resume) args.push('--resume', resume);
@@ -253,15 +264,19 @@ const send = (res, code, body, type = 'application/json; charset=utf-8') => { re
 const readBody = (req) => new Promise((ok) => { let b = ''; req.on('data', (c) => { b += c; }); req.on('end', () => { try { ok(JSON.parse(b || '{}')); } catch { ok({}); } }); });
 
 async function 채팅(req, res) {
-  const { text } = await readBody(req);
-  if (!text?.trim()) return send(res, 400, { error: '빈 메시지예요' });
+  const body = await readBody(req);
+  const files = Array.isArray(body.files) ? body.files.filter((f) => typeof f === 'string' && f.startsWith('uploads/')) : [];
+  const text = String(body.text || '').trim() || (files.length ? '첨부한 파일을 확인해 주세요.' : '');
+  if (!text) return send(res, 400, { error: '빈 메시지예요' });
+  const prompt = files.length ? `${text}\n\n[첨부 파일 — Read 도구로 읽어라]\n${files.map((f) => '- ' + f).join('\n')}` : text;
+  const 표시 = files.length ? `${text}\n📎 ${files.map((f) => f.replace(/^uploads\/[^-]+-/, '')).join(', ')}` : text;
   if (!CLAUDE) return send(res, 503, { error: 'Claude Code 가 설치돼 있지 않아요. README 의 설치 순서를 보세요.' });
   if (현재) return send(res, 409, { error: `지금 다른 일(${현재.kind})을 하고 있어요. ■ 를 눌러 멈추거나 끝나길 기다려 주세요.` });
   res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache', connection: 'keep-alive' });
   const sse = (e) => { try { res.write(`data: ${JSON.stringify(e)}\n\n`); } catch {} };
   let answer = '', finished = false;
   const proc = claude실행({
-    prompt: text, resume: 상태().session,
+    prompt, resume: 상태().session,
     onEvent: (e) => {
       if (finished) return;
       if (e.t === 'text') answer += (answer ? '\n\n' : '') + e.text;
@@ -271,7 +286,7 @@ async function 채팅(req, res) {
         if (e.ok && e.session) 대화기록(e.session, text);                                // 성공한 답만 이어간다(실패한 실행의 id 를 resume 하면 또 실패)
         else if (!e.ok && /session|resume/i.test(e.text)) 상태저장({ session: null });   // 이어가기 자체가 실패면 다음엔 새 대화로
         const sid = 상태().session;
-        기록추가('user', text, sid); 기록추가('assistant', e.ok ? answer : `⚠️ ${e.text}`, sid);
+        기록추가('user', 표시, sid); 기록추가('assistant', e.ok ? answer : `⚠️ ${e.text}`, sid);
         (설정().allowSelfEdit && e.ok ? 자기수정마무리(text) : Promise.resolve(null))
           .catch((err) => ({ ok: false, text: `자기 수정 마무리 실패: ${err.message}` }))
           .then((r) => { if (r) { sse({ t: 'selfedit', ...r }); 기록추가('assistant', `🔁 ${r.text}`, sid); } res.end(); 일끝(); });
@@ -291,7 +306,20 @@ createServer(async (req, res) => {
       return send(res, 200, {
         claude: { path: CLAUDE, version: CLAUDE_VERSION, ok: !!CLAUDE }, settings: 설정(), session: st.session, sessions: st.sessions, busy: 현재 ? 현재.kind : null, pendingRestart: 재시작예약,
         schedules: 예약목록().map((j) => ({ ...j, lastRun: st.runs[j.id] || null })), memory: readText(p('memory.md')), journal: 일지(), history: 기록(st.session),
+        skills: ls(join(DATA, '.claude', 'skills')), wiki: ls(join(DATA, 'wiki'), (f) => f.endsWith('.md')),
       });
+    }
+    if (route === 'GET /api/file') {   // 위키·스킬 파일 읽기(그 두 폴더만)
+      const rel = String(url.searchParams.get('path') || '');
+      if (!/^(wiki\/[^/\\]+\.md|\.claude\/skills\/[^/\\]+\/SKILL\.md)$/.test(rel)) return send(res, 400, { error: '위키·스킬 파일만 볼 수 있어요' });
+      return send(res, 200, { path: rel, text: readText(p(rel)) });
+    }
+    if (route === 'POST /api/upload') {   // 채팅 첨부: 본문 = 파일 그대로, 이름은 x-name 헤더(URI 인코딩)
+      const name = decodeURIComponent(String(req.headers['x-name'] || 'file')).replace(/[\\/:*?"<>|]/g, '_').slice(-80);
+      const chunks = []; let size = 0;
+      req.on('data', (c) => { size += c.length; if (size > 50e6) req.destroy(); else chunks.push(c); });
+      req.on('end', () => { const rel = `uploads/${Date.now().toString(36)}-${name}`; writeFileSync(p(rel), Buffer.concat(chunks)); send(res, 200, { path: rel, size }); });
+      return;
     }
     if (route === 'POST /api/settings') { writeJson(p('settings.json'), { ...설정(), ...(await readBody(req)) }); return send(res, 200, 설정()); }
     if (route === 'POST /api/new') { 상태저장({ session: null }); return send(res, 200, { ok: true }); }

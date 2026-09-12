@@ -26,7 +26,7 @@ function 가짜두뇌() {
     out({ type: 'system', subtype: 'init', session_id: 'fake-session-1', model: 'fake' });
     out({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Read', input: { file_path: 'memory.md' } }] } });
     if (prompt.includes('천천히')) await new Promise((r) => setTimeout(r, 30_000));   // ■ 중지 시험용
-    out({ type: 'assistant', message: { content: [{ type: 'text', text: `가짜 답: ${prompt.trim().slice(0, 40)}` }] } });
+    out({ type: 'assistant', message: { content: [{ type: 'text', text: `가짜 답: ${prompt.trim().slice(0, 40)}${prompt.includes('[첨부 파일') ? ' +첨부' : ''}` }] } });
     out({ type: 'result', subtype: 'success', is_error: false, session_id: 'fake-session-1', duration_ms: 12, total_cost_usd: 0 });
   });
 }
@@ -55,6 +55,20 @@ async function 시험() {
     assert.equal(JSON.parse(readFileSync(join(data, 'state.json'), 'utf8')).session, 'fake-session-1', '대화 id 저장');
     assert.equal(readFileSync(join(data, 'history.jsonl'), 'utf8').trim().split('\n').length, 2, '기록 2줄(질문·답)');
 
+    // 1b) 첨부: 올리면 uploads/ 에 저장되고, 채팅에 붙이면 지시문 끝에 [첨부 파일] 목록이 붙는다
+    const up = await (await fetch(`${BASE}/api/upload`, { method: 'POST', headers: { 'x-name': encodeURIComponent('메모 1.txt') }, body: 'hello' })).json();
+    assert.ok(up.path.startsWith('uploads/') && up.path.endsWith('-메모 1.txt'), `첨부 경로 ${up.path}`);
+    assert.equal(readFileSync(join(data, up.path), 'utf8'), 'hello', '첨부 내용 저장');
+    const ev1b = await 채팅(BASE, '이 파일 봐', null, [up.path]);
+    assert.ok(ev1b.find((e) => e.t === 'text')?.text.includes('+첨부'), '첨부 목록이 두뇌에 전달된다');
+
+    // 1c) 위키·스킬 목록과 파일 읽기(그 두 폴더만)
+    writeFileSync(join(data, 'wiki', '시험.md'), '# 위키 시험');
+    const st1 = await (await fetch(`${BASE}/api/state`)).json();
+    assert.ok(Array.isArray(st1.skills) && st1.wiki.includes('시험.md'), '위키 목록');
+    assert.equal((await (await fetch(`${BASE}/api/file?path=${encodeURIComponent('wiki/시험.md')}`)).json()).text, '# 위키 시험', '위키 읽기');
+    assert.equal((await fetch(`${BASE}/api/file?path=${encodeURIComponent('../server.js')}`)).status, 400, '다른 파일은 막는다');
+
     // 2) 예약: 첫 tick 에 돌아 journal 에 쌓이고 오늘 실행으로 기록된다
     const 일지 = join(data, 'journal', `${today()}.md`);
     await 기다림(() => existsSync(일지), 12_000, '예약 실행');
@@ -78,15 +92,15 @@ async function 시험() {
     assert.ok(Date.now() - tStop < 3000, `3초 안에 끊긴다 (${Date.now() - tStop}ms)`);
     assert.equal(await exited, 75, '일이 끝나면 코드 75 로 종료(재시작 요청)');
 
-    console.log('산초 자가시험 통과: 화면 문법 · 채팅 SSE · 대화 id · 기록 · 예약 tick · 일지 · 재시작 관문·예약 · ■ 중지 · 종료 75');
+    console.log('산초 자가시험 통과: 화면 문법 · 채팅 SSE · 대화 id · 기록 · 첨부 · 위키/스킬 파일 · 예약 tick · 일지 · 재시작 관문·예약 · ■ 중지 · 종료 75');
   } finally {
     server.kill();
     rmSync(data, { recursive: true, force: true });
   }
 }
 
-async function 채팅(BASE, text, onEvent) {
-  const r = await fetch(`${BASE}/api/chat`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) });
+async function 채팅(BASE, text, onEvent, files) {
+  const r = await fetch(`${BASE}/api/chat`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, files }) });
   assert.equal(r.status, 200, `채팅 응답 ${r.status}`);
   const events = [];
   let buf = '';

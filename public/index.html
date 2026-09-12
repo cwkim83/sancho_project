@@ -7,7 +7,7 @@
 <!-- 마크다운 렌더러(표·굵게·코드). 인터넷이 없으면 못 받아오는데, 그땐 아래 md() 가 글자 그대로 보여준다 -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <style>
-  /* Claude 데스크톱 앱의 느낌을 본뜸: 왼쪽 목록, 가운데 대화(말풍선 없는 답), 아래 둥근 입력창(권한 · 모델 · 전송/중지) */
+  /* Claude 데스크톱 앱의 느낌을 본뜸: 왼쪽 목록, 가운데 대화(말풍선 없는 답), 아래 둥근 입력창(＋첨부 · 권한 · 모델 · 노력 · 전송/중지) */
   :root{--bg:#faf9f5;--side:#f2f0e9;--text:#1f1e1b;--muted:#77746c;--line:#e4e1d9;--accent:#d97757;--user:#efece4;--codebg:#f8ece8;--code:#a53a2e}
   *{box-sizing:border-box}
   body{margin:0;height:100vh;display:flex;font:15px/1.6 system-ui,'Malgun Gothic',sans-serif;background:var(--bg);color:var(--text)}
@@ -28,7 +28,7 @@
   details summary{cursor:pointer;font-size:13px;padding:4px 8px;border-radius:8px;list-style:none;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
   details summary:hover{background:rgba(0,0,0,.05)}
   details .body{font-size:12.5px;padding:2px 8px 8px 14px;color:#3c3a35} details .body.pre{white-space:pre-wrap}
-  details .body p{margin:.3em 0}
+  details .body p{margin:.3em 0} details .body pre{white-space:pre-wrap;font-size:11.5px}
   .foot{border-top:1px solid var(--line);padding:10px 14px;font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:8px;position:relative}
   .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#c33;margin-right:6px;vertical-align:middle} .dot.ok{background:#2e9e5b}
   .icon{margin-left:auto;border:0;background:transparent;cursor:pointer;font-size:16px;color:var(--muted)}
@@ -56,7 +56,10 @@
   .note{font-size:12px;color:var(--muted);margin:4px 0 8px}
   #composerWrap{flex:none;padding:8px 20px 12px}
   #composer{max-width:780px;margin:0 auto;background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 2px 10px rgba(0,0,0,.04);padding:10px 12px 8px}
-  #composer:focus-within{border-color:#c9c5ba}
+  #composer:focus-within{border-color:#c9c5ba} #composer.drag{border-color:var(--accent);background:#fff8f4}
+  .files{display:flex;flex-wrap:wrap;gap:6px;padding:0 4px 6px} .files:empty{display:none}
+  .fchip{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:8px;padding:2px 8px;font-size:12.5px;background:var(--bg);max-width:260px}
+  .fchip span{overflow:hidden;white-space:nowrap;text-overflow:ellipsis} .fchip button{border:0;background:transparent;cursor:pointer;color:var(--muted);padding:0}
   textarea{width:100%;border:0;outline:0;resize:none;font:inherit;background:transparent;max-height:220px;line-height:1.5;padding:4px 4px 8px;display:block}
   .crow{display:flex;align-items:center;justify-content:space-between;gap:8px} .left,.right{display:flex;align-items:center;gap:6px;position:relative}
   .send{width:32px;height:32px;border-radius:50%;border:0;background:var(--text);color:#fff;font-size:16px;cursor:pointer;display:grid;place-items:center}
@@ -66,6 +69,8 @@
   .menu.up{bottom:calc(100% + 6px);right:0} .menu.upleft{bottom:calc(100% + 6px);left:0}
   .menu label,.menu button{display:flex;justify-content:space-between;gap:10px;padding:7px 10px;border-radius:8px;border:0;background:transparent;font:inherit;text-align:left;cursor:pointer;align-items:center;color:var(--text)}
   .menu label:hover,.menu button:hover{background:#f4f2ec} .menu .hint{padding:4px 10px}
+  .eff{padding:8px 10px;min-width:260px} .eff .row{display:flex;justify-content:space-between;align-items:center;gap:10px} .eff .row.hint{padding:0}
+  input[type=range]{width:100%;accent-color:#8a877f;margin:10px 0 4px}
   .center{text-align:center;max-width:780px;margin:6px auto 0}
 </style>
 </head>
@@ -77,6 +82,8 @@
     <div class="sec"><h4>대화</h4><div id="sessions"></div></div>
     <div class="sec"><h4>예약</h4><div id="sched"></div></div>
     <div class="sec"><h4>알림</h4><div id="journal"></div></div>
+    <div class="sec"><h4>스킬</h4><div id="skills"></div></div>
+    <div class="sec"><h4>위키</h4><div id="wiki"></div></div>
     <div class="sec"><h4>기억</h4><div id="memory"></div></div>
   </div>
   <div class="foot"><span id="status"></span><button id="gear" class="icon" title="설정">⚙</button>
@@ -92,13 +99,17 @@
   <div id="log"><div id="col"></div></div>
   <div id="composerWrap">
     <div id="composer">
+      <div id="files" class="files"></div>
       <textarea id="in" rows="1" placeholder="산초에게 말씀하세요…"></textarea>
       <div class="crow">
         <div class="left">
+          <button class="chip" id="attachBtn" title="파일 첨부 — 붙여넣기(Ctrl+V)·끌어다 놓기도 됩니다">＋</button>
+          <input type="file" id="fileIn" multiple hidden>
           <button class="chip" id="permBtn">권한 ▾</button>
           <div id="permMenu" class="menu upleft" hidden>
             <label>명령 실행 허용 <input type="checkbox" id="allowShell"></label>
             <label>내 홈 폴더 접근 허용 <input type="checkbox" id="allowHome"></label>
+            <label>연결된 앱 허용 <span class="hint">Gmail·캘린더·드라이브·M365</span> <input type="checkbox" id="allowApps"></label>
             <label>산초 자기 수정 허용 <input type="checkbox" id="allowSelfEdit"></label>
             <div class="hint">기본은 data/ 폴더만 읽고 씁니다</div>
           </div>
@@ -106,44 +117,78 @@
         <div class="right">
           <button class="chip" id="modelBtn">모델 ▾</button>
           <div id="modelMenu" class="menu up" hidden>
-            <button data-model="sonnet">Sonnet <span class="hint">빠르고 한도 절약</span></button>
+            <button data-model="fable">Fable 5.1 <span class="hint">가장 똑똑 · 한도를 많이 씀</span></button>
             <button data-model="opus">Opus <span class="hint">어려운 일</span></button>
+            <button data-model="sonnet">Sonnet <span class="hint">빠르고 한도 절약</span></button>
             <button data-model="haiku">Haiku <span class="hint">잡일</span></button>
+          </div>
+          <button class="chip" id="effortBtn">노력 ▾</button>
+          <div id="effortMenu" class="menu up" hidden>
+            <div class="eff">
+              <div class="row"><span>노력</span><b id="effName"></b></div>
+              <input type="range" id="effort" min="0" max="4" step="1">
+              <div class="row hint"><span>더 빠르게</span><span>더 스마트하게</span></div>
+            </div>
           </div>
           <button id="send" class="send" title="전송 (Enter)" disabled>↑</button>
         </div>
       </div>
     </div>
-    <div class="hint center">Enter 전송 · Shift+Enter 줄바꿈 · Esc 중지</div>
+    <div class="hint center">Enter 전송 · Shift+Enter 줄바꿈 · Esc 중지 · 파일은 ＋ 또는 붙여넣기</div>
   </div>
 </main>
 <script>
 const $ = (s) => document.querySelector(s);
-const col = $('#col'), logEl = $('#log'), input = $('#in'), sendBtn = $('#send');
-let busy = false;
+const col = $('#col'), logEl = $('#log'), input = $('#in'), sendBtn = $('#send'), comp = $('#composer');
+let busy = false, pending = [];   // pending: 첨부 대기 File 목록
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 if (window.marked) marked.use({ breaks: true, renderer: { html: (h) => esc(typeof h === 'string' ? h : (h && h.text) || '') } });   // 답에 섞인 날 HTML 은 글자로
 const md = (t) => window.marked ? marked.parse(String(t)) : '<p>' + esc(t).replace(/\n/g, '<br>') + '</p>';
 const ago = (ts) => { const m = Math.round((Date.now() - new Date(ts)) / 60000); return m < 1 ? '지금' : m < 60 ? m + '분 전' : m < 1440 ? Math.round(m / 60) + '시간 전' : Math.round(m / 1440) + '일 전'; };
 const closeMenus = () => document.querySelectorAll('.menu').forEach((x) => { x.hidden = true; });
+const 모델명 = { fable: 'Fable 5.1', opus: 'Opus', sonnet: 'Sonnet', haiku: 'Haiku' };
+const 노력값 = ['low', 'medium', 'high', 'xhigh', 'max'], 노력명 = ['낮음', '중간', '높음', '매우 높음', '최대'];
 
 function el(cls, html) { const d = document.createElement('div'); d.className = cls; if (html != null) d.innerHTML = html; col.appendChild(d); logEl.scrollTop = logEl.scrollHeight; return d; }
 const addUser = (t) => { const d = el('user'); d.textContent = t; return d; };
 const addBot = (t) => el('bot', md(t));
 const addTool = (name, inp) => { const d = el('tool'); d.textContent = name + '  ' + (inp || ''); d.title = inp || ''; return d; };
 const addCard = (title, rows, err) => el('card' + (err ? ' err' : ''), `<h5>${esc(title)}</h5>` + rows.map((r) => `<div class="f">${esc(r)}</div>`).join(''));
+const setIf = (node, html) => { if (node.dataset.sig !== html) { node.innerHTML = html; node.dataset.sig = html; } };   // 내용이 같으면 다시 안 그린다(펼친 항목이 접히지 않게)
 
-function 버튼(on) { busy = on; sendBtn.classList.toggle('stop', on); sendBtn.textContent = on ? '■' : '↑'; sendBtn.title = on ? '중지 (Esc)' : '전송 (Enter)'; sendBtn.disabled = !on && !input.value.trim(); }
+function updateSend() { sendBtn.disabled = !busy && !input.value.trim() && !pending.length; }
+function 버튼(on) { busy = on; sendBtn.classList.toggle('stop', on); sendBtn.textContent = on ? '■' : '↑'; sendBtn.title = on ? '중지 (Esc)' : '전송 (Enter)'; updateSend(); }
 async function api(path, body) {
   const r = await fetch(path, { method: body ? 'POST' : 'GET', headers: { 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
   return r.json();
 }
 
+// ---- 첨부: ＋ 버튼, 끌어다 놓기, 붙여넣기 ----
+function addFiles(list) { for (const f of list || []) if (f) pending.push(f); renderFiles(); }
+function renderFiles() {
+  $('#files').innerHTML = pending.map((f, i) => `<div class="fchip" title="${esc(f.name)}"><span>📎 ${esc(f.name)}</span><button data-rm="${i}" title="빼기">✕</button></div>`).join('');
+  updateSend();
+}
+$('#files').onclick = (e) => { const i = e.target.dataset.rm; if (i != null) { pending.splice(+i, 1); renderFiles(); } };
+$('#attachBtn').onclick = () => $('#fileIn').click();
+$('#fileIn').onchange = (e) => { addFiles([...e.target.files]); e.target.value = ''; };
+comp.ondragover = (e) => { e.preventDefault(); comp.classList.add('drag'); };
+comp.ondragleave = () => comp.classList.remove('drag');
+comp.ondrop = (e) => { e.preventDefault(); comp.classList.remove('drag'); addFiles([...e.dataTransfer.files]); };
+input.onpaste = (e) => { const fs = [...(e.clipboardData?.files || [])]; if (fs.length) { e.preventDefault(); addFiles(fs); } };
+async function upload(f) {
+  const r = await fetch('/api/upload', { method: 'POST', headers: { 'x-name': encodeURIComponent(f.name || 'file') }, body: f });
+  const j = await r.json().catch(() => ({})); if (!r.ok || j.error) throw new Error(j.error || '업로드 실패'); return j.path;
+}
+
 async function send() {
-  const text = input.value.trim();
-  if (!text || busy) return;
-  input.value = ''; input.style.height = 'auto'; $('#empty')?.remove(); addUser(text); 버튼(true);
-  const r = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) });
+  const text = input.value.trim(), files = pending.splice(0);
+  if ((!text && !files.length) || busy) return;
+  input.value = ''; input.style.height = 'auto'; renderFiles(); $('#empty')?.remove();
+  addUser(text + (files.length ? (text ? '\n' : '') + '📎 ' + files.map((f) => f.name).join(', ') : '')); 버튼(true);
+  const paths = [];
+  try { for (const f of files) paths.push(await upload(f)); } catch (e) { addCard('첨부 실패', [e.message], true); 버튼(false); return; }
+  const r = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, files: paths }) });
   if (!r.ok) { const e = await r.json().catch(() => ({})); addCard('오류', [e.error || ('오류 ' + r.status)], true); 버튼(false); return; }
   const think = el('think', '<span class="spin">✳</span> 생각 중…');
   const reader = r.body.getReader(), dec = new TextDecoder();
@@ -176,18 +221,21 @@ async function send() {
 }
 
 sendBtn.onclick = () => busy ? api('/api/stop', {}) : send();
-input.oninput = () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 220) + 'px'; sendBtn.disabled = !busy && !input.value.trim(); };
+input.oninput = () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 220) + 'px'; updateSend(); };
 input.onkeydown = (e) => {
   if (e.isComposing || e.keyCode === 229) return;   // 한글 조합 중 Enter 는 글자 확정용 — 보내지 않는다
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
 };
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && busy) api('/api/stop', {}); });
 document.addEventListener('click', (e) => { if (!e.target.closest('.menu')) closeMenus(); });
-for (const [b, m] of [['#permBtn', '#permMenu'], ['#modelBtn', '#modelMenu'], ['#gear', '#gearMenu']]) {
+for (const [b, m] of [['#permBtn', '#permMenu'], ['#modelBtn', '#modelMenu'], ['#effortBtn', '#effortMenu'], ['#gear', '#gearMenu']]) {
   $(b).onclick = (e) => { e.stopPropagation(); const open = $(m).hidden; closeMenus(); $(m).hidden = !open; };
 }
 $('#modelMenu').onclick = async (e) => { const m = e.target.closest('button')?.dataset.model; if (!m) return; await api('/api/settings', { model: m }); closeMenus(); refresh(); };
-for (const id of ['allowShell', 'allowHome', 'allowSelfEdit']) $('#' + id).onchange = async (e) => { await api('/api/settings', { [id]: e.target.checked }); refresh(); };
+const effIn = $('#effort');
+effIn.oninput = () => { $('#effName').textContent = 노력명[effIn.value]; };
+effIn.onchange = async () => { await api('/api/settings', { effort: 노력값[effIn.value] }); refresh(); };
+for (const id of ['allowShell', 'allowHome', 'allowApps', 'allowSelfEdit']) $('#' + id).onchange = async (e) => { await api('/api/settings', { [id]: e.target.checked }); refresh(); };
 $('#new').onclick = async () => { if (busy) return; await api('/api/new', {}); refresh(); };
 $('#sessions').onclick = async (e) => { const sid = e.target.closest('[data-sid]')?.dataset.sid; if (!sid || busy) return; await api('/api/session', { id: sid }); refresh(); };
 $('#sched').onclick = async (e) => {
@@ -196,6 +244,12 @@ $('#sched').onclick = async (e) => {
   if (del && confirm('이 예약을 지울까요?')) await api('/api/schedule/remove', { id: del });
   refresh();
 };
+// 위키·스킬은 펼칠 때 파일을 읽어온다
+document.addEventListener('toggle', async (e) => {
+  const d = e.target; if (d.tagName !== 'DETAILS' || !d.open || !d.dataset.file || d.dataset.loaded) return;
+  d.dataset.loaded = 1; const r = await api('/api/file?path=' + encodeURIComponent(d.dataset.file));
+  d.querySelector('.body').innerHTML = r.error ? esc(r.error) : md(r.text || '(빈 파일)');
+}, true);
 
 // 자가 업그레이드: 서버가 관문(문법 + 자가시험)을 지나야만 재시작한다. 실패하면 이유가 여기 뜬다.
 async function 업그레이드(path, label) {
@@ -208,34 +262,41 @@ async function 업그레이드(path, label) {
 $('#update').onclick = () => 업그레이드('/api/update', '업데이트');
 $('#restart').onclick = () => 업그레이드('/api/restart', '재시작');
 
-const 모델명 = { sonnet: 'Sonnet', opus: 'Opus', haiku: 'Haiku' };
+const empty = (t) => `<div class="hint" style="padding:4px 8px">${t}</div>`;
 async function refresh() {
   let s;
   try { s = await api('/api/state'); } catch { $('#status').innerHTML = '<span class="dot"></span>서버 응답 없음 — 재시작 중이면 곧 돌아와요'; return; }
-  const model = 모델명[s.settings.model] || s.settings.model;
-  $('#modelBtn').textContent = model + ' ▾'; $('#modelChip').textContent = model;
-  for (const id of ['allowShell', 'allowHome', 'allowSelfEdit']) $('#' + id).checked = !!s.settings[id];
-  const perms = [s.settings.allowShell && '명령', s.settings.allowHome && '홈 폴더', s.settings.allowSelfEdit && '자기 수정'].filter(Boolean);
+  const model = 모델명[s.settings.model] || s.settings.model, ei = Math.max(0, 노력값.indexOf(s.settings.effort));
+  $('#modelBtn').textContent = model + ' ▾'; $('#effortBtn').textContent = '노력 ' + 노력명[ei] + ' ▾'; $('#modelChip').textContent = model + ' · ' + 노력명[ei];
+  if (document.activeElement !== effIn) { effIn.value = ei; $('#effName').textContent = 노력명[ei]; }
+  for (const id of ['allowShell', 'allowHome', 'allowApps', 'allowSelfEdit']) $('#' + id).checked = !!s.settings[id];
+  const perms = [s.settings.allowShell && '명령', s.settings.allowHome && '홈 폴더', s.settings.allowApps && '앱', s.settings.allowSelfEdit && '자기 수정'].filter(Boolean);
   $('#permBtn').textContent = (perms.length ? '권한: ' + perms.join(' · ') : '권한: 기본') + ' ▾';
   $('#status').innerHTML = `<span class="dot ${s.claude.ok ? 'ok' : ''}"></span>${s.claude.ok ? 'Claude Code ' + esc(s.claude.version.replace(' (Claude Code)', '')) : 'Claude Code 없음 — README 참고'}`;
   const run = $('#running'); run.hidden = !s.busy && !s.pendingRestart;
   run.innerHTML = (s.busy ? `<span class="spin">✳</span> 실행 중인 작업 1개 · ${esc(s.busy)}` : '') + (s.pendingRestart ? ' · 일이 끝나면 재시작' : '');
   const cur = s.sessions.find((x) => x.id === s.session);
   $('#title').textContent = cur ? cur.title : '새 대화';
-  $('#sessions').innerHTML = s.sessions.length
+  setIf($('#sessions'), s.sessions.length
     ? s.sessions.map((x) => `<div class="item ${x.id === s.session ? 'active' : ''}" data-sid="${esc(x.id)}" title="${esc(x.title)}"><span>${esc(x.title)}</span><span class="t">${ago(x.ts)}</span></div>`).join('')
-    : '<div class="hint" style="padding:4px 8px">아직 없음</div>';
-  $('#sched').innerHTML = s.schedules.length
+    : empty('아직 없음'));
+  setIf($('#sched'), s.schedules.length
     ? s.schedules.map((j) => `<div class="item" title="${esc(j.prompt)}"><span><b>${esc(j.time)}</b> ${j.repeat === 'once' ? esc(j.date || '한 번') : '매일'} · ${esc(j.prompt)}</span><span class="acts"><button data-run="${esc(j.id)}" title="지금 실행">▶</button><button data-del="${esc(j.id)}" title="삭제">✕</button></span></div>`).join('')
-    : '<div class="hint" style="padding:4px 8px">없음 — 채팅으로 "매일 7시에 …해줘"</div>';
+    : empty('없음 — 채팅으로 "매일 7시에 …해줘"'));
   const entries = s.journal.flatMap((j) => j.text.split(/\n(?=## )/).filter((x) => x.trim()).map((x) => {
     const lines = x.trim().split('\n'); return { date: j.date, head: lines[0].replace(/^## /, ''), body: lines.slice(1).join('\n').trim() };
   })).reverse().slice(0, 10);
-  $('#journal').innerHTML = entries.length
+  setIf($('#journal'), entries.length
     ? entries.map((e) => `<details><summary>${esc(e.date.slice(5))} ${esc(e.head)}</summary><div class="body">${md(e.body)}</div></details>`).join('')
-    : '<div class="hint" style="padding:4px 8px">아직 없음 — 예약이 실행되면 여기 쌓여요</div>';
+    : empty('아직 없음 — 예약이 실행되면 여기 쌓여요'));
+  setIf($('#skills'), s.skills.length
+    ? s.skills.map((n) => `<details data-file=".claude/skills/${esc(n)}/SKILL.md"><summary>${esc(n)}</summary><div class="body"></div></details>`).join('')
+    : empty('아직 없음 — "이거 스킬로 저장해" 또는 "이 URL 의 스킬 가져와"'));
+  setIf($('#wiki'), s.wiki.length
+    ? s.wiki.map((n) => `<details data-file="wiki/${esc(n)}"><summary>${esc(n.replace(/\.md$/, ''))}</summary><div class="body"></div></details>`).join('')
+    : empty('아직 없음 — "조사한 내용 위키에 저장해"'));
   const mem = s.memory.trim();
-  $('#memory').innerHTML = mem ? `<details><summary>${mem.split('\n').filter(Boolean).length}줄 기억하고 있어요</summary><div class="body pre">${esc(mem)}</div></details>` : '<div class="hint" style="padding:4px 8px">아직 없음 — "기억해: …"</div>';
+  setIf($('#memory'), mem ? `<details><summary>${mem.split('\n').filter(Boolean).length}줄 기억하고 있어요</summary><div class="body pre">${esc(mem)}</div></details>` : empty('아직 없음 — "기억해: …"'));
   if (col.dataset.sid !== String(s.session)) {   // 대화가 바뀌었을 때만 다시 그린다(진행 중 화면은 건드리지 않는다)
     col.dataset.sid = String(s.session); col.innerHTML = '';
     for (const h of s.history) h.role === 'user' ? addUser(h.text) : addBot(h.text);
