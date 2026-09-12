@@ -142,7 +142,7 @@ async function api(path, body) {
 async function send() {
   const text = input.value.trim();
   if (!text || busy) return;
-  input.value = ''; input.style.height = 'auto'; addUser(text); 버튼(true);
+  input.value = ''; input.style.height = 'auto'; $('#empty')?.remove(); addUser(text); 버튼(true);
   const r = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) });
   if (!r.ok) { const e = await r.json().catch(() => ({})); addCard('오류', [e.error || ('오류 ' + r.status)], true); 버튼(false); return; }
   const think = el('think', '<span class="spin">✳</span> 생각 중…');
@@ -239,7 +239,7 @@ async function refresh() {
   if (col.dataset.sid !== String(s.session)) {   // 대화가 바뀌었을 때만 다시 그린다(진행 중 화면은 건드리지 않는다)
     col.dataset.sid = String(s.session); col.innerHTML = '';
     for (const h of s.history) h.role === 'user' ? addUser(h.text) : addBot(h.text);
-    if (!s.history.length) el('note', '무엇을 도와드릴까요? 아래에 말씀하세요.');
+    if (!s.history.length) el('note', '무엇을 도와드릴까요? 아래에 말씀하세요.').id = 'empty';
   }
 }
 refresh();
