@@ -72,7 +72,7 @@ const 자기수정안내 = (s) => `
 3) git commit 한다(한국어 한 줄 메시지).  4) curl -s -X POST http://127.0.0.1:${PORT}/api/restart 로 재시작을 요청한다.
    서버가 관문(문법+자가시험)을 다시 돌려 실패하면 재시작을 거부하고 이유를 준다 — 그러면 고쳐서 다시.
 5) 재시작은 지금 대화가 끝난 뒤 일어난다. 무엇을 바꿨는지 한 줄로 알리고 답을 끝낸다.
-되돌리기: 재시작 뒤 서버가 안 켜지면 산초시작.bat 이 마지막 정상판(git tag last-good)으로 자동 복구한다. 주인이 되돌리라 하면 git reset --hard last-good.
+되돌리기: 재시작 뒤 서버가 안 켜지면 sancho.bat 이 마지막 정상판(git tag last-good)으로 자동 복구한다. 주인이 되돌리라 하면 git reset --hard last-good.
 `;
 
 // ---------- Claude Code 실행 ----------
@@ -204,7 +204,7 @@ function 관문() {
 }
 
 let 재시작예약 = false;
-function 재시작() {   // 종료 코드 75 = 산초시작.bat 에게 "다시 켜라". 직접 node 로 켰으면 그냥 꺼진다.
+function 재시작() {   // 종료 코드 75 = sancho.bat 에게 "다시 켜라". 직접 node 로 켰으면 그냥 꺼진다.
   if (현재) { 재시작예약 = true; return '지금 하는 일이 끝나면'; }
   setTimeout(() => process.exit(75), 500);
   return '지금';
@@ -286,7 +286,7 @@ createServer(async (req, res) => {
     if (route === 'POST /api/chat') return 채팅(req, res);
     if (route === 'POST /api/restart') {
       try { await 관문(); } catch (e) { return send(res, 409, { error: `관문에 걸려 재시작하지 않았어요.\n${e.message}` }); }
-      return send(res, 200, { ok: true, when: 재시작(), note: '산초시작.bat 으로 켠 경우에만 자동으로 다시 켜져요' });
+      return send(res, 200, { ok: true, when: 재시작(), note: 'sancho.bat 으로 켠 경우에만 자동으로 다시 켜져요' });
     }
     if (route === 'POST /api/update') {
       try { return send(res, 200, await 갱신()); } catch (e) { return send(res, 409, { error: e.message }); }
@@ -295,11 +295,11 @@ createServer(async (req, res) => {
   } catch (e) { send(res, 500, { error: String(e?.message || e) }); }
 }).on('error', (e) => {
   if (e.code !== 'EADDRINUSE') throw e;
-  console.log(`산초가 이미 켜져 있어요 → 브라우저에서 http://127.0.0.1:${PORT} 를 여세요`);   // 산초시작.bat 을 두 번 눌러도 놀라지 않게
+  console.log(`산초가 이미 켜져 있어요 → 브라우저에서 http://127.0.0.1:${PORT} 를 여세요`);   // sancho.bat 을 두 번 눌러도 놀라지 않게
   process.exit(0);
 }).listen(PORT, '127.0.0.1', () => {
   console.log(`산초 → http://127.0.0.1:${PORT}   두뇌: ${CLAUDE ? CLAUDE_VERSION : 'Claude Code 를 찾지 못했어요 (README 참고)'}`);
   // 잘 켜진 코드를 "마지막 정상판"으로 표시한다 — 작업 폴더가 깨끗할 때만(커밋 안 된 코드가 돌고 있으면 표시를 옮기지 않는다).
-  // 산초시작.bat 이 비정상 종료 뒤 이 표시로 복구한다. git 이 없거나 저장소가 아니면 조용히 건너뛴다.
+  // sancho.bat 이 비정상 종료 뒤 이 표시로 복구한다. git 이 없거나 저장소가 아니면 조용히 건너뛴다.
   git('status', '--porcelain').then((dirty) => dirty ? null : git('tag', '-f', 'last-good')).catch(() => {});
 });
