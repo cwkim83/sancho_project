@@ -66,6 +66,27 @@
     return h % 360;
   }
 
+  // graphify 의 핵심: 폴더가 아니라 **실제 연결 모양**으로 무리를 찾아 색을 나눈다(라벨 전파).
+  // 이웃들이 가장 많이 단 이름표를 자기 이름표로 삼기를 되풀이하면, 촘촘히 이어진 덩어리끼리 같은 이름표로 모인다.
+  // 훑는 순서를 섞지 않아서 같은 그래프면 늘 같은 색이 나온다 — 새로고침마다 색이 바뀌면 눈이 피곤하다.
+  function findCommunities() {
+    const label = new Map(nodes.map((n) => [n.id, n.id]));
+    for (let it = 0; it < 12; it++) {
+      let changed = 0;
+      for (const n of nodes) {
+        const nb = neighbors.get(n.id);
+        if (!nb || !nb.size) continue;
+        const cnt = new Map();
+        for (const m of nb) { const l = label.get(m); cnt.set(l, (cnt.get(l) || 0) + 1); }
+        let best = label.get(n.id), bn = 0;
+        for (const [l, c] of cnt) if (c > bn || (c === bn && l < best)) { best = l; bn = c; }
+        if (best !== label.get(n.id)) { label.set(n.id, best); changed++; }
+      }
+      if (!changed) break;
+    }
+    return label;
+  }
+
   // 폴더(무리) 필터 — 색인을 왕창 넣으면 그래프가 털뭉치가 된다.
   // 🛰️ 메뉴에서 최상위 폴더 단위로 껐다 켠다. 끈 목록은 기억된다.
   let excluded = new Set();
@@ -105,6 +126,14 @@
       .filter((l) => l.a && l.b && l.a !== l.b);
     neighbors = new Map(nodes.map((n) => [n.id, new Set()]));
     for (const l of links) { neighbors.get(l.a.id).add(l.b.id); neighbors.get(l.b.id).add(l.a.id); }
+    // graphify 처럼: 크기는 **실제** 연결 수, 색은 **무리(community)** — 서버가 준 deg 는 어림값이라 쓰지 않는다
+    for (const n of nodes) n.deg = neighbors.get(n.id).size;
+    const comm = findCommunities();
+    for (const n of nodes) {
+      n.comm = comm.get(n.id) || n.id;
+      n.hue = hueOf(n.comm);
+      n.r = 3.4 + Math.min(11, Math.sqrt(n.deg || 1) * 2.4);   // 허브일수록 크게
+    }
     note = nodes.length ? '' : '아직 기억이 없어요';
     if (calm) layBrain();   // 잠든 사이 데이터가 갈리면 새 노드에도 뇌 자리를 준다
     if (!fitted && nodes.length) { setTimeout(fit, 600); fitted = true; }   // 몇 틱 안정된 뒤 맞춘다

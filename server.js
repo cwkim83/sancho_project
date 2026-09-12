@@ -4,7 +4,7 @@
 // 의존 패키지 0. Node 18 이상.
 import { createServer } from 'node:http';
 import { spawn, execFile, execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync, appendFileSync, mkdirSync, readdirSync, existsSync, statSync, cpSync, createReadStream } from 'node:fs';
+import { readFileSync, writeFileSync, appendFileSync, mkdirSync, readdirSync, existsSync, statSync, cpSync, createReadStream, unlinkSync } from 'node:fs';
 import { join, dirname, resolve, sep, basename, extname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -267,6 +267,18 @@ async function 자기수정마무리(요청) {
   return { ok: true, text: `${설정().name} 코드 수정이 관문(문법·자가시험)을 지나 커밋됐어요. ${재시작()} 재시작합니다 — 몇 초 뒤 화면이 돌아옵니다.` };
 }
 
+// Windows 시작 시 자동 실행(선택): 시작 프로그램 폴더에 바로가기 하나. 관리자 권한 불필요, 끄면 지운다.
+const 시작바로가기 = process.platform === 'win32' && process.env.APPDATA ? join(process.env.APPDATA, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'Sancho.lnk') : null;
+function 자동실행(on) {
+  return new Promise((ok, no) => {
+    if (!시작바로가기) return no(new Error('Windows 에서만 됩니다'));
+    if (!on) { try { unlinkSync(시작바로가기); } catch {} return ok(false); }
+    const ps = `$s=(New-Object -ComObject WScript.Shell).CreateShortcut('${시작바로가기}'); $s.TargetPath='cmd.exe'; $s.Arguments='/c "${join(ROOT, 'sancho-autostart.bat')}"'; $s.WorkingDirectory='${ROOT}'; $s.WindowStyle=7; $s.Description='Sancho'; $s.Save()`;
+    execFile('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(ps, 'utf16le').toString('base64')], { windowsHide: true },   // 인코딩: 따옴표 문제 없이 넘긴다
+      (e, _o, err) => e ? no(new Error(String(err || e.message).slice(0, 300))) : ok(true));
+  });
+}
+
 async function 갱신() {   // GitHub 의 새 판 받기. 관문에 걸리면 이전 판으로 되돌린다.
   const before = await git('rev-parse', 'HEAD');
   await git('pull', '--ff-only');
@@ -386,7 +398,11 @@ createServer(async (req, res) => {
         claude: { path: CLAUDE, version: CLAUDE_VERSION, ok: !!CLAUDE }, settings: 설정(), session: st.session, sessions: st.sessions, busy: 현재 ? 현재.kind : null, pendingRestart: 재시작예약,
         schedules: 예약목록().map((j) => ({ ...j, lastRun: st.runs[j.id] || null })), memory: readText(p('memory.md')), journal: 일지(), history: 기록(st.session),
         skills: ls(join(DATA, '.claude', 'skills')), wiki: ls(join(DATA, 'wiki'), (f) => f.endsWith('.md')),
+        canAutostart: !!시작바로가기, autostart: !!(시작바로가기 && existsSync(시작바로가기)),
       });
+    }
+    if (route === 'POST /api/autostart') {
+      try { await 자동실행(!!(await readBody(req)).on); return send(res, 200, { autostart: existsSync(시작바로가기) }); } catch (e) { return send(res, 409, { error: e.message }); }
     }
     if (route === 'GET /neural.js') return send(res, 200, readFileSync(join(ROOT, 'public', 'neural.js')), 'application/javascript; charset=utf-8');
     if (route === 'GET /api/graph') {   // 뇌 그래프 재료(파이스 neural.js 용): 산초 → 기억·위키·스킬·대화·예약 → 항목, 위키 [[링크]]는 서로 연결

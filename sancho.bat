@@ -1,4 +1,5 @@
 @echo off
+title Sancho - closing this window stops Sancho
 rem Sancho launcher. ASCII only: cmd misreads UTF-8 Korean in .bat files (2026-09-12).
 rem Exit code 75 = restart requested. Any other non-zero exit = crash -> roll back to git tag last-good and start again.
 cd /d "%~dp0"

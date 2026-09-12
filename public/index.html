@@ -128,6 +128,7 @@
       <input class="set" data-key="geminiKey" type="password" placeholder="비상두뇌 Gemini API 키 — Claude 한도 걸릴 때만">
       <input class="set" data-key="token" type="password" placeholder="외부 접속 토큰 — 터널로 밖에 열 때">
       <div class="sub">산초</div>
+      <label id="autoLbl">Windows 시작 시 자동 실행 <span class="hint">시작 프로그램 바로가기</span> <input type="checkbox" id="autostart"></label>
       <button id="update">업데이트 <span class="hint">GitHub 새 판 받기</span></button>
       <button id="restart">재시작 <span class="hint">관문 통과 시</span></button>
       <div id="upmsg" class="hint"></div>
@@ -488,6 +489,7 @@ async function 업그레이드(path, label) {
   if (r.updated === false) { $('#upmsg').textContent = r.note; return; }
   $('#upmsg').textContent = (r.updated ? `${r.from} → ${r.to} 받았어요. ` : '') + `${r.when} 재시작해요. 잠시 뒤 화면이 돌아옵니다.`;
 }
+$('#autostart').onchange = async (e) => { const r = await api('/api/autostart', { on: e.target.checked }); if (r.error) alert(r.error); refresh(); };
 $('#update').onclick = () => 업그레이드('/api/update', '업데이트');
 $('#restart').onclick = () => 업그레이드('/api/restart', '재시작');
 
@@ -507,6 +509,7 @@ async function refresh() {
   const run = $('#running'); run.hidden = !s.busy && !s.pendingRestart;
   run.innerHTML = (s.busy ? `<span class="spin">✳</span> 실행 중인 작업 1개 · ${esc(s.busy)}` : '') + (s.pendingRestart ? ' · 일이 끝나면 재시작' : '');
   if (!busy) brain(!!s.busy);   // 예약 작업이 돌 때도 뇌가 깜빡인다
+  $('#autoLbl').hidden = !s.canAutostart; $('#autostart').checked = !!s.autostart;
   const cur = s.sessions.find((x) => x.id === s.session);
   $('#title').textContent = cur ? cur.title : '새 대화';
   const pinned = s.sessions.filter((x) => x.pinned), recent = s.sessions.filter((x) => !x.pinned), shown = showAll ? recent : recent.slice(0, 5);
