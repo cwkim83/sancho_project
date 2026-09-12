@@ -7,6 +7,7 @@ import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from 'no
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { Script } from 'node:vm';
 import assert from 'node:assert/strict';
 
 const HERE = fileURLToPath(import.meta.url);
@@ -32,12 +33,16 @@ function 가짜두뇌() {
 
 // ---------- 시험 ----------
 async function 시험() {
+  // 0) 화면 스크립트 문법 — 파이스에서 ')' 하나로 화면이 통째로 죽은 적이 있다(2026-09-11). 실행 중 오류까지는 못 잡는다.
+  const html = readFileSync(join(dirname(HERE), 'public', 'index.html'), 'utf8');
+  for (const m of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) new Script(m[1], { filename: 'index.html' });
+
   const data = mkdtempSync(join(tmpdir(), 'sancho-test-'));
   const PORT = 8791, BASE = `http://127.0.0.1:${PORT}`;
   // 실행 시각이 이미 지난 예약 하나 — 서버의 첫 tick(5초 뒤)에 돌아야 한다
   writeFileSync(join(data, 'schedule.json'), JSON.stringify([{ id: 'test', time: '00:00', repeat: 'daily', prompt: '보고서를 써라' }]));
   const server = spawn(process.execPath, [join(dirname(HERE), 'server.js')], {
-    env: { ...process.env, SANCHO_PORT: String(PORT), SANCHO_DATA: data, SANCHO_CLAUDE: HERE }, stdio: ['ignore', 'ignore', 'inherit'],
+    env: { ...process.env, SANCHO_PORT: String(PORT), SANCHO_DATA: data, SANCHO_CLAUDE: HERE, SANCHO_SKIP_SELFTEST: '1' }, stdio: ['ignore', 'ignore', 'inherit'],
   });
   try {
     await 기다림(async () => (await fetch(`${BASE}/api/state`)).ok, 5000, '서버 기동');
@@ -57,15 +62,23 @@ async function 시험() {
     assert.equal(JSON.parse(readFileSync(join(data, 'state.json'), 'utf8')).runs.test, today(), '오늘 실행 기록');
     await 기다림(async () => (await (await fetch(`${BASE}/api/state`)).json()).busy === null, 3000, '예약 뒤 한가함');
 
-    // 3) 중지: 오래 걸리는 답을 ■ 로 끊으면 3초 안에 done(ok=false) 이 오고 서버는 한가해진다
-    const t0 = Date.now();
-    const ev2 = await 채팅(BASE, '천천히 답해', async (e) => { if (e.t === 'tool') await fetch(`${BASE}/api/stop`, { method: 'POST' }); });
+    // 3) 재시작 예약 + ■ 중지: 일하는 중에 재시작을 요청하면 관문을 지나 "끝나면" 으로 예약되고,
+    //    ■ 로 끊으면 3초 안에 done(ok=false) 이 오고, 일이 끝났으니 서버가 코드 75 로 종료된다(산초시작.bat 이 다시 켠다)
+    const exited = new Promise((r) => server.on('exit', r));
+    let tStop = 0, rr = null;
+    const ev2 = await 채팅(BASE, '천천히 답해', async (e) => {
+      if (e.t !== 'tool') return;
+      rr = await (await fetch(`${BASE}/api/restart`, { method: 'POST' })).json();
+      tStop = Date.now(); await fetch(`${BASE}/api/stop`, { method: 'POST' });
+    });
+    assert.equal(rr?.ok, true, `재시작 관문 통과 (${JSON.stringify(rr)})`);
+    assert.ok(/끝나면/.test(rr.when), '일하는 중엔 재시작을 예약한다');
     assert.equal(ev2.at(-1).t, 'done', '중지 뒤 done');
     assert.equal(ev2.at(-1).ok, false, '중지되면 실패로 끝난다');
-    assert.ok(Date.now() - t0 < 3000, `3초 안에 끊긴다 (${Date.now() - t0}ms)`);
-    await 기다림(async () => (await (await fetch(`${BASE}/api/state`)).json()).busy === null, 3000, '중지 뒤 한가함');
+    assert.ok(Date.now() - tStop < 3000, `3초 안에 끊긴다 (${Date.now() - tStop}ms)`);
+    assert.equal(await exited, 75, '일이 끝나면 코드 75 로 종료(재시작 요청)');
 
-    console.log('산초 자가시험 통과: 채팅 SSE · 대화 id · 기록 · 예약 tick · 일지 · ■ 중지');
+    console.log('산초 자가시험 통과: 화면 문법 · 채팅 SSE · 대화 id · 기록 · 예약 tick · 일지 · 재시작 관문·예약 · ■ 중지 · 종료 75');
   } finally {
     server.kill();
     rmSync(data, { recursive: true, force: true });

@@ -23,7 +23,7 @@ const readText = (file) => { try { return readFileSync(file, 'utf8'); } catch { 
 const ymd = (d) => d.toLocaleDateString('sv-SE');      // YYYY-MM-DD (현지 날짜)
 const hhmm = (d) => d.toTimeString().slice(0, 5);      // HH:MM
 
-const 기본설정 = { name: '산초', model: 'sonnet', allowShell: false, allowHome: false };
+const 기본설정 = { name: '산초', model: 'sonnet', allowShell: false, allowHome: false, allowSelfEdit: false };
 const 설정 = () => ({ ...기본설정, ...readJson(p('settings.json'), {}) });
 const 상태 = () => ({ session: null, runs: {}, ...readJson(p('state.json'), {}) });   // session: 이어가는 대화 id, runs: 예약별 마지막 실행 날짜
 const 상태저장 = (patch) => writeJson(p('state.json'), { ...상태(), ...patch });
@@ -56,13 +56,24 @@ function 시스템프롬프트() {
    - 삭제 요청이면 그 항목을 배열에서 뺀다. 추가·삭제 뒤엔 결과를 한 줄로 알린다.
    - 예약 시각이 되면 ${s.name} 서버가 prompt 를 너에게 보내 실행하고 결과를 journal/ 에 쌓아 주인에게 보여준다.
 3) journal/ — 예약 실행 결과가 날짜별(YYYY-MM-DD.md) 로 쌓인다. 필요하면 읽어 참고한다.
-${s.allowShell ? '명령 실행(Bash)이 허용돼 있다. 파괴적인 명령은 실행 전에 주인에게 확인한다.' : '명령 실행(Bash)은 꺼져 있다. 필요하면 주인에게 대시보드 설정에서 켜달라고 말한다.'}
+${(s.allowShell || s.allowSelfEdit) ? '명령 실행(Bash)이 허용돼 있다. 파괴적인 명령은 실행 전에 주인에게 확인한다.' : '명령 실행(Bash)은 꺼져 있다. 필요하면 주인에게 대시보드 설정에서 켜달라고 말한다.'}
 ${s.allowHome ? `주인의 홈 폴더(${homedir()})를 읽고 고칠 수 있다.` : '이 데이터 폴더 밖의 파일은 건드릴 수 없다.'}
-
+${s.allowSelfEdit ? 자기수정안내(s) : ''}
 지금 기억(memory.md):
 ${mem}
 `;
 }
+
+// 자기 수정: 도구는 새로 만들지 않는다 — Claude Code 의 Edit/Bash 가 그대로 도구다. 여기 적는 건 절차와 안전장치의 위치뿐이다.
+const 자기수정안내 = (s) => `
+[자기 수정 허용] ${s.name}의 코드는 ${ROOT} 에 있다 — server.js(서버), public/index.html(화면), selftest.js(자가시험), README.md.
+주인이 ${s.name} 자체를 고치라고 하면 이 순서를 지킨다:
+1) Edit 로 고친다.  2) 그 폴더에서 node --check server.js 와 node selftest.js 를 직접 돌려 통과시킨다(실패면 고쳐서 다시).
+3) git commit 한다(한국어 한 줄 메시지).  4) curl -s -X POST http://127.0.0.1:${PORT}/api/restart 로 재시작을 요청한다.
+   서버가 관문(문법+자가시험)을 다시 돌려 실패하면 재시작을 거부하고 이유를 준다 — 그러면 고쳐서 다시.
+5) 재시작은 지금 대화가 끝난 뒤 일어난다. 무엇을 바꿨는지 한 줄로 알리고 답을 끝낸다.
+되돌리기: 재시작 뒤 서버가 안 켜지면 산초시작.bat 이 마지막 정상판(git tag last-good)으로 자동 복구한다. 주인이 되돌리라 하면 git reset --hard last-good.
+`;
 
 // ---------- Claude Code 실행 ----------
 let 현재 = null;   // 진행 중인 실행 { proc, kind, startedAt } — 한 번에 하나만(같은 구독·같은 파일을 쓴다)
@@ -73,8 +84,9 @@ function claude실행({ prompt, resume, onEvent }) {
   const args = ['-p', '--output-format', 'stream-json', '--verbose', '--model', s.model,
     '--append-system-prompt-file', p('.system.md'),
     '--allowedTools', 'Read', 'Glob', 'Grep', 'Edit', 'Write', 'WebSearch', 'WebFetch'];
-  if (s.allowShell) args.push('Bash');
+  if (s.allowShell || s.allowSelfEdit) args.push('Bash');
   if (s.allowHome) args.push('--add-dir', homedir());
+  if (s.allowSelfEdit) args.push('--add-dir', ROOT);   // 자기 코드를 고칠 수 있게 산초 폴더를 열어준다
   if (resume) args.push('--resume', resume);
   const env = { ...process.env };
   // Claude Code 세션 안(데스크톱 앱 등)에서 산초를 띄우면 세션 전용 환경변수가 상속돼 자식 claude 가 "중첩 실행"에 걸리거나
@@ -120,6 +132,8 @@ function claude실행({ prompt, resume, onEvent }) {
   return proc;
 }
 
+function 일끝() { 현재 = null; if (재시작예약) setTimeout(() => process.exit(75), 500); }   // 재시작이 예약돼 있으면 지금 일이 끝난 뒤에
+
 function 중지() {
   if (!현재) return false;
   const { proc } = 현재;
@@ -144,7 +158,7 @@ function 예약실행(j) {
     onEvent: (e) => {
       if (e.t === 'text') out += (out ? '\n\n' : '') + e.text;
       if (e.t === 'done') {
-        현재 = null;
+        일끝();
         // 일지엔 마지막 답(final)만 남긴다 — 중간 혼잣말("I'll check…")까지 쌓이면 읽기 어렵다(2026-09-12 실측)
         appendFileSync(join(JOURNAL, `${today}.md`), `## ${hhmm(new Date())} · ${j.id}\n${e.ok ? (e.final || out) : `⚠️ 실패: ${e.text}`}\n\n`);
         const st = 상태(); st.runs[j.id] = today; 상태저장(st);
@@ -171,6 +185,42 @@ function tick() {
 }
 setInterval(tick, 30_000);
 setTimeout(tick, 5_000);
+
+// ---------- 자가 업그레이드 ----------
+// 갱신(git pull)도 자기 수정도 재시작 전에 같은 관문을 지난다: 문법 + 자가시험.
+// 두뇌(Claude)가 절차를 지키길 기대하지 않고 서버가 직접 막는다 — 2026-09-11 파이스가 자기 코드를 고치다 화면을 죽인 사고의 교훈.
+const git = (...args) => new Promise((ok, no) => execFile('git', args, { cwd: ROOT, windowsHide: true },
+  (e, out, err) => e ? no(new Error(String(err || e.message).trim().slice(0, 600))) : ok(String(out).trim())));
+
+function 관문() {
+  return new Promise((ok, no) => {
+    execFile(process.execPath, ['--check', join(ROOT, 'server.js')], { windowsHide: true }, (e, _o, err) => {
+      if (e) return no(new Error(`server.js 문법 오류:\n${String(err).slice(0, 800)}`));
+      if (process.env.SANCHO_SKIP_SELFTEST) return ok();   // selftest 가 재시작을 시험할 때 자기 자신을 또 부르지 않게
+      execFile(process.execPath, [join(ROOT, 'selftest.js')], { cwd: ROOT, windowsHide: true, timeout: 90_000 },
+        (e2, _o2, err2) => e2 ? no(new Error(`자가시험 실패:\n${String(err2 || e2.message).slice(-800)}`)) : ok());
+    });
+  });
+}
+
+let 재시작예약 = false;
+function 재시작() {   // 종료 코드 75 = 산초시작.bat 에게 "다시 켜라". 직접 node 로 켰으면 그냥 꺼진다.
+  if (현재) { 재시작예약 = true; return '지금 하는 일이 끝나면'; }
+  setTimeout(() => process.exit(75), 500);
+  return '지금';
+}
+
+async function 갱신() {   // GitHub 의 새 판 받기. 관문에 걸리면 이전 판으로 되돌린다.
+  const before = await git('rev-parse', 'HEAD');
+  await git('pull', '--ff-only');
+  const after = await git('rev-parse', 'HEAD');
+  if (before === after) return { updated: false, note: '이미 최신이에요', head: after.slice(0, 7) };
+  try { await 관문(); } catch (e) {
+    await git('reset', '--hard', before).catch(() => {});   // ponytail: 커밋 안 된 로컬 변경도 같이 날아간다 — 자기 수정은 커밋해 두는 절차라 감수
+    throw new Error(`새 판(${after.slice(0, 7)})이 관문에 걸려 이전 판(${before.slice(0, 7)})으로 되돌렸어요.\n${e.message}`);
+  }
+  return { updated: true, from: before.slice(0, 7), to: after.slice(0, 7), when: 재시작() };
+}
 
 // ---------- 기록 ----------
 const 기록추가 = (role, text) => appendFileSync(p('history.jsonl'), JSON.stringify({ ts: new Date().toISOString(), role, text }) + '\n');
@@ -199,7 +249,7 @@ async function 채팅(req, res) {
       if (e.t === 'text') answer += (answer ? '\n\n' : '') + e.text;
       sse(e);
       if (e.t === 'done') {
-        finished = true; 현재 = null;
+        finished = true; 일끝();
         if (e.ok && e.session) 상태저장({ session: e.session });                    // 성공한 답만 이어간다(실패한 실행의 id 를 resume 하면 또 실패)
         else if (!e.ok && /session|resume/i.test(e.text)) 상태저장({ session: null });   // 이어가기 자체가 실패면 다음엔 새 대화로
         기록추가('assistant', e.ok ? answer : `⚠️ ${e.text}`);
@@ -218,7 +268,7 @@ createServer(async (req, res) => {
     if (route === 'GET /api/state') {
       const st = 상태();
       return send(res, 200, {
-        claude: { path: CLAUDE, version: CLAUDE_VERSION, ok: !!CLAUDE }, settings: 설정(), session: st.session, busy: 현재 ? 현재.kind : null,
+        claude: { path: CLAUDE, version: CLAUDE_VERSION, ok: !!CLAUDE }, settings: 설정(), session: st.session, busy: 현재 ? 현재.kind : null, pendingRestart: 재시작예약,
         schedules: 예약목록().map((j) => ({ ...j, lastRun: st.runs[j.id] || null })), memory: readText(p('memory.md')), journal: 일지(), history: 기록(),
       });
     }
@@ -234,10 +284,22 @@ createServer(async (req, res) => {
       예약실행(j); return send(res, 200, { ok: true });
     }
     if (route === 'POST /api/chat') return 채팅(req, res);
+    if (route === 'POST /api/restart') {
+      try { await 관문(); } catch (e) { return send(res, 409, { error: `관문에 걸려 재시작하지 않았어요.\n${e.message}` }); }
+      return send(res, 200, { ok: true, when: 재시작(), note: '산초시작.bat 으로 켠 경우에만 자동으로 다시 켜져요' });
+    }
+    if (route === 'POST /api/update') {
+      try { return send(res, 200, await 갱신()); } catch (e) { return send(res, 409, { error: e.message }); }
+    }
     send(res, 404, { error: 'not found' });
   } catch (e) { send(res, 500, { error: String(e?.message || e) }); }
 }).on('error', (e) => {
   if (e.code !== 'EADDRINUSE') throw e;
   console.log(`산초가 이미 켜져 있어요 → 브라우저에서 http://127.0.0.1:${PORT} 를 여세요`);   // 산초시작.bat 을 두 번 눌러도 놀라지 않게
   process.exit(0);
-}).listen(PORT, '127.0.0.1', () => console.log(`산초 → http://127.0.0.1:${PORT}   두뇌: ${CLAUDE ? CLAUDE_VERSION : 'Claude Code 를 찾지 못했어요 (README 참고)'}`));
+}).listen(PORT, '127.0.0.1', () => {
+  console.log(`산초 → http://127.0.0.1:${PORT}   두뇌: ${CLAUDE ? CLAUDE_VERSION : 'Claude Code 를 찾지 못했어요 (README 참고)'}`);
+  // 잘 켜진 코드를 "마지막 정상판"으로 표시한다 — 작업 폴더가 깨끗할 때만(커밋 안 된 코드가 돌고 있으면 표시를 옮기지 않는다).
+  // 산초시작.bat 이 비정상 종료 뒤 이 표시로 복구한다. git 이 없거나 저장소가 아니면 조용히 건너뛴다.
+  git('status', '--porcelain').then((dirty) => dirty ? null : git('tag', '-f', 'last-good')).catch(() => {});
+});
