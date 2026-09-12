@@ -237,7 +237,7 @@ async function 갱신() {   // GitHub 의 새 판 받기. 관문에 걸리면 �
 // ---------- 기록 · 대화 목록 ----------
 const 기록추가 = (role, text, sid) => appendFileSync(p('history.jsonl'), JSON.stringify({ ts: new Date().toISOString(), role, text, sid }) + '\n');
 const 기록 = (sid, n = 200) => readText(p('history.jsonl')).trim().split('\n').filter(Boolean)
-  .map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter((h) => h && h.sid === sid).slice(-n);
+  .map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter((h) => h && sid && h.sid === sid).slice(-n);   // 새 대화(sid 없음)는 빈 화면
 // 대화 목록 도입(2026-09-12) 전 기록엔 sid 가 없다 — 지금 대화로 귀속시킨다(1회)
 { const raw = readText(p('history.jsonl')); if (raw.includes('"text"') && !raw.includes('"sid"')) writeFileSync(p('history.jsonl'), raw.trim().split('\n').filter(Boolean).map((l) => { try { return JSON.stringify({ ...JSON.parse(l), sid: 상태().session }); } catch { return l; } }).join('\n') + '\n'); }
 function 대화기록(sid, firstText) {   // 대화 목록 맨 위로(제목은 첫 말 40자, Claude 앱처럼)
