@@ -23,7 +23,8 @@ const readText = (file) => { try { return readFileSync(file, 'utf8'); } catch { 
 const ymd = (d) => d.toLocaleDateString('sv-SE');      // YYYY-MM-DD (현지 날짜)
 const hhmm = (d) => d.toTimeString().slice(0, 5);      // HH:MM
 
-const 기본설정 = { name: '산초', model: 'sonnet', effort: 'high', allowShell: false, allowHome: false, allowSelfEdit: false, allowApps: false };
+const 기본설정 = { name: '산초', model: 'sonnet', effort: 'high', allowShell: false, allowHome: false, allowSelfEdit: false, allowApps: false,
+  vaultPath: '', telegramToken: '', telegramChat: '', geminiKey: '', geminiModel: 'gemini-2.5-flash', token: '' };   // 연결(선택): 옵시디언 볼트 · 텔레그램 배달 · 비상두뇌(Gemini) · 외부 접속 토큰
 const 모델ID = { sonnet: 'sonnet', opus: 'opus', haiku: 'haiku', fable: 'claude-fable-5-1' };   // 화면 이름 → claude --model 값
 const 노력 = ['low', 'medium', 'high', 'xhigh', 'max'];                                            // claude --effort 값(2.1.269 실측)
 const 연결앱 = ['mcp__claude_ai_Gmail', 'mcp__claude_ai_Google_Calendar', 'mcp__claude_ai_Google_Drive', 'mcp__claude_ai_Microsoft_365'];   // claude.ai 커넥터 서버 이름(공백·점 → _)
@@ -67,6 +68,9 @@ function 시스템프롬프트() {
 6) history.jsonl — 지난 대화 기록. "전에 말한 …" 을 찾을 땐 Grep 한다.
 7) uploads/ — 주인이 채팅에 올린 파일. 말 끝에 [첨부 파일] 목록이 붙으면 Read 로 읽고 답한다(이미지·PDF 도 Read 로 볼 수 있다).
 8) 파일함/ — 네가 만든 파일(엑셀·PPT·워드·PDF·이미지 등)은 여기 저장한다. 만든 파일은 대시보드에 카드로 떠서 주인이 바로 열 수 있다. 만드는 법은 office-docs 스킬을 따른다.
+자동 기억: 대화 중 주인에 관해 새로 알게 된 사실(선호·일정·사람·습관·목표)은 묻지 않아도 memory.md 에 한 줄 덧붙인다. 이미 있는 내용·사소한 것은 빼고, 적었으면 답 끝에 "(기억함)" 이라고 짧게 표시한다.
+${s.vaultPath ? `옵시디언 볼트: ${s.vaultPath} — 주인이 "노트에 적어", "볼트에서 찾아" 하면 이 폴더의 .md 파일을 Write/Grep/Read 한다. 새 노트는 볼트 안 ${s.name}/ 폴더에 만든다.` : ''}
+${s.telegramToken ? `텔레그램: 주인이 "텔레그램으로 보내" 하면 settings.json 의 telegramToken·telegramChat 으로 Bash curl -s -X POST https://api.telegram.org/bot<토큰>/sendMessage -d chat_id=<chat> --data-urlencode text=<내용> 을 호출한다(명령 실행 권한 필요).` : ''}
 배달: 주인이 예약 결과를 메일 등으로 받고 싶다고 하면 prompt 에 "결과를 <채널>로 보내라" 를 넣는다. ${s.allowApps ? '연결된 앱(Gmail·Google 캘린더·드라이브·Microsoft 365) 도구를 쓸 수 있다.' : '연결된 앱(Gmail 등) 도구는 꺼져 있다. 필요하면 주인에게 설정에서 켜달라고 말한다.'}
 ${(s.allowShell || s.allowSelfEdit) ? '명령 실행(Bash)이 허용돼 있다. 파괴적인 명령은 실행 전에 주인에게 확인한다.' : '명령 실행(Bash)은 꺼져 있다. 필요하면 주인에게 대시보드 설정에서 켜달라고 말한다.'}
 ${s.allowHome ? `주인의 홈 폴더(${homedir()})를 읽고 고칠 수 있다.` : '이 데이터 폴더 밖의 파일은 건드릴 수 없다.'}
@@ -89,10 +93,10 @@ const 자기수정안내 = (s) => `
 // ---------- Claude Code 실행 ----------
 let 현재 = null;   // 진행 중인 실행 { proc, kind, startedAt } — 한 번에 하나만(같은 구독·같은 파일을 쓴다)
 
-function claude실행({ prompt, resume, onEvent }) {
+function claude실행({ prompt, resume, model, onEvent }) {
   const s = 설정();
   writeFileSync(p('.system.md'), 시스템프롬프트());
-  const args = ['-p', '--output-format', 'stream-json', '--verbose', '--model', 모델ID[s.model] || s.model,
+  const args = ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--model', 모델ID[model || s.model] || model || s.model,
     '--append-system-prompt-file', p('.system.md'),
     '--allowedTools', 'Read', 'Glob', 'Grep', 'Edit', 'Write', 'WebSearch', 'WebFetch'];
   if (s.allowShell || s.allowSelfEdit) args.push('Bash', 'PowerShell');   // Windows 의 Claude Code 는 PowerShell 도구도 먼저 집는다(2026-09-13 실측)
@@ -100,6 +104,7 @@ function claude실행({ prompt, resume, onEvent }) {
   if (노력.includes(s.effort)) args.push('--effort', s.effort);
   if (s.allowHome) args.push('--add-dir', homedir());
   if (s.allowSelfEdit) args.push('--add-dir', ROOT);   // 자기 코드를 고칠 수 있게 산초 폴더를 열어준다
+  if (s.vaultPath && existsSync(s.vaultPath)) args.push('--add-dir', s.vaultPath);   // 옵시디언 볼트
   if (resume) args.push('--resume', resume);
   const env = { ...process.env };
   // Claude Code 세션 안(데스크톱 앱 등)에서 산초를 띄우면 세션 전용 환경변수가 상속돼 자식 claude 가 "중첩 실행"에 걸리거나
@@ -110,7 +115,7 @@ function claude실행({ prompt, resume, onEvent }) {
   proc.stdin.on('error', () => {});
   proc.stdin.end(prompt);                                     // 지시문은 표준입력으로 — 길이 제한·따옴표 문제가 없다
 
-  let buf = '', err = '', done = false;
+  let buf = '', err = '', done = false, sawDelta = false, textBlocks = 0;
   const emit = (e) => { try { onEvent(e); } catch {} };
   const 요약 = (input) => String(input?.command || input?.file_path || input?.pattern || input?.query || input?.url || input?.description || '').slice(0, 120);
   const 친절한오류 = (t) => /not logged in/i.test(t) ? `Claude Code 에 로그인이 안 돼 있어요. 터미널에서 claude 를 실행한 뒤 /login 으로 한 번만 로그인하면 됩니다. (${t})`
@@ -118,10 +123,14 @@ function claude실행({ prompt, resume, onEvent }) {
   function handle(line) {
     let ev; try { ev = JSON.parse(line); } catch { return; }
     if (ev.type === 'system' && ev.subtype === 'init') emit({ t: 'init', session: ev.session_id, model: ev.model });
-    else if (ev.type === 'assistant') {
+    else if (ev.type === 'stream_event') {   // 글자 단위 스트리밍(--include-partial-messages)
+      const d = ev.event || {};
+      if (d.type === 'content_block_start' && d.content_block?.type === 'text') { if (textBlocks++ > 0) emit({ t: 'delta', text: '\n\n' }); }
+      else if (d.type === 'content_block_delta' && d.delta?.type === 'text_delta' && d.delta.text) { sawDelta = true; emit({ t: 'delta', text: d.delta.text }); }
+    } else if (ev.type === 'assistant') {
       if (ev.message?.model === '<synthetic>') return;   // Claude Code 가 만든 오류 문구(로그인 안 됨 등) — result 에 다시 오니 여기선 건너뛴다
       for (const c of ev.message?.content || []) {
-        if (c.type === 'text' && c.text) emit({ t: 'text', text: c.text });
+        if (c.type === 'text' && c.text) { if (!sawDelta) emit({ t: 'text', text: c.text }); }   // 글자 스트림을 받았으면 통문장은 중복이라 건너뛴다
         else if (c.type === 'tool_use') emit({ t: 'tool', name: c.name, input: 요약(c.input) });
       }
     } else if (ev.type === 'result') {
@@ -163,17 +172,39 @@ function 예약목록() {
     .map((j) => ({ ...j, id: String(j.id), time: String(j.time).trim().padStart(5, '0'), repeat: j.repeat === 'once' ? 'once' : 'daily' }));
 }
 
+// 텔레그램 배달(선택): 예약 결과를 휴대폰으로. 파이스의 deliver 에 해당. 토큰·chat id 는 설정에.
+async function 텔레그램(text) {
+  const s = 설정(); if (!s.telegramToken || !s.telegramChat) return false;
+  const body = String(text).replace(/[*_`#>|]/g, '').slice(0, 3800);
+  const r = await fetch(`https://api.telegram.org/bot${s.telegramToken}/sendMessage`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chat_id: s.telegramChat, text: body }) }).catch(() => null);
+  return !!(r && r.ok);
+}
+
+// 비상두뇌(선택): Claude 가 한도에 걸렸을 때 Gemini 키가 있으면 도구 없이 대신 답한다. 파이스의 비상두뇌(Gemini 직행)에 해당.
+async function 비상두뇌(prompt) {
+  const s = 설정(); if (!s.geminiKey) return null;
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${s.geminiModel || 'gemini-2.5-flash'}:generateContent?key=${s.geminiKey}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: `${시스템프롬프트()}\n(지금은 비상 두뇌라 도구를 쓸 수 없다. 아는 것만 짧게 답하라.)\n\n주인: ${prompt}` }] }] }),
+  });
+  const j = await r.json().catch(() => ({}));
+  return j?.candidates?.[0]?.content?.parts?.map((x) => x.text || '').join('') || null;
+}
+
 function 예약실행(j) {
   const today = ymd(new Date());
   let out = '';
   const proc = claude실행({
     prompt: `[예약 실행] id=${j.id} 예정시각=${j.time}\n${j.prompt}\n\n결과는 주인이 나중에 대시보드에서 읽을 짧은 보고문으로 써라. 질문으로 끝내지 말 것.`,
     onEvent: (e) => {
-      if (e.t === 'text') out += (out ? '\n\n' : '') + e.text;
+      if (e.t === 'delta') out += e.text;
+      else if (e.t === 'text') out += (out ? '\n\n' : '') + e.text;
       if (e.t === 'done') {
         일끝();
         // 일지엔 마지막 답(final)만 남긴다 — 중간 혼잣말("I'll check…")까지 쌓이면 읽기 어렵다(2026-09-12 실측)
-        appendFileSync(join(JOURNAL, `${today}.md`), `## ${hhmm(new Date())} · ${j.id}\n${e.ok ? (e.final || out) : `⚠️ 실패: ${e.text}`}\n\n`);
+        const 결과 = e.ok ? (e.final || out) : `⚠️ 실패: ${e.text}`;
+        appendFileSync(join(JOURNAL, `${today}.md`), `## ${hhmm(new Date())} · ${j.id}\n${결과}\n\n`);
+        텔레그램(`[${설정().name} · ${j.id}]\n${결과}`);
         const st = 상태(); st.runs[j.id] = today; 상태저장(st);
         if (j.repeat === 'once') writeJson(p('schedule.json'), 예약목록().filter((x) => x.id !== j.id));
       }
@@ -303,28 +334,41 @@ async function 채팅(req, res) {
   if (현재) return send(res, 409, { error: `지금 다른 일(${현재.kind})을 하고 있어요. ■ 를 눌러 멈추거나 끝나길 기다려 주세요.` });
   res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache', connection: 'keep-alive' });
   const sse = (e) => { try { res.write(`data: ${JSON.stringify(e)}\n\n`); } catch {} };
-  let answer = '', finished = false;
-  const proc = claude실행({
-    prompt, resume: 상태().session,
-    onEvent: (e) => {
+  let answer = '', finished = false, 재시도 = false;
+  const 마무리 = (e) => {   // 끝: 대화 목록 · 만든 파일 카드 · 기록 · 자기 수정 → 응답 닫기
+    finished = true;
+    if (e.ok && e.session) 대화기록(e.session, text);                                // 성공한 답만 이어간다(실패한 실행의 id 를 resume 하면 또 실패)
+    else if (!e.ok && /session|resume/i.test(e.text)) 상태저장({ session: null });   // 이어가기 자체가 실패면 다음엔 새 대화로
+    const sid = 상태().session, made = e.ok ? 새파일(전) : [];
+    if (made.length) sse({ t: 'files', files: made });   // 두뇌가 만든 파일 → 카드(열기·보기·내려받기)
+    sse(e);
+    기록추가('user', text, sid, 첨부); 기록추가('assistant', e.ok ? answer : `⚠️ ${e.text}`, sid, made);
+    (설정().allowSelfEdit && e.ok && !e.emergency ? 자기수정마무리(text) : Promise.resolve(null))
+      .catch((err) => ({ ok: false, text: `자기 수정 마무리 실패: ${err.message}` }))
+      .then((r) => { if (r) { sse({ t: 'selfedit', ...r }); 기록추가('assistant', `🔁 ${r.text}`, sid); } res.end(); 일끝(); });
+  };
+  const 시도 = (model) => claude실행({
+    prompt, resume: 상태().session, model,
+    onEvent: async (e) => {
       if (finished) return;
-      if (e.t === 'text') answer += (answer ? '\n\n' : '') + e.text;
-      sse(e);
-      if (e.t === 'done') {
-        finished = true;
-        if (e.ok && e.session) 대화기록(e.session, text);                                // 성공한 답만 이어간다(실패한 실행의 id 를 resume 하면 또 실패)
-        else if (!e.ok && /session|resume/i.test(e.text)) 상태저장({ session: null });   // 이어가기 자체가 실패면 다음엔 새 대화로
-        const sid = 상태().session;
-        const made = e.ok ? 새파일(전) : [];
-        if (made.length) sse({ t: 'files', files: made });   // 두뇌가 만든 파일 → 카드(열기·보기·내려받기)
-        기록추가('user', text, sid, 첨부); 기록추가('assistant', e.ok ? answer : `⚠️ ${e.text}`, sid, made);
-        (설정().allowSelfEdit && e.ok ? 자기수정마무리(text) : Promise.resolve(null))
-          .catch((err) => ({ ok: false, text: `자기 수정 마무리 실패: ${err.message}` }))
-          .then((r) => { if (r) { sse({ t: 'selfedit', ...r }); 기록추가('assistant', `🔁 ${r.text}`, sid); } res.end(); 일끝(); });
+      if (e.t === 'delta') answer += e.text;
+      else if (e.t === 'text') answer += (answer ? '\n\n' : '') + e.text;
+      if (e.t !== 'done') return sse(e);
+      // 비상 경로(파이스의 안전모델·비상두뇌): 한도에 걸리면 Gemini 키가 있을 때 대신 답하고, 본모델이 거부되면 Sonnet 으로 한 번 다시 시도한다
+      if (!e.ok && !재시도) {
+        재시도 = true;
+        if (/limit|429|overloaded|529|quota/i.test(e.text)) {
+          const g = await 비상두뇌(prompt).catch(() => null);
+          if (g) { answer = `⚠️ [비상두뇌 · Gemini] 본두뇌(Claude)가 한도에 걸려 대신 답합니다. 도구 없이 아는 것만.\n\n${g}`; sse({ t: 'text', text: answer }); return 마무리({ ...e, ok: true, emergency: true, text: '' }); }
+        } else if ((model || 설정().model) !== 'sonnet' && /model|credit|not found|invalid|400|403/i.test(e.text)) {
+          sse({ t: 'note', text: `본모델이 답하지 못해 Sonnet 으로 다시 시도합니다 (${e.text.slice(0, 80)})` }); answer = '';
+          현재 = { proc: 시도('sonnet'), kind: '채팅', startedAt: Date.now() }; return;
+        }
       }
+      마무리(e);
     },
   });
-  현재 = { proc, kind: '채팅', startedAt: Date.now() };
+  현재 = { proc: 시도(), kind: '채팅', startedAt: Date.now() };
 }
 
 createServer(async (req, res) => {
@@ -332,6 +376,10 @@ createServer(async (req, res) => {
   const route = `${req.method} ${url.pathname}`;
   try {
     if (route === 'GET /') return send(res, 200, readFileSync(join(ROOT, 'public', 'index.html')), 'text/html; charset=utf-8');
+    if (route === 'GET /health') return send(res, 200, { ok: true, busy: 현재 ? 현재.kind : null, version: CLAUDE_VERSION });
+    // 외부 접속(선택): 설정에 접속 토큰이 있으면 API 는 토큰이 있어야 한다(터널로 밖에 열 때). 화면(/)은 토큰을 묻는다.
+    const 토큰 = 설정().token;
+    if (토큰 && url.pathname.startsWith('/api/') && req.headers['x-token'] !== 토큰 && url.searchParams.get('token') !== 토큰) return send(res, 401, { error: '접속 토큰이 필요해요' });
     if (route === 'GET /api/state') {
       const st = 상태();
       return send(res, 200, {
@@ -404,8 +452,8 @@ createServer(async (req, res) => {
   if (e.code !== 'EADDRINUSE') throw e;
   console.log(`산초가 이미 켜져 있어요 → 브라우저에서 http://127.0.0.1:${PORT} 를 여세요`);   // sancho.bat 을 두 번 눌러도 놀라지 않게
   process.exit(0);
-}).listen(PORT, '127.0.0.1', () => {
-  console.log(`산초 → http://127.0.0.1:${PORT}   두뇌: ${CLAUDE ? CLAUDE_VERSION : 'Claude Code 를 찾지 못했어요 (README 참고)'}`);
+}).listen(PORT, process.env.SANCHO_HOST || '127.0.0.1', () => {   // SANCHO_HOST=0.0.0.0 으로 열 때는 반드시 접속 토큰을 설정한다
+  console.log(`산초 → http://${process.env.SANCHO_HOST || '127.0.0.1'}:${PORT}   두뇌: ${CLAUDE ? CLAUDE_VERSION : 'Claude Code 를 찾지 못했어요 (README 참고)'}`);
   // 잘 켜진 코드를 "마지막 정상판"으로 표시한다 — 작업 폴더가 깨끗할 때만(커밋 안 된 코드가 돌고 있으면 표시를 옮기지 않는다).
   // sancho.bat 이 비정상 종료 뒤 이 표시로 복구한다. git 이 없거나 저장소가 아니면 조용히 건너뛴다.
   git('status', '--porcelain').then((dirty) => dirty ? null : git('tag', '-f', 'last-good')).catch(() => {});
