@@ -273,7 +273,9 @@ function 자동실행(on) {
   return new Promise((ok, no) => {
     if (!시작바로가기) return no(new Error('Windows 에서만 됩니다'));
     if (!on) { try { unlinkSync(시작바로가기); } catch {} return ok(false); }
-    const ps = `$s=(New-Object -ComObject WScript.Shell).CreateShortcut('${시작바로가기}'); $s.TargetPath='cmd.exe'; $s.Arguments='/c "${join(ROOT, 'sancho-autostart.bat')}"'; $s.WorkingDirectory='${ROOT}'; $s.WindowStyle=7; $s.Description='Sancho'; $s.Save()`;
+    // 창 없이(숨김) 켠다 — 최소화 창은 실수로 닫혀서 산초가 꺼진 일이 두 번(2026-09-13). 끄는 건 ⚙ "산초 끄기".
+    const 숨김 = Buffer.from(`Start-Process -FilePath 'cmd.exe' -ArgumentList '/c "${join(ROOT, 'sancho-autostart.bat')}"' -WorkingDirectory '${ROOT}' -WindowStyle Hidden`, 'utf16le').toString('base64');
+    const ps = `$s=(New-Object -ComObject WScript.Shell).CreateShortcut('${시작바로가기}'); $s.TargetPath='powershell.exe'; $s.Arguments='-NoProfile -WindowStyle Hidden -EncodedCommand ${숨김}'; $s.WorkingDirectory='${ROOT}'; $s.WindowStyle=7; $s.Description='Sancho (hidden)'; $s.Save()`;
     execFile('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(ps, 'utf16le').toString('base64')], { windowsHide: true },   // 인코딩: 따옴표 문제 없이 넘긴다
       (e, _o, err) => e ? no(new Error(String(err || e.message).slice(0, 300))) : ok(true));
   });
@@ -400,6 +402,10 @@ createServer(async (req, res) => {
         skills: ls(join(DATA, '.claude', 'skills')), wiki: ls(join(DATA, 'wiki'), (f) => f.endsWith('.md')),
         canAutostart: !!시작바로가기, autostart: !!(시작바로가기 && existsSync(시작바로가기)),
       });
+    }
+    if (route === 'POST /api/quit') {   // 완전 종료(코드 0 → sancho.bat 루프도 끝난다). 숨겨서 돌아가니 끄는 길은 이것뿐
+      send(res, 200, { ok: true, note: '산초를 끕니다. 다시 켤 때는 sancho.bat 을 실행하거나 컴퓨터를 다시 켜세요.' });
+      setTimeout(() => process.exit(0), 300); return;
     }
     if (route === 'POST /api/autostart') {
       try { await 자동실행(!!(await readBody(req)).on); return send(res, 200, { autostart: existsSync(시작바로가기) }); } catch (e) { return send(res, 409, { error: e.message }); }

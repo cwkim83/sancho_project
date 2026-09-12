@@ -131,6 +131,7 @@
       <label id="autoLbl">Windows 시작 시 자동 실행 <span class="hint">시작 프로그램 바로가기</span> <input type="checkbox" id="autostart"></label>
       <button id="update">업데이트 <span class="hint">GitHub 새 판 받기</span></button>
       <button id="restart">재시작 <span class="hint">관문 통과 시</span></button>
+      <button id="quit">산초 끄기 <span class="hint">완전 종료 · 다시 켤 땐 sancho.bat</span></button>
       <div id="upmsg" class="hint"></div>
     </div>
   </div>
@@ -492,6 +493,7 @@ async function 업그레이드(path, label) {
 $('#autostart').onchange = async (e) => { const r = await api('/api/autostart', { on: e.target.checked }); if (r.error) alert(r.error); refresh(); };
 $('#update').onclick = () => 업그레이드('/api/update', '업데이트');
 $('#restart').onclick = () => 업그레이드('/api/restart', '재시작');
+$('#quit').onclick = async () => { if (!confirm('산초를 완전히 끌까요? 다시 켤 때는 sancho.bat 을 실행하거나 컴퓨터를 다시 켜야 합니다.')) return; const r = await api('/api/quit', {}); $('#upmsg').textContent = r.note || r.error || ''; };
 
 const empty = (t) => `<div class="hint" style="padding:4px 8px">${t}</div>`;
 const sessItem = (x, cur) => `<div class="item ${x.id === cur ? 'active' : ''}" data-sid="${esc(x.id)}" title="${esc(x.title)}"><span>${esc(x.title)}</span><span class="t">${ago(x.ts)}</span><span class="acts"><button data-pin="${esc(x.id)}" data-pinned="${x.pinned ? 1 : 0}" title="${x.pinned ? '고정 해제' : '고정 (3개까지)'}">${x.pinned ? '📍' : '📌'}</button><button data-del="${esc(x.id)}" title="목록에서 지우기">✕</button></span></div>`;
