@@ -90,6 +90,7 @@ async function send() {
         if (e.t === 'text') { if (!bot) bot = add('msg bot', ''); bot.textContent += (bot.textContent ? '\n\n' : '') + e.text; }
         else if (e.t === 'tool') add('tool', '🔧 ' + e.name + (e.input ? ' · ' + e.input : ''));
         else if (e.t === 'done') { gotDone = true; if (!e.ok) add('msg bot err', '⚠️ ' + e.text); else if (e.ms) add('tool', '✓ ' + (e.ms / 1000).toFixed(1) + '초'); }
+        else if (e.t === 'selfedit') add('msg bot' + (e.ok ? '' : ' err'), '🔁 ' + e.text);   // 자기 수정 마무리(관문·커밋·재시작) 결과
         log.scrollTop = log.scrollHeight;
       }
     }

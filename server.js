@@ -64,15 +64,14 @@ ${mem}
 `;
 }
 
-// 자기 수정: 도구는 새로 만들지 않는다 — Claude Code 의 Edit/Bash 가 그대로 도구다. 여기 적는 건 절차와 안전장치의 위치뿐이다.
+// 자기 수정: 도구는 새로 만들지 않는다 — Claude Code 의 Edit/Bash 가 그대로 도구다.
+// 절차(검사→커밋→재시작)도 Claude 에게 맡기지 않는다 — 2026-09-12 실측: "절차대로 해줘" 라고 해도 고치고 끝냈다. 답이 끝나면 서버가 한다(자기수정마무리).
 const 자기수정안내 = (s) => `
 [자기 수정 허용] ${s.name}의 코드는 ${ROOT} 에 있다 — server.js(서버), public/index.html(화면), selftest.js(자가시험), README.md.
-주인이 ${s.name} 자체를 고치라고 하면 이 순서를 지킨다:
-1) Edit 로 고친다.  2) 그 폴더에서 node --check server.js 와 node selftest.js 를 직접 돌려 통과시킨다(실패면 고쳐서 다시).
-3) git commit 한다(한국어 한 줄 메시지).  4) curl -s -X POST http://127.0.0.1:${PORT}/api/restart 로 재시작을 요청한다.
-   서버가 관문(문법+자가시험)을 다시 돌려 실패하면 재시작을 거부하고 이유를 준다 — 그러면 고쳐서 다시.
-5) 재시작은 지금 대화가 끝난 뒤 일어난다. 무엇을 바꿨는지 한 줄로 알리고 답을 끝낸다.
-되돌리기: 재시작 뒤 서버가 안 켜지면 sancho.bat 이 마지막 정상판(git tag last-good)으로 자동 복구한다. 주인이 되돌리라 하면 git reset --hard last-good.
+주인이 ${s.name} 자체를 고치라고 하면 Edit 로 고치고, 무엇을 바꿨는지 한 줄로 알려라. 나머지는 ${s.name} 서버가 한다:
+네 답이 끝나면 서버가 바뀐 코드를 관문(node --check server.js + node selftest.js)에 통과시켜 git commit 하고 재시작한다.
+관문에 걸리면 변경을 되돌리고 주인에게 이유를 보여준다. 고친 뒤 그 폴더에서 스스로 node selftest.js 를 한 번 돌려 확인하면 되돌아가는 일이 줄어든다.
+재시작 뒤 서버가 안 켜지면 sancho.bat 이 마지막 정상판(git tag last-good)으로 자동 복구한다. 주인이 되돌리라 하면 git reset --hard last-good.
 `;
 
 // ---------- Claude Code 실행 ----------
@@ -210,6 +209,19 @@ function 재시작() {   // 종료 코드 75 = sancho.bat 에게 "다시 켜라"
   return '지금';
 }
 
+// 채팅이 끝난 뒤: 산초 코드가 바뀌었으면 관문 → 커밋 → 재시작. 걸리면 되돌린다. Claude 가 절차를 지키든 말든 결과는 같다.
+async function 자기수정마무리(요청) {
+  const changed = await git('status', '--porcelain', '--', 'server.js', 'public', 'selftest.js', 'sancho.bat', 'package.json', 'README.md').catch(() => '');
+  if (!changed.trim()) return null;
+  try { await 관문(); } catch (e) {
+    await git('checkout', '--', '.').catch(() => {});   // 방금 고친 것만 버린다(마지막 커밋으로)
+    return { ok: false, text: `${설정().name} 코드가 바뀌었지만 관문에 걸려 되돌렸어요.\n${e.message}` };
+  }
+  await git('add', '-A');
+  await git('commit', '-q', '-m', `산초 자기 수정: ${요청.replace(/\s+/g, ' ').slice(0, 60)}\n\nCo-Authored-By: Claude <noreply@anthropic.com>`);
+  return { ok: true, text: `${설정().name} 코드 수정이 관문(문법·자가시험)을 지나 커밋됐어요. ${재시작()} 재시작합니다 — 몇 초 뒤 화면이 돌아옵니다.` };
+}
+
 async function 갱신() {   // GitHub 의 새 판 받기. 관문에 걸리면 이전 판으로 되돌린다.
   const before = await git('rev-parse', 'HEAD');
   await git('pull', '--ff-only');
@@ -249,11 +261,13 @@ async function 채팅(req, res) {
       if (e.t === 'text') answer += (answer ? '\n\n' : '') + e.text;
       sse(e);
       if (e.t === 'done') {
-        finished = true; 일끝();
+        finished = true;
         if (e.ok && e.session) 상태저장({ session: e.session });                    // 성공한 답만 이어간다(실패한 실행의 id 를 resume 하면 또 실패)
         else if (!e.ok && /session|resume/i.test(e.text)) 상태저장({ session: null });   // 이어가기 자체가 실패면 다음엔 새 대화로
         기록추가('assistant', e.ok ? answer : `⚠️ ${e.text}`);
-        res.end();
+        (설정().allowSelfEdit && e.ok ? 자기수정마무리(text) : Promise.resolve(null))
+          .catch((err) => ({ ok: false, text: `자기 수정 마무리 실패: ${err.message}` }))
+          .then((r) => { if (r) { sse({ t: 'selfedit', ...r }); 기록추가('assistant', `🔁 ${r.text}`); } res.end(); 일끝(); });
       }
     },
   });
