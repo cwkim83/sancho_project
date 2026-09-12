@@ -288,13 +288,55 @@ const prefs = { wake: localStorage.sancho_wake === '1', tts: localStorage.sancho
 let rec = null, listening = false, wakeRec = null, voiceTurn = false, meet = null;
 const 호출어 = /(산초|산쵸|삼초|산처|싼초|산조|산쪼|상초)\s*(야|아|님|씨)?[,!.?~\s]*/, 호출어앞 = new RegExp('^\\s*' + 호출어.source);
 const 호출어제거 = (t) => t.replace(호출어앞, '');
+// 자연스러운 한국어 목소리 고르기 — 앞에 적힌 것일수록 사람 목소리에 가깝다
+const 목소리순위 = [/google.*한국|korean.*google/i, /sunhi|선히/i, /injoon|인준/i, /heami|해미/i];
+let 고른목소리 = null;
+function 목소리찾기() {
+  const ko = speechSynthesis.getVoices().filter((v) => /^ko/i.test(v.lang));
+  if (!ko.length) return null;
+  for (const 순위 of 목소리순위) { const v = ko.find((x) => 순위.test(x.name)); if (v) return v; }
+  return ko.find((v) => !v.localService) || ko[0];
+}
+if ('speechSynthesis' in window) {
+  고른목소리 = 목소리찾기();
+  speechSynthesis.onvoiceschanged = () => { 고른목소리 = 목소리찾기(); };
+}
+// 읽지 말아야 할 것(코드·주소·기호)을 걷어내고 말맛에 맞게 다듬는다
+function 읽을글로(text) {
+  return text
+    .replace(/```[\s\S]*?```/g, ' 코드는 화면을 보세요. ')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' 그림 ')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/https?:\/\/\S+/g, ' 주소는 화면을 보세요. ')
+    .replace(/^\s*\|.*\|\s*$/gm, ' ')                       // 표는 읽지 않는다
+    .replace(/^\s*[-*+]\s+/gm, '')                          // 목록 기호
+    .replace(/^\s*#{1,6}\s*/gm, '')
+    .replace(/[#*_>|~]/g, ' ')
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '') // 이모지
+    .replace(/([.!?…])\s*/g, '$1 ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 1500);
+}
+// 문장 단위로 끊어 읽어야 숨을 쉬고, 긴 글에서 중간에 끊기는 일도 없다
 function speak(text) {
   if (!('speechSynthesis' in window) || !text) return;
   speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text.replace(/```[\s\S]*?```/g, ' 코드는 화면을 보세요 ').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[#*_`>|]/g, ' ').replace(/\s+/g, ' ').slice(0, 1500));
-  u.lang = 'ko-KR'; u.rate = 1.05;
-  const v = speechSynthesis.getVoices().find((x) => x.lang.startsWith('ko')); if (v) u.voice = v;
-  speechSynthesis.speak(u);
+  const 글 = 읽을글로(text);
+  if (!글) return;
+  const 문장들 = 글.match(/[^.!?…\n]+[.!?…]*/g) || [글];
+  문장들.forEach((문장, i) => {
+    const s = 문장.trim(); if (!s) return;
+    const u = new SpeechSynthesisUtterance(s);
+    u.lang = 'ko-KR';
+    if (고른목소리) u.voice = 고른목소리;
+    u.rate = 0.98;                                    // 조금 천천히 — 또박또박 들린다
+    u.pitch = s.endsWith('?') ? 1.08 : 1;             // 묻는 말은 끝을 살짝 올린다
+    u.volume = 1;
+    if (i) u.text = ' ' + s;                          // 문장 사이 한 박자
+    speechSynthesis.speak(u);
+  });
 }
 function micUI(on) { $('#micBtn').classList.toggle('on', on); $('#micBtn').textContent = on ? '🎤 듣는 중…' : '🎤'; }
 function wakeUI() { $('#wakeInd').hidden = !wakeRec; $('#wakeOn').checked = prefs.wake; $('#ttsOn').checked = prefs.tts; }
