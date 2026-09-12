@@ -101,7 +101,7 @@ function claude실행({ prompt, resume, onEvent }) {
       }
     } else if (ev.type === 'result') {
       done = true;
-      emit({ t: 'done', ok: !ev.is_error, session: ev.session_id, text: ev.is_error ? 친절한오류(String(ev.result || ev.subtype || '오류')) : '', cost: ev.total_cost_usd, ms: ev.duration_ms });
+      emit({ t: 'done', ok: !ev.is_error, session: ev.session_id, text: ev.is_error ? 친절한오류(String(ev.result || ev.subtype || '오류')) : '', final: ev.is_error ? '' : String(ev.result || ''), cost: ev.total_cost_usd, ms: ev.duration_ms });
     }
   }
   proc.stdout.setEncoding('utf8');
@@ -145,7 +145,8 @@ function 예약실행(j) {
       if (e.t === 'text') out += (out ? '\n\n' : '') + e.text;
       if (e.t === 'done') {
         현재 = null;
-        appendFileSync(join(JOURNAL, `${today}.md`), `## ${hhmm(new Date())} · ${j.id}\n${e.ok ? out : `⚠️ 실패: ${e.text}`}\n\n`);
+        // 일지엔 마지막 답(final)만 남긴다 — 중간 혼잣말("I'll check…")까지 쌓이면 읽기 어렵다(2026-09-12 실측)
+        appendFileSync(join(JOURNAL, `${today}.md`), `## ${hhmm(new Date())} · ${j.id}\n${e.ok ? (e.final || out) : `⚠️ 실패: ${e.text}`}\n\n`);
         const st = 상태(); st.runs[j.id] = today; 상태저장(st);
         if (j.repeat === 'once') writeJson(p('schedule.json'), 예약목록().filter((x) => x.id !== j.id));
       }
