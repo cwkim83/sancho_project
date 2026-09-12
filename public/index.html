@@ -4,65 +4,135 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>산초</title>
+<!-- 마크다운 렌더러(표·굵게·코드). 인터넷이 없으면 못 받아오는데, 그땐 아래 md() 가 글자 그대로 보여준다 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <style>
-  body{margin:0;font:14px/1.5 system-ui,'Malgun Gothic',sans-serif;background:#f4f4f2;color:#222;display:flex;height:100vh}
-  #chat{flex:3;display:flex;flex-direction:column;border-right:1px solid #ddd;background:#fff;min-width:0}
-  #side{flex:2;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:12px;min-width:0}
-  .panel{background:#fff;border:1px solid #ddd;border-radius:8px;padding:10px}
-  .panel h3{margin:0 0 6px;font-size:13px;color:#555}
-  #log{flex:1;overflow:auto;padding:16px}
-  .msg{max-width:85%;margin:6px 0;padding:8px 12px;border-radius:10px;white-space:pre-wrap;word-break:break-word}
-  .user{margin-left:auto;background:#dbeafe}
-  .bot{background:#f1f1ef}
-  .err{background:#fee2e2}
-  .tool{font-size:12px;color:#777;margin:2px 0 2px 8px}
-  #bar{display:flex;gap:8px;padding:10px;border-top:1px solid #ddd}
-  textarea{flex:1;resize:none;height:44px;padding:8px;font:inherit}
-  button{padding:6px 12px;font:inherit;cursor:pointer;border:1px solid #bbb;background:#fafafa;border-radius:6px}
-  #send.stop{background:#c0392b;color:#fff;border-color:#c0392b}
-  .row{display:flex;justify-content:space-between;gap:6px;align-items:center;padding:4px 0;border-top:1px dashed #eee}
-  .small{font-size:12px;color:#666}
-  .btns{margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-  label{margin-left:8px}
-  pre{white-space:pre-wrap;margin:0;font:12px/1.4 ui-monospace,Consolas,monospace;max-height:220px;overflow:auto}
-  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#c33;margin-right:6px}
-  .dot.ok{background:#2a2}
+  /* Claude 데스크톱 앱의 느낌을 본뜸: 왼쪽 목록, 가운데 대화(말풍선 없는 답), 아래 둥근 입력창(권한 · 모델 · 전송/중지) */
+  :root{--bg:#faf9f5;--side:#f2f0e9;--text:#1f1e1b;--muted:#77746c;--line:#e4e1d9;--accent:#d97757;--user:#efece4;--codebg:#f8ece8;--code:#a53a2e}
+  *{box-sizing:border-box}
+  body{margin:0;height:100vh;display:flex;font:15px/1.6 system-ui,'Malgun Gothic',sans-serif;background:var(--bg);color:var(--text)}
+  #side{width:270px;flex:none;background:var(--side);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+  .brand{padding:16px 16px 8px;font-weight:600;display:flex;align-items:center;gap:6px}
+  .star{color:var(--accent)}
+  .newbtn{margin:4px 12px 8px;padding:8px 12px;border:1px solid var(--line);background:#fff;border-radius:10px;text-align:left;cursor:pointer;font:inherit;font-size:14px}
+  .newbtn:hover{background:var(--bg)}
+  .sbody{flex:1;overflow:auto;padding:0 12px 8px}
+  .sec h4{margin:12px 4px 4px;font-size:12px;color:var(--muted);font-weight:600}
+  .hint{font-size:12px;color:var(--muted)}
+  .item{padding:6px 8px;border-radius:8px;cursor:pointer;font-size:13.5px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+  .item>span:first-child{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  .item:hover{background:rgba(0,0,0,.05)} .item.active{background:#fff;box-shadow:0 0 0 1px var(--line)}
+  .item .t{font-size:11px;color:var(--muted);flex:none}
+  .item .acts{display:none;gap:2px;flex:none} .item:hover .acts{display:flex}
+  .item .acts button{border:0;background:transparent;cursor:pointer;font-size:12px;color:var(--muted);padding:0 4px}
+  details summary{cursor:pointer;font-size:13px;padding:4px 8px;border-radius:8px;list-style:none;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  details summary:hover{background:rgba(0,0,0,.05)}
+  details .body{font-size:12.5px;padding:2px 8px 8px 14px;color:#3c3a35} details .body.pre{white-space:pre-wrap}
+  details .body p{margin:.3em 0}
+  .foot{border-top:1px solid var(--line);padding:10px 14px;font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:8px;position:relative}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#c33;margin-right:6px;vertical-align:middle} .dot.ok{background:#2e9e5b}
+  .icon{margin-left:auto;border:0;background:transparent;cursor:pointer;font-size:16px;color:var(--muted)}
+  main{flex:1;display:flex;flex-direction:column;min-width:0}
+  header{height:48px;flex:none;display:flex;align-items:center;gap:10px;padding:0 20px;border-bottom:1px solid var(--line);font-size:14px;font-weight:600}
+  #title{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  .chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:3px 10px;font:inherit;font-size:12.5px;color:var(--text);cursor:pointer;white-space:nowrap}
+  .chip.small{font-weight:400;color:var(--muted);cursor:default}
+  .running{margin-left:auto;font-weight:400;font-size:12.5px;color:var(--muted);white-space:nowrap}
+  .spin{display:inline-block;animation:spin 2s linear infinite;color:var(--accent)} @keyframes spin{to{transform:rotate(360deg)}}
+  #log{flex:1;overflow:auto} #col{max-width:780px;margin:0 auto;padding:24px 20px 16px}
+  .user{background:var(--user);border-radius:14px;padding:10px 14px;margin:18px 0 14px;white-space:pre-wrap;word-break:break-word}
+  .bot{margin:6px 0 10px;word-break:break-word}
+  .bot p{margin:.5em 0} .bot h1,.bot h2,.bot h3{font-size:1.05em;margin:1em 0 .4em} .bot ul,.bot ol{padding-left:1.4em;margin:.4em 0} .bot li{margin:.15em 0}
+  .bot code{background:var(--codebg);color:var(--code);padding:1px 5px;border-radius:5px;font:.9em ui-monospace,Consolas,monospace}
+  .bot pre{background:#f4f2ec;border:1px solid var(--line);border-radius:10px;padding:10px 12px;overflow:auto} .bot pre code{background:none;color:inherit;padding:0}
+  .bot table{border-collapse:collapse;margin:.6em 0;font-size:.95em;display:block;overflow-x:auto} .bot th,.bot td{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top} .bot th{background:#f4f2ec}
+  .bot blockquote{border-left:3px solid var(--line);margin:.5em 0;padding:0 .8em;color:var(--muted)}
+  .tool{font:12.5px ui-monospace,Consolas,monospace;color:var(--muted);padding:1px 0 1px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tool::before{content:'⏺ ';color:var(--accent)}
+  .think{color:var(--muted);font-size:13px;margin:8px 0}
+  .card{border:1px solid var(--line);border-radius:12px;background:#fff;padding:10px 14px;margin:10px 0;font-size:13.5px}
+  .card h5{margin:0 0 4px;font-size:13px} .card .f{padding:3px 0;border-top:1px dashed var(--line);font:12.5px ui-monospace,Consolas,monospace;white-space:pre-wrap}
+  .card.err{border-color:#e8b4ad;background:#fdf3f1}
+  .note{font-size:12px;color:var(--muted);margin:4px 0 8px}
+  #composerWrap{flex:none;padding:8px 20px 12px}
+  #composer{max-width:780px;margin:0 auto;background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 2px 10px rgba(0,0,0,.04);padding:10px 12px 8px}
+  #composer:focus-within{border-color:#c9c5ba}
+  textarea{width:100%;border:0;outline:0;resize:none;font:inherit;background:transparent;max-height:220px;line-height:1.5;padding:4px 4px 8px;display:block}
+  .crow{display:flex;align-items:center;justify-content:space-between;gap:8px} .left,.right{display:flex;align-items:center;gap:6px;position:relative}
+  .send{width:32px;height:32px;border-radius:50%;border:0;background:var(--text);color:#fff;font-size:16px;cursor:pointer;display:grid;place-items:center}
+  .send:disabled{background:#cfcbc2;cursor:default} .send.stop{background:var(--accent)}
+  .menu{position:absolute;z-index:10;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.08);padding:6px;min-width:230px;display:flex;flex-direction:column;gap:2px;font-size:13.5px}
+  .menu.up{bottom:calc(100% + 6px);right:0} .menu.upleft{bottom:calc(100% + 6px);left:0}
+  .menu label,.menu button{display:flex;justify-content:space-between;gap:10px;padding:7px 10px;border-radius:8px;border:0;background:transparent;font:inherit;text-align:left;cursor:pointer;align-items:center;color:var(--text)}
+  .menu label:hover,.menu button:hover{background:#f4f2ec} .menu .hint{padding:4px 10px}
+  .center{text-align:center;max-width:780px;margin:6px auto 0}
 </style>
 </head>
 <body>
-<div id="chat">
-  <div id="log"></div>
-  <div id="bar">
-    <textarea id="in" placeholder="산초에게 말씀하세요 (Enter 전송, Shift+Enter 줄바꿈)"></textarea>
-    <button id="send" title="전송">↑</button>
-    <button id="new" title="이어가던 대화를 끊고 새로 시작 (기억·예약은 그대로)">새 대화</button>
+<aside id="side">
+  <div class="brand"><span class="star">✳</span> 산초</div>
+  <button id="new" class="newbtn">＋ 새 대화</button>
+  <div class="sbody">
+    <div class="sec"><h4>대화</h4><div id="sessions"></div></div>
+    <div class="sec"><h4>예약</h4><div id="sched"></div></div>
+    <div class="sec"><h4>알림</h4><div id="journal"></div></div>
+    <div class="sec"><h4>기억</h4><div id="memory"></div></div>
   </div>
-</div>
-<div id="side">
-  <div class="panel"><h3>상태</h3><div id="status"></div>
-    <div class="small" style="margin-top:6px">
-      모델 <select id="model"><option value="sonnet">sonnet</option><option value="opus">opus</option><option value="haiku">haiku</option></select>
-      <label><input type="checkbox" id="allowShell"> 명령 실행 허용</label>
-      <label><input type="checkbox" id="allowHome"> 내 홈 폴더 접근 허용</label>
-      <label><input type="checkbox" id="allowSelfEdit"> 산초 자기 수정 허용</label>
-    </div>
-    <div class="btns small">
-      <button id="update" title="GitHub 의 새 판을 받아 관문(문법+자가시험)을 지나면 재시작합니다">업데이트</button>
-      <button id="restart" title="관문(문법+자가시험)을 지나면 재시작합니다">재시작</button>
-      <span id="upmsg"></span>
+  <div class="foot"><span id="status"></span><button id="gear" class="icon" title="설정">⚙</button>
+    <div id="gearMenu" class="menu upleft" hidden>
+      <button id="update">업데이트 <span class="hint">GitHub 새 판 받기</span></button>
+      <button id="restart">재시작 <span class="hint">관문 통과 시</span></button>
+      <div id="upmsg" class="hint"></div>
     </div>
   </div>
-  <div class="panel"><h3>예약 <span class="small">— 채팅으로 "매일 7시에 …해줘"</span></h3><div id="sched"></div></div>
-  <div class="panel"><h3>알림 <span class="small">— 예약 실행 결과</span></h3><pre id="journal"></pre></div>
-  <div class="panel"><h3>기억 <span class="small">— 채팅으로 "기억해: …"</span></h3><pre id="memory"></pre></div>
-</div>
+</aside>
+<main>
+  <header><span id="title">새 대화</span><span id="modelChip" class="chip small"></span><span id="running" class="running" hidden></span></header>
+  <div id="log"><div id="col"></div></div>
+  <div id="composerWrap">
+    <div id="composer">
+      <textarea id="in" rows="1" placeholder="산초에게 말씀하세요…"></textarea>
+      <div class="crow">
+        <div class="left">
+          <button class="chip" id="permBtn">권한 ▾</button>
+          <div id="permMenu" class="menu upleft" hidden>
+            <label>명령 실행 허용 <input type="checkbox" id="allowShell"></label>
+            <label>내 홈 폴더 접근 허용 <input type="checkbox" id="allowHome"></label>
+            <label>산초 자기 수정 허용 <input type="checkbox" id="allowSelfEdit"></label>
+            <div class="hint">기본은 data/ 폴더만 읽고 씁니다</div>
+          </div>
+        </div>
+        <div class="right">
+          <button class="chip" id="modelBtn">모델 ▾</button>
+          <div id="modelMenu" class="menu up" hidden>
+            <button data-model="sonnet">Sonnet <span class="hint">빠르고 한도 절약</span></button>
+            <button data-model="opus">Opus <span class="hint">어려운 일</span></button>
+            <button data-model="haiku">Haiku <span class="hint">잡일</span></button>
+          </div>
+          <button id="send" class="send" title="전송 (Enter)" disabled>↑</button>
+        </div>
+      </div>
+    </div>
+    <div class="hint center">Enter 전송 · Shift+Enter 줄바꿈 · Esc 중지</div>
+  </div>
+</main>
 <script>
 const $ = (s) => document.querySelector(s);
-const log = $('#log'), input = $('#in'), sendBtn = $('#send');
+const col = $('#col'), logEl = $('#log'), input = $('#in'), sendBtn = $('#send');
 let busy = false;
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-function add(cls, text) { const d = document.createElement('div'); d.className = cls; d.textContent = text; log.appendChild(d); log.scrollTop = log.scrollHeight; return d; }
-function 버튼(생각중) { busy = 생각중; sendBtn.classList.toggle('stop', 생각중); sendBtn.textContent = 생각중 ? '■' : '↑'; sendBtn.title = 생각중 ? '중지 — 지금 하는 일을 즉시 끊습니다' : '전송'; }
+if (window.marked) marked.use({ breaks: true, renderer: { html: (h) => esc(typeof h === 'string' ? h : (h && h.text) || '') } });   // 답에 섞인 날 HTML 은 글자로
+const md = (t) => window.marked ? marked.parse(String(t)) : '<p>' + esc(t).replace(/\n/g, '<br>') + '</p>';
+const ago = (ts) => { const m = Math.round((Date.now() - new Date(ts)) / 60000); return m < 1 ? '지금' : m < 60 ? m + '분 전' : m < 1440 ? Math.round(m / 60) + '시간 전' : Math.round(m / 1440) + '일 전'; };
+const closeMenus = () => document.querySelectorAll('.menu').forEach((x) => { x.hidden = true; });
+
+function el(cls, html) { const d = document.createElement('div'); d.className = cls; if (html != null) d.innerHTML = html; col.appendChild(d); logEl.scrollTop = logEl.scrollHeight; return d; }
+const addUser = (t) => { const d = el('user'); d.textContent = t; return d; };
+const addBot = (t) => el('bot', md(t));
+const addTool = (name, inp) => { const d = el('tool'); d.textContent = name + '  ' + (inp || ''); d.title = inp || ''; return d; };
+const addCard = (title, rows, err) => el('card' + (err ? ' err' : ''), `<h5>${esc(title)}</h5>` + rows.map((r) => `<div class="f">${esc(r)}</div>`).join(''));
+
+function 버튼(on) { busy = on; sendBtn.classList.toggle('stop', on); sendBtn.textContent = on ? '■' : '↑'; sendBtn.title = on ? '중지 (Esc)' : '전송 (Enter)'; sendBtn.disabled = !on && !input.value.trim(); }
 async function api(path, body) {
   const r = await fetch(path, { method: body ? 'POST' : 'GET', headers: { 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
   return r.json();
@@ -71,12 +141,12 @@ async function api(path, body) {
 async function send() {
   const text = input.value.trim();
   if (!text || busy) return;
-  input.value = ''; add('msg user', text); 버튼(true);
+  input.value = ''; input.style.height = 'auto'; addUser(text); 버튼(true);
   const r = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) });
-  if (!r.ok) { const e = await r.json().catch(() => ({})); add('msg bot err', e.error || ('오류 ' + r.status)); 버튼(false); return; }
-  const 생각 = add('tool', '… 생각 중');
+  if (!r.ok) { const e = await r.json().catch(() => ({})); addCard('오류', [e.error || ('오류 ' + r.status)], true); 버튼(false); return; }
+  const think = el('think', '<span class="spin">✳</span> 생각 중…');
   const reader = r.body.getReader(), dec = new TextDecoder();
-  let buf = '', bot = null, gotDone = false;
+  let buf = '', bot = null, acc = '', gotDone = false; const edited = new Set();
   try {
     while (true) {
       const { value, done } = await reader.read();
@@ -87,26 +157,38 @@ async function send() {
         const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
         if (!chunk.startsWith('data: ')) continue;
         let e; try { e = JSON.parse(chunk.slice(6)); } catch { continue; }
-        if (e.t === 'text') { if (!bot) bot = add('msg bot', ''); bot.textContent += (bot.textContent ? '\n\n' : '') + e.text; }
-        else if (e.t === 'tool') add('tool', '🔧 ' + e.name + (e.input ? ' · ' + e.input : ''));
-        else if (e.t === 'done') { gotDone = true; if (!e.ok) add('msg bot err', '⚠️ ' + e.text); else if (e.ms) add('tool', '✓ ' + (e.ms / 1000).toFixed(1) + '초'); }
-        else if (e.t === 'selfedit') add('msg bot' + (e.ok ? '' : ' err'), '🔁 ' + e.text);   // 자기 수정 마무리(관문·커밋·재시작) 결과
-        log.scrollTop = log.scrollHeight;
+        if (e.t === 'text') { acc += (acc ? '\n\n' : '') + e.text; if (!bot) bot = el('bot'); bot.innerHTML = md(acc); col.appendChild(think); }
+        else if (e.t === 'tool') { addTool(e.name, e.input); if (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(e.name) && e.input) edited.add(e.input); col.appendChild(think); }
+        else if (e.t === 'done') {
+          gotDone = true; think.remove(); if (e.session) col.dataset.sid = e.session;
+          if (!e.ok) addCard('⚠️ 실패', [e.text], true);
+          else { if (edited.size) addCard(`파일 ${edited.size}개 편집됨`, [...edited].map((f) => f.split(/[\\/]/).pop())); if (e.ms) el('note', '✓ ' + (e.ms / 1000).toFixed(1) + '초'); }
+        }
+        else if (e.t === 'selfedit') addCard('🔁 산초 자기 수정', [e.text], !e.ok);
+        logEl.scrollTop = logEl.scrollHeight;
       }
     }
   } catch {}
-  if (!gotDone) add('tool', '연결이 끊겼어요 — 재시작 중이면 몇 초 뒤 돌아옵니다');
-  생각.remove(); 버튼(false); refresh();
+  think.remove();
+  if (!gotDone) el('note', '연결이 끊겼어요 — 재시작 중이면 몇 초 뒤 돌아옵니다');
+  버튼(false); refresh();
 }
+
 sendBtn.onclick = () => busy ? api('/api/stop', {}) : send();
+input.oninput = () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 220) + 'px'; sendBtn.disabled = !busy && !input.value.trim(); };
 input.onkeydown = (e) => {
   if (e.isComposing || e.keyCode === 229) return;   // 한글 조합 중 Enter 는 글자 확정용 — 보내지 않는다
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
 };
-$('#new').onclick = async () => { await api('/api/new', {}); log.innerHTML = ''; add('tool', '새 대화를 시작했어요. (기억·예약은 그대로)'); };
-for (const id of ['model', 'allowShell', 'allowHome', 'allowSelfEdit']) {
-  $('#' + id).onchange = async (e) => { const v = e.target.type === 'checkbox' ? e.target.checked : e.target.value; await api('/api/settings', { [id]: v }); refresh(); };
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && busy) api('/api/stop', {}); });
+document.addEventListener('click', (e) => { if (!e.target.closest('.menu')) closeMenus(); });
+for (const [b, m] of [['#permBtn', '#permMenu'], ['#modelBtn', '#modelMenu'], ['#gear', '#gearMenu']]) {
+  $(b).onclick = (e) => { e.stopPropagation(); const open = $(m).hidden; closeMenus(); $(m).hidden = !open; };
 }
+$('#modelMenu').onclick = async (e) => { const m = e.target.closest('button')?.dataset.model; if (!m) return; await api('/api/settings', { model: m }); closeMenus(); refresh(); };
+for (const id of ['allowShell', 'allowHome', 'allowSelfEdit']) $('#' + id).onchange = async (e) => { await api('/api/settings', { [id]: e.target.checked }); refresh(); };
+$('#new').onclick = async () => { if (busy) return; await api('/api/new', {}); refresh(); };
+$('#sessions').onclick = async (e) => { const sid = e.target.closest('[data-sid]')?.dataset.sid; if (!sid || busy) return; await api('/api/session', { id: sid }); refresh(); };
 $('#sched').onclick = async (e) => {
   const run = e.target.dataset.run, del = e.target.dataset.del;
   if (run) { const r = await api('/api/schedule/run', { id: run }); if (r.error) alert(r.error); }
@@ -125,19 +207,39 @@ async function 업그레이드(path, label) {
 $('#update').onclick = () => 업그레이드('/api/update', '업데이트');
 $('#restart').onclick = () => 업그레이드('/api/restart', '재시작');
 
+const 모델명 = { sonnet: 'Sonnet', opus: 'Opus', haiku: 'Haiku' };
 async function refresh() {
   let s;
-  try { s = await api('/api/state'); } catch { $('#status').innerHTML = '<span class="dot"></span>서버가 응답하지 않아요 — 재시작 중이면 몇 초 뒤 돌아옵니다'; return; }
-  $('#status').innerHTML = `<span class="dot ${s.claude.ok ? 'ok' : ''}"></span>${s.claude.ok ? 'Claude Code ' + esc(s.claude.version) : 'Claude Code 없음 — README 참고'}`
-    + (s.busy ? ` · <b>작업 중 (${esc(s.busy)})</b>` : '') + (s.pendingRestart ? ' · <b>일이 끝나면 재시작</b>' : '')
-    + (s.session ? '<div class="small">대화 이어가는 중 · 끊으려면 "새 대화"</div>' : '');
-  $('#model').value = s.settings.model; $('#allowShell').checked = !!s.settings.allowShell; $('#allowHome').checked = !!s.settings.allowHome; $('#allowSelfEdit').checked = !!s.settings.allowSelfEdit;
+  try { s = await api('/api/state'); } catch { $('#status').innerHTML = '<span class="dot"></span>서버 응답 없음 — 재시작 중이면 곧 돌아와요'; return; }
+  const model = 모델명[s.settings.model] || s.settings.model;
+  $('#modelBtn').textContent = model + ' ▾'; $('#modelChip').textContent = model;
+  for (const id of ['allowShell', 'allowHome', 'allowSelfEdit']) $('#' + id).checked = !!s.settings[id];
+  const perms = [s.settings.allowShell && '명령', s.settings.allowHome && '홈 폴더', s.settings.allowSelfEdit && '자기 수정'].filter(Boolean);
+  $('#permBtn').textContent = (perms.length ? '권한: ' + perms.join(' · ') : '권한: 기본') + ' ▾';
+  $('#status').innerHTML = `<span class="dot ${s.claude.ok ? 'ok' : ''}"></span>${s.claude.ok ? 'Claude Code ' + esc(s.claude.version.replace(' (Claude Code)', '')) : 'Claude Code 없음 — README 참고'}`;
+  const run = $('#running'); run.hidden = !s.busy && !s.pendingRestart;
+  run.innerHTML = (s.busy ? `<span class="spin">✳</span> 실행 중인 작업 1개 · ${esc(s.busy)}` : '') + (s.pendingRestart ? ' · 일이 끝나면 재시작' : '');
+  const cur = s.sessions.find((x) => x.id === s.session);
+  $('#title').textContent = cur ? cur.title : '새 대화';
+  $('#sessions').innerHTML = s.sessions.length
+    ? s.sessions.map((x) => `<div class="item ${x.id === s.session ? 'active' : ''}" data-sid="${esc(x.id)}" title="${esc(x.title)}"><span>${esc(x.title)}</span><span class="t">${ago(x.ts)}</span></div>`).join('')
+    : '<div class="hint" style="padding:4px 8px">아직 없음</div>';
   $('#sched').innerHTML = s.schedules.length
-    ? s.schedules.map((j) => `<div class="row"><div><b>${esc(j.time)}</b> ${j.repeat === 'once' ? esc(j.date || '한 번') : '매일'} · ${esc(j.prompt).slice(0, 80)}<div class="small">${j.lastRun ? '마지막 실행 ' + esc(j.lastRun) : '아직 실행 안 함'}</div></div><div><button data-run="${esc(j.id)}">지금</button> <button data-del="${esc(j.id)}">삭제</button></div></div>`).join('')
-    : '<div class="small">없음</div>';
-  $('#journal').textContent = s.journal.map((j) => `# ${j.date}\n${j.text}`).join('\n') || '아직 없음';
-  $('#memory').textContent = s.memory || '아직 없음';
-  if (!log.dataset.loaded) { log.dataset.loaded = 1; for (const h of s.history) add('msg ' + (h.role === 'user' ? 'user' : 'bot'), h.text); }
+    ? s.schedules.map((j) => `<div class="item" title="${esc(j.prompt)}"><span><b>${esc(j.time)}</b> ${j.repeat === 'once' ? esc(j.date || '한 번') : '매일'} · ${esc(j.prompt)}</span><span class="acts"><button data-run="${esc(j.id)}" title="지금 실행">▶</button><button data-del="${esc(j.id)}" title="삭제">✕</button></span></div>`).join('')
+    : '<div class="hint" style="padding:4px 8px">없음 — 채팅으로 "매일 7시에 …해줘"</div>';
+  const entries = s.journal.flatMap((j) => j.text.split(/\n(?=## )/).filter((x) => x.trim()).map((x) => {
+    const lines = x.trim().split('\n'); return { date: j.date, head: lines[0].replace(/^## /, ''), body: lines.slice(1).join('\n').trim() };
+  })).reverse().slice(0, 10);
+  $('#journal').innerHTML = entries.length
+    ? entries.map((e) => `<details><summary>${esc(e.date.slice(5))} ${esc(e.head)}</summary><div class="body">${md(e.body)}</div></details>`).join('')
+    : '<div class="hint" style="padding:4px 8px">아직 없음 — 예약이 실행되면 여기 쌓여요</div>';
+  const mem = s.memory.trim();
+  $('#memory').innerHTML = mem ? `<details><summary>${mem.split('\n').filter(Boolean).length}줄 기억하고 있어요</summary><div class="body pre">${esc(mem)}</div></details>` : '<div class="hint" style="padding:4px 8px">아직 없음 — "기억해: …"</div>';
+  if (col.dataset.sid !== String(s.session)) {   // 대화가 바뀌었을 때만 다시 그린다(진행 중 화면은 건드리지 않는다)
+    col.dataset.sid = String(s.session); col.innerHTML = '';
+    for (const h of s.history) h.role === 'user' ? addUser(h.text) : addBot(h.text);
+    if (!s.history.length) el('note', '무엇을 도와드릴까요? 아래에 말씀하세요.');
+  }
 }
 refresh();
 setInterval(refresh, 10000);

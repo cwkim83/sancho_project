@@ -25,7 +25,7 @@ const hhmm = (d) => d.toTimeString().slice(0, 5);      // HH:MM
 
 const 기본설정 = { name: '산초', model: 'sonnet', allowShell: false, allowHome: false, allowSelfEdit: false };
 const 설정 = () => ({ ...기본설정, ...readJson(p('settings.json'), {}) });
-const 상태 = () => ({ session: null, runs: {}, ...readJson(p('state.json'), {}) });   // session: 이어가는 대화 id, runs: 예약별 마지막 실행 날짜
+const 상태 = () => ({ session: null, runs: {}, sessions: [], ...readJson(p('state.json'), {}) });   // session: 지금 대화 id, sessions: 대화 목록 [{id,title,ts}], runs: 예약별 마지막 실행 날짜
 const 상태저장 = (patch) => writeJson(p('state.json'), { ...상태(), ...patch });
 
 // ---------- Claude Code 찾기 ----------
@@ -234,10 +234,17 @@ async function 갱신() {   // GitHub 의 새 판 받기. 관문에 걸리면 �
   return { updated: true, from: before.slice(0, 7), to: after.slice(0, 7), when: 재시작() };
 }
 
-// ---------- 기록 ----------
-const 기록추가 = (role, text) => appendFileSync(p('history.jsonl'), JSON.stringify({ ts: new Date().toISOString(), role, text }) + '\n');
-const 기록 = (n = 60) => readText(p('history.jsonl')).trim().split('\n').filter(Boolean).slice(-n)
-  .map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+// ---------- 기록 · 대화 목록 ----------
+const 기록추가 = (role, text, sid) => appendFileSync(p('history.jsonl'), JSON.stringify({ ts: new Date().toISOString(), role, text, sid }) + '\n');
+const 기록 = (sid, n = 200) => readText(p('history.jsonl')).trim().split('\n').filter(Boolean)
+  .map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter((h) => h && h.sid === sid).slice(-n);
+// 대화 목록 도입(2026-09-12) 전 기록엔 sid 가 없다 — 지금 대화로 귀속시킨다(1회)
+{ const raw = readText(p('history.jsonl')); if (raw.includes('"text"') && !raw.includes('"sid"')) writeFileSync(p('history.jsonl'), raw.trim().split('\n').filter(Boolean).map((l) => { try { return JSON.stringify({ ...JSON.parse(l), sid: 상태().session }); } catch { return l; } }).join('\n') + '\n'); }
+function 대화기록(sid, firstText) {   // 대화 목록 맨 위로(제목은 첫 말 40자, Claude 앱처럼)
+  const st = 상태(); const old = st.sessions.find((s) => s.id === sid);
+  const list = [{ id: sid, title: old?.title || firstText.replace(/\s+/g, ' ').slice(0, 40), ts: new Date().toISOString() }, ...st.sessions.filter((s) => s.id !== sid)];
+  상태저장({ session: sid, sessions: list.slice(0, 50) });
+}
 const 일지 = (n = 2) => readdirSync(JOURNAL).filter((f) => f.endsWith('.md')).sort().slice(-n)
   .map((f) => ({ date: f.slice(0, -3), text: readText(join(JOURNAL, f)) }));
 
@@ -252,7 +259,6 @@ async function 채팅(req, res) {
   if (현재) return send(res, 409, { error: `지금 다른 일(${현재.kind})을 하고 있어요. ■ 를 눌러 멈추거나 끝나길 기다려 주세요.` });
   res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache', connection: 'keep-alive' });
   const sse = (e) => { try { res.write(`data: ${JSON.stringify(e)}\n\n`); } catch {} };
-  기록추가('user', text);
   let answer = '', finished = false;
   const proc = claude실행({
     prompt: text, resume: 상태().session,
@@ -262,12 +268,13 @@ async function 채팅(req, res) {
       sse(e);
       if (e.t === 'done') {
         finished = true;
-        if (e.ok && e.session) 상태저장({ session: e.session });                    // 성공한 답만 이어간다(실패한 실행의 id 를 resume 하면 또 실패)
+        if (e.ok && e.session) 대화기록(e.session, text);                                // 성공한 답만 이어간다(실패한 실행의 id 를 resume 하면 또 실패)
         else if (!e.ok && /session|resume/i.test(e.text)) 상태저장({ session: null });   // 이어가기 자체가 실패면 다음엔 새 대화로
-        기록추가('assistant', e.ok ? answer : `⚠️ ${e.text}`);
+        const sid = 상태().session;
+        기록추가('user', text, sid); 기록추가('assistant', e.ok ? answer : `⚠️ ${e.text}`, sid);
         (설정().allowSelfEdit && e.ok ? 자기수정마무리(text) : Promise.resolve(null))
           .catch((err) => ({ ok: false, text: `자기 수정 마무리 실패: ${err.message}` }))
-          .then((r) => { if (r) { sse({ t: 'selfedit', ...r }); 기록추가('assistant', `🔁 ${r.text}`); } res.end(); 일끝(); });
+          .then((r) => { if (r) { sse({ t: 'selfedit', ...r }); 기록추가('assistant', `🔁 ${r.text}`, sid); } res.end(); 일끝(); });
       }
     },
   });
@@ -282,12 +289,17 @@ createServer(async (req, res) => {
     if (route === 'GET /api/state') {
       const st = 상태();
       return send(res, 200, {
-        claude: { path: CLAUDE, version: CLAUDE_VERSION, ok: !!CLAUDE }, settings: 설정(), session: st.session, busy: 현재 ? 현재.kind : null, pendingRestart: 재시작예약,
-        schedules: 예약목록().map((j) => ({ ...j, lastRun: st.runs[j.id] || null })), memory: readText(p('memory.md')), journal: 일지(), history: 기록(),
+        claude: { path: CLAUDE, version: CLAUDE_VERSION, ok: !!CLAUDE }, settings: 설정(), session: st.session, sessions: st.sessions, busy: 현재 ? 현재.kind : null, pendingRestart: 재시작예약,
+        schedules: 예약목록().map((j) => ({ ...j, lastRun: st.runs[j.id] || null })), memory: readText(p('memory.md')), journal: 일지(), history: 기록(st.session),
       });
     }
     if (route === 'POST /api/settings') { writeJson(p('settings.json'), { ...설정(), ...(await readBody(req)) }); return send(res, 200, 설정()); }
     if (route === 'POST /api/new') { 상태저장({ session: null }); return send(res, 200, { ok: true }); }
+    if (route === 'POST /api/session') {   // 대화 목록에서 이전 대화로 돌아가기(Claude Code 가 그 대화를 --resume 한다)
+      const { id } = await readBody(req);
+      if (!상태().sessions.some((s) => s.id === id)) return send(res, 404, { error: '없는 대화예요' });
+      상태저장({ session: id }); return send(res, 200, { ok: true });
+    }
     if (route === 'POST /api/stop') return send(res, 200, { stopped: 중지() });
     if (route === 'POST /api/schedule/remove') { const { id } = await readBody(req); writeJson(p('schedule.json'), 예약목록().filter((j) => j.id !== id)); return send(res, 200, { ok: true }); }
     if (route === 'POST /api/schedule/run') {
