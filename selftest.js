@@ -27,7 +27,11 @@ function 가짜두뇌() {
     out({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Read', input: { file_path: 'memory.md' } }] } });
     if (prompt.includes('천천히')) await new Promise((r) => setTimeout(r, 30_000));   // ■ 중지 시험용
     if (prompt.includes('파일 만들어')) { mkdirSync('파일함', { recursive: true }); writeFileSync(join('파일함', '가짜.xlsx'), 'x'); }   // 만든 파일 알아내기 시험용(cwd = 데이터 폴더)
-    out({ type: 'assistant', message: { content: [{ type: 'text', text: `가짜 답: ${prompt.trim().slice(0, 40)}${prompt.includes('[첨부 파일') ? ' +첨부' : ''}` }] } });
+    // 진짜 CLI 처럼 글자 스트림(stream_event) 을 먼저 흘리고, 통문장(assistant) 도 낸다 — 서버는 스트림을 받았으면 통문장을 무시해야 한다
+    const full = `가짜 답: ${prompt.trim().slice(0, 40)}${prompt.includes('[첨부 파일') ? ' +첨부' : ''}`;
+    out({ type: 'stream_event', event: { type: 'content_block_start', content_block: { type: 'text' } } });
+    for (const piece of [full.slice(0, 3), full.slice(3, 6), full.slice(6)]) out({ type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text: piece } } });
+    out({ type: 'assistant', message: { content: [{ type: 'text', text: full }] } });
     out({ type: 'result', subtype: 'success', is_error: false, session_id: 'fake-session-1', duration_ms: 12, total_cost_usd: 0 });
   });
 }
@@ -51,17 +55,19 @@ async function 시험() {
 
     // 1) 채팅: init → tool → text → done 이 SSE 로 오고, 대화 id 와 기록이 남는다
     const ev = await 채팅(BASE, '안녕');
-    assert.deepEqual(ev.map((e) => e.t), ['init', 'tool', 'text', 'done'], 'SSE 이벤트 순서');
-    assert.ok(ev[2].text.includes('안녕') && ev[3].ok, '답과 완료');
+    assert.deepEqual(ev.map((e) => e.t), ['init', 'tool', 'delta', 'delta', 'delta', 'done'], 'SSE 이벤트 순서(글자 스트림, 통문장 중복 없음)');
+    assert.equal(ev.filter((e) => e.t === 'delta').map((e) => e.text).join(''), '가짜 답: 안녕', '글자 스트림을 이으면 답 전체');
+    assert.ok(ev.at(-1).ok, '완료');
     assert.equal(JSON.parse(readFileSync(join(data, 'state.json'), 'utf8')).session, 'fake-session-1', '대화 id 저장');
-    assert.equal(readFileSync(join(data, 'history.jsonl'), 'utf8').trim().split('\n').length, 2, '기록 2줄(질문·답)');
+    const hist = readFileSync(join(data, 'history.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    assert.equal(hist.length, 2, '기록 2줄(질문·답)'); assert.equal(hist[1].text, '가짜 답: 안녕', '기록된 답 = 글자 스트림 합');
 
     // 1b) 첨부: 올리면 uploads/ 에 저장되고, 채팅에 붙이면 지시문 끝에 [첨부 파일] 목록이 붙는다
     const up = await (await fetch(`${BASE}/api/upload`, { method: 'POST', headers: { 'x-name': encodeURIComponent('메모 1.txt') }, body: 'hello' })).json();
     assert.ok(up.path.startsWith('uploads/') && up.path.endsWith('-메모 1.txt'), `첨부 경로 ${up.path}`);
     assert.equal(readFileSync(join(data, up.path), 'utf8'), 'hello', '첨부 내용 저장');
     const ev1b = await 채팅(BASE, '이 파일 봐', null, [up.path]);
-    assert.ok(ev1b.find((e) => e.t === 'text')?.text.includes('+첨부'), '첨부 목록이 두뇌에 전달된다');
+    assert.ok(ev1b.filter((e) => e.t === 'delta').map((e) => e.text).join('').includes('+첨부'), '첨부 목록이 두뇌에 전달된다');
 
     // 1b-2) 두뇌가 만든 파일은 files 이벤트로 오고, 내려받기·열기 경로는 데이터 폴더 안만 허용된다
     const ev1c = await 채팅(BASE, '파일 만들어');
@@ -86,6 +92,17 @@ async function 시험() {
     assert.ok(Array.isArray(st1.skills) && st1.wiki.includes('시험.md'), '위키 목록');
     assert.equal((await (await fetch(`${BASE}/api/file?path=${encodeURIComponent('wiki/시험.md')}`)).json()).text, '# 위키 시험', '위키 읽기');
     assert.equal((await fetch(`${BASE}/api/file?path=${encodeURIComponent('../server.js')}`)).status, 400, '다른 파일은 막는다');
+    const g = await (await fetch(`${BASE}/api/graph`)).json();
+    assert.ok(g.nodes.some((n) => n.id === '산초') && g.nodes.some((n) => n.id === 'wiki/시험.md') && g.links.length >= 2, '뇌 그래프 재료');
+    assert.equal((await fetch(`${BASE}/neural.js`)).status, 200, 'neural.js 제공');
+
+    // 1e) 접속 토큰: 설정에 있으면 API 는 토큰 없이 401, 토큰 있으면 200 (화면과 /health 는 그대로)
+    writeFileSync(join(data, 'settings.json'), JSON.stringify({ token: 't1' }));
+    assert.equal((await fetch(`${BASE}/api/state`)).status, 401, '토큰 없으면 401');
+    assert.equal((await fetch(`${BASE}/api/state`, { headers: { 'x-token': 't1' } })).status, 200, '토큰 있으면 200');
+    assert.equal((await fetch(`${BASE}/api/state?token=t1`)).status, 200, '쿼리 토큰도 된다');
+    assert.equal((await fetch(`${BASE}/health`)).status, 200, '/health 는 열려 있다');
+    writeFileSync(join(data, 'settings.json'), '{}');
 
     // 2) 예약: 첫 tick 에 돌아 journal 에 쌓이고 오늘 실행으로 기록된다
     const 일지 = join(data, 'journal', `${today()}.md`);
@@ -110,7 +127,7 @@ async function 시험() {
     assert.ok(Date.now() - tStop < 3000, `3초 안에 끊긴다 (${Date.now() - tStop}ms)`);
     assert.equal(await exited, 75, '일이 끝나면 코드 75 로 종료(재시작 요청)');
 
-    console.log('산초 자가시험 통과: 화면 문법 · 채팅 SSE · 대화 id · 기록 · 첨부 · 만든 파일·내려받기·열기 경계 · 대화 고정/삭제 · 위키/스킬 파일 · 예약 tick · 일지 · 재시작 관문·예약 · ■ 중지 · 종료 75');
+    console.log('산초 자가시험 통과: 화면 문법 · 글자 스트림 · 대화 id · 기록 · 첨부 · 만든 파일·내려받기·열기 경계 · 대화 고정/삭제 · 위키/스킬 파일 · 뇌 그래프 · 접속 토큰 · 예약 tick · 일지 · 재시작 관문·예약 · ■ 중지 · 종료 75');
   } finally {
     server.kill();
     rmSync(data, { recursive: true, force: true });

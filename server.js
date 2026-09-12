@@ -388,6 +388,26 @@ createServer(async (req, res) => {
         skills: ls(join(DATA, '.claude', 'skills')), wiki: ls(join(DATA, 'wiki'), (f) => f.endsWith('.md')),
       });
     }
+    if (route === 'GET /neural.js') return send(res, 200, readFileSync(join(ROOT, 'public', 'neural.js')), 'application/javascript; charset=utf-8');
+    if (route === 'GET /api/graph') {   // 뇌 그래프 재료(파이스 neural.js 용): 산초 → 기억·위키·스킬·대화·예약 → 항목, 위키 [[링크]]는 서로 연결
+      const nodes = [{ id: '산초', name: 설정().name, deg: 8 }], links = [];
+      const cat = (name) => { nodes.push({ id: 'cat:' + name, name, folder: name, deg: 4 }); links.push({ source: '산초', target: 'cat:' + name }); };
+      const add = (id, name, folder, extra = {}) => { nodes.push({ id, name, folder, deg: 1, ...extra }); links.push({ source: 'cat:' + folder, target: id }); };
+      const mem = readText(p('memory.md')).split('\n').map((l) => l.replace(/^-\s*/, '').trim()).filter(Boolean);
+      if (mem.length) { cat('기억'); mem.slice(-40).forEach((l, i) => add('memory:' + i, l.slice(0, 40), '기억', { text: l })); }
+      const wiki = ls(join(DATA, 'wiki'), (f) => f.endsWith('.md'));
+      if (wiki.length) {
+        cat('위키'); for (const f of wiki) add('wiki/' + f, f.replace(/\.md$/, ''), '위키');
+        for (const f of wiki) for (const m of readText(join(DATA, 'wiki', f)).matchAll(/\[\[([^\]|#]+)/g)) { const t = m[1].trim() + '.md'; if (t !== f && wiki.includes(t)) links.push({ source: 'wiki/' + f, target: 'wiki/' + t }); }
+      }
+      const skills = ls(join(DATA, '.claude', 'skills'));
+      if (skills.length) { cat('스킬'); for (const n of skills) add(`.claude/skills/${n}/SKILL.md`, n, '스킬'); }
+      const st = 상태();
+      if (st.sessions.length) { cat('대화'); for (const x of st.sessions.slice(0, 15)) add('session:' + x.id, x.title, '대화', { text: x.title }); }
+      const sch = 예약목록();
+      if (sch.length) { cat('예약'); for (const j of sch) add('sched:' + j.id, `${j.time} ${j.prompt.slice(0, 30)}`, '예약', { text: j.prompt }); }
+      return send(res, 200, { nodes, links });
+    }
     if (route === 'GET /api/file') {   // 위키·스킬 파일 읽기(그 두 폴더만)
       const rel = String(url.searchParams.get('path') || '');
       if (!/^(wiki\/[^/\\]+\.md|\.claude\/skills\/[^/\\]+\/SKILL\.md)$/.test(rel)) return send(res, 400, { error: '위키·스킬 파일만 볼 수 있어요' });

@@ -7,14 +7,16 @@
 <!-- 마크다운 렌더러(표·굵게·코드). 인터넷이 없으면 못 받아오는데, 그땐 아래 md() 가 글자 그대로 보여준다 -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <style>
-  /* Claude 데스크톱 앱의 느낌을 본뜸: 왼쪽 목록(고정됨·최근), 가운데 대화(말풍선 없는 답), 아래 둥근 입력창(＋첨부 · 🎤 · 권한 · 모델 · 노력 · 전송/중지) */
-  :root{--bg:#faf9f5;--side:#f2f0e9;--text:#1f1e1b;--muted:#77746c;--line:#e4e1d9;--accent:#d97757;--user:#efece4;--codebg:#f8ece8;--code:#a53a2e}
+  /* Claude 데스크톱 앱의 느낌을 본뜸. 색은 전부 변수 — 밝게/어둡게(자동·수동) 는 변수만 바뀐다 */
+  :root{--bg:#faf9f5;--side:#f2f0e9;--text:#1f1e1b;--muted:#77746c;--line:#e4e1d9;--accent:#d97757;--user:#efece4;--codebg:#f8ece8;--code:#a53a2e;--card:#fff;--soft:#f4f2ec;--hover:rgba(0,0,0,.05);--sendbg:#1f1e1b;--sendfg:#fff;--shadow:rgba(0,0,0,.08)}
+  @media (prefers-color-scheme: dark){:root:not([data-theme=light]){--bg:#1e1d1a;--side:#252420;--text:#e9e7e0;--muted:#9c9990;--line:#3b3934;--accent:#e08a6d;--user:#2f2d28;--codebg:#3d2b27;--code:#f2a48f;--card:#2a2925;--soft:#34322d;--hover:rgba(255,255,255,.06);--sendbg:#e9e7e0;--sendfg:#1e1d1a;--shadow:rgba(0,0,0,.5)}}
+  :root[data-theme=dark]{--bg:#1e1d1a;--side:#252420;--text:#e9e7e0;--muted:#9c9990;--line:#3b3934;--accent:#e08a6d;--user:#2f2d28;--codebg:#3d2b27;--code:#f2a48f;--card:#2a2925;--soft:#34322d;--hover:rgba(255,255,255,.06);--sendbg:#e9e7e0;--sendfg:#1e1d1a;--shadow:rgba(0,0,0,.5)}
   *{box-sizing:border-box}
   body{margin:0;height:100vh;display:flex;font:15px/1.6 system-ui,'Malgun Gothic',sans-serif;background:var(--bg);color:var(--text)}
   #side{width:270px;flex:none;background:var(--side);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
   .brand{padding:16px 16px 8px;font-weight:600;display:flex;align-items:center;gap:6px}
   .star{color:var(--accent)}
-  .newbtn{margin:4px 12px 8px;padding:8px 12px;border:1px solid var(--line);background:#fff;border-radius:10px;text-align:left;cursor:pointer;font:inherit;font-size:14px}
+  .newbtn{margin:4px 12px 8px;padding:8px 12px;border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:10px;text-align:left;cursor:pointer;font:inherit;font-size:14px}
   .newbtn:hover{background:var(--bg)}
   .sbody{flex:1;overflow:auto;padding:0 12px 8px}
   .sec h4{margin:12px 4px 4px;font-size:12px;color:var(--muted);font-weight:600}
@@ -22,66 +24,81 @@
   .hint{font-size:12px;color:var(--muted)}
   .item{padding:6px 8px;border-radius:8px;cursor:pointer;font-size:13.5px;display:flex;justify-content:space-between;gap:8px;align-items:center}
   .item>span:first-child{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-  .item:hover{background:rgba(0,0,0,.05)} .item.active{background:#fff;box-shadow:0 0 0 1px var(--line)}
+  .item:hover{background:var(--hover)} .item.active{background:var(--card);box-shadow:0 0 0 1px var(--line)}
   .item .t{font-size:11px;color:var(--muted);flex:none}
   .item .acts{display:none;gap:2px;flex:none} .item:hover .acts{display:flex} .item:hover .t{display:none}
   .item .acts button{border:0;background:transparent;cursor:pointer;font-size:12px;color:var(--muted);padding:0 4px}
   details summary{cursor:pointer;font-size:13px;padding:4px 8px;border-radius:8px;list-style:none;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-  details summary:hover{background:rgba(0,0,0,.05)}
-  details .body{font-size:12.5px;padding:2px 8px 8px 14px;color:#3c3a35} details .body.pre{white-space:pre-wrap}
+  details summary:hover{background:var(--hover)}
+  details .body{font-size:12.5px;padding:2px 8px 8px 14px;color:var(--text);opacity:.85} details .body.pre{white-space:pre-wrap}
   details .body p{margin:.3em 0} details .body pre{white-space:pre-wrap;font-size:11.5px}
   .foot{border-top:1px solid var(--line);padding:10px 14px;font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:8px;position:relative}
   .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#c33;margin-right:6px;vertical-align:middle} .dot.ok{background:#2e9e5b}
   .icon{margin-left:auto;border:0;background:transparent;cursor:pointer;font-size:16px;color:var(--muted)}
-  main{flex:1;display:flex;flex-direction:column;min-width:0}
+  main{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
   header{height:48px;flex:none;display:flex;align-items:center;gap:10px;padding:0 20px;border-bottom:1px solid var(--line);font-size:14px;font-weight:600}
   #title{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-  .chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:3px 10px;font:inherit;font-size:12.5px;color:var(--text);cursor:pointer;white-space:nowrap}
-  .chip.small{font-weight:400;color:var(--muted);cursor:default} .chip:disabled{color:#bbb;cursor:default}
+  .chip{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:3px 10px;font:inherit;font-size:12.5px;color:var(--text);cursor:pointer;white-space:nowrap}
+  .chip.small{font-weight:400;color:var(--muted);cursor:default} .chip:disabled{opacity:.4;cursor:default}
   #micBtn.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .led{display:inline-block;width:7px;height:7px;border-radius:50%;background:#2e9e5b;margin-right:5px;vertical-align:middle} .led.busy{background:var(--accent);animation:blink 1s infinite} @keyframes blink{50%{opacity:.25}}
   .running{margin-left:auto;font-weight:400;font-size:12.5px;color:var(--muted);white-space:nowrap}
   .spin{display:inline-block;animation:spin 2s linear infinite;color:var(--accent)} @keyframes spin{to{transform:rotate(360deg)}}
   #log{flex:1;overflow:auto} #col{max-width:780px;margin:0 auto;padding:24px 20px 16px}
   .user{background:var(--user);border-radius:14px;padding:10px 14px;margin:18px 0 14px;white-space:pre-wrap;word-break:break-word}
   .attach{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;white-space:normal}
-  .thumb{width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:zoom-in;background:#fff}
+  .thumb{width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:zoom-in;background:var(--card)}
   .bot{margin:6px 0 10px;word-break:break-word}
   .bot p{margin:.5em 0} .bot h1,.bot h2,.bot h3{font-size:1.05em;margin:1em 0 .4em} .bot ul,.bot ol{padding-left:1.4em;margin:.4em 0} .bot li{margin:.15em 0}
   .bot code{background:var(--codebg);color:var(--code);padding:1px 5px;border-radius:5px;font:.9em ui-monospace,Consolas,monospace}
-  .bot pre{background:#f4f2ec;border:1px solid var(--line);border-radius:10px;padding:10px 12px;overflow:auto} .bot pre code{background:none;color:inherit;padding:0}
-  .bot table{border-collapse:collapse;margin:.6em 0;font-size:.95em;display:block;overflow-x:auto} .bot th,.bot td{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top} .bot th{background:#f4f2ec}
+  .bot pre{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:10px 12px;overflow:auto} .bot pre code{background:none;color:inherit;padding:0}
+  .bot table{border-collapse:collapse;margin:.6em 0;font-size:.95em;display:block;overflow-x:auto} .bot th,.bot td{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top} .bot th{background:var(--soft)}
   .bot blockquote{border-left:3px solid var(--line);margin:.5em 0;padding:0 .8em;color:var(--muted)}
+  .bot a{color:var(--accent)}
   .tool{font:12.5px ui-monospace,Consolas,monospace;color:var(--muted);padding:1px 0 1px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .tool::before{content:'⏺ ';color:var(--accent)}
   .think{color:var(--muted);font-size:13px;margin:8px 0}
-  .card{border:1px solid var(--line);border-radius:12px;background:#fff;padding:10px 14px;margin:10px 0;font-size:13.5px}
+  .card{border:1px solid var(--line);border-radius:12px;background:var(--card);padding:10px 14px;margin:10px 0;font-size:13.5px}
   .card h5{margin:0 0 4px;font-size:13px} .card .f{padding:4px 0;border-top:1px dashed var(--line);font:12.5px ui-monospace,Consolas,monospace;white-space:pre-wrap}
-  .card.err{border-color:#e8b4ad;background:#fdf3f1}
+  .card.err{border-color:#c0392b;background:color-mix(in srgb,#c0392b 10%,var(--card))}
   .frow{display:flex;align-items:center;gap:10px;font-family:inherit} .frow .fname{flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis} .frow .ico{font-size:20px;width:24px;text-align:center}
-  .facts{display:flex;gap:4px;flex:none} .facts button,.facts .btn{border:1px solid var(--line);background:#fff;border-radius:6px;padding:2px 8px;font:12px system-ui;cursor:pointer;color:var(--text);text-decoration:none}
+  .facts{display:flex;gap:4px;flex:none} .facts button,.facts .btn{border:1px solid var(--line);background:var(--card);border-radius:6px;padding:2px 8px;font:12px system-ui;cursor:pointer;color:var(--text);text-decoration:none}
   .facts button:hover,.facts .btn:hover{background:var(--bg)}
   .note{font-size:12px;color:var(--muted);margin:4px 0 8px}
   #composerWrap{flex:none;padding:8px 20px 12px}
-  #composer{max-width:780px;margin:0 auto;background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 2px 10px rgba(0,0,0,.04);padding:10px 12px 8px}
-  #composer:focus-within{border-color:#c9c5ba} #composer.drag{border-color:var(--accent);background:#fff8f4}
+  #composer{max-width:780px;margin:0 auto;background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 2px 10px var(--shadow);padding:10px 12px 8px}
+  #composer:focus-within{border-color:var(--muted)} #composer.drag{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--card))}
   .files{display:flex;flex-wrap:wrap;gap:6px;padding:0 4px 6px} .files:empty{display:none}
   .fchip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:8px;padding:2px 8px;font-size:12.5px;background:var(--bg);max-width:280px}
   .fchip span{overflow:hidden;white-space:nowrap;text-overflow:ellipsis} .fchip button{border:0;background:transparent;cursor:pointer;color:var(--muted);padding:0}
   .fchip img{width:40px;height:40px;object-fit:cover;border-radius:6px;cursor:zoom-in}
-  textarea{width:100%;border:0;outline:0;resize:none;font:inherit;background:transparent;max-height:220px;line-height:1.5;padding:4px 4px 8px;display:block}
+  textarea{width:100%;border:0;outline:0;resize:none;font:inherit;color:var(--text);background:transparent;max-height:220px;line-height:1.5;padding:4px 4px 8px;display:block}
   .crow{display:flex;align-items:center;justify-content:space-between;gap:8px} .left,.right{display:flex;align-items:center;gap:6px;position:relative}
-  .send{width:32px;height:32px;border-radius:50%;border:0;background:var(--text);color:#fff;font-size:16px;cursor:pointer;display:grid;place-items:center}
-  .send:disabled{background:#cfcbc2;cursor:default} .send.stop{background:var(--accent)}
-  .menu{position:absolute;z-index:10;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.08);padding:6px;min-width:230px;display:flex;flex-direction:column;gap:2px;font-size:13.5px}
+  .send{width:32px;height:32px;border-radius:50%;border:0;background:var(--sendbg);color:var(--sendfg);font-size:16px;cursor:pointer;display:grid;place-items:center}
+  .send:disabled{opacity:.3;cursor:default} .send.stop{background:var(--accent);color:#fff;opacity:1}
+  .menu{position:absolute;z-index:10;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 24px var(--shadow);padding:6px;min-width:230px;display:flex;flex-direction:column;gap:2px;font-size:13.5px}
   .menu[hidden]{display:none}   /* display:flex 가 hidden 속성을 이기지 않게 */
   .menu.up{bottom:calc(100% + 6px);right:0} .menu.upleft{bottom:calc(100% + 6px);left:0}
+  #gearMenu{min-width:320px;max-height:75vh;overflow:auto}
   .menu label,.menu button{display:flex;justify-content:space-between;gap:10px;padding:7px 10px;border-radius:8px;border:0;background:transparent;font:inherit;text-align:left;cursor:pointer;align-items:center;color:var(--text)}
-  .menu label:hover,.menu button:hover{background:#f4f2ec} .menu .hint{padding:4px 10px} .menu .sub{margin:6px 10px 0}
+  .menu label:hover,.menu button:hover{background:var(--soft)} .menu .hint{padding:4px 10px} .menu .sub{margin:6px 10px 0}
+  .menu input.set,.menu select{border:1px solid var(--line);border-radius:8px;padding:6px 8px;font:inherit;font-size:12.5px;background:var(--bg);color:var(--text);margin:2px 4px}
   .eff{padding:8px 10px;min-width:260px} .eff .row{display:flex;justify-content:space-between;align-items:center;gap:10px} .eff .row.hint{padding:0}
-  input[type=range]{width:100%;accent-color:#8a877f;margin:10px 0 4px}
+  input[type=range]{width:100%;accent-color:var(--muted);margin:10px 0 4px}
   .center{text-align:center;max-width:780px;margin:6px auto 0}
   #lightbox{position:fixed;inset:0;background:rgba(0,0,0,.82);display:grid;place-items:center;z-index:50;cursor:zoom-out} #lightbox[hidden]{display:none}
   #lightbox img{max-width:92vw;max-height:92vh;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+  /* 회의록 녹취 패널 */
+  #meet{position:fixed;right:20px;bottom:130px;width:380px;background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px var(--shadow);padding:12px;z-index:20} #meet[hidden]{display:none}
+  #meet .mhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:13.5px} #meet textarea{height:170px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--bg)} #meet .mbtns{display:flex;gap:6px;justify-content:flex-end;margin-top:8px}
+  /* 뇌 그래프(파이스 코어) — 헤더 아래 전체를 덮는 층 */
+  #hud{position:absolute;top:48px;left:0;right:0;bottom:0;background:var(--bg);z-index:5} #hud[hidden]{display:none}
+  #neural{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+  .hudbar{position:absolute;top:10px;left:16px;right:16px;display:flex;gap:8px;align-items:center;pointer-events:none} .hudbar *{pointer-events:auto}
+  .mono{font:11px ui-monospace,Consolas,monospace;letter-spacing:.12em;color:var(--muted);margin-right:auto;pointer-events:none}
+  .ninfo{position:absolute;z-index:8;width:min(320px,72vw);padding:12px 14px;border-radius:12px;background:var(--card);border:1px solid var(--line);box-shadow:0 8px 28px var(--shadow)} .ninfo.hidden{display:none}
+  .ninfo b{display:block;font-size:14px;margin-bottom:4px;word-break:break-all} .ninfo .ni-meta{font:10px ui-monospace,Consolas,monospace;color:var(--muted);letter-spacing:.04em}
+  .ninfo .ni-body{margin-top:8px;font-size:12px;line-height:1.6;white-space:pre-wrap;word-break:break-word;max-height:170px;overflow:auto}
 </style>
 </head>
 <body>
@@ -98,9 +115,18 @@
   </div>
   <div class="foot"><span id="status"></span><button id="gear" class="icon" title="설정">⚙</button>
     <div id="gearMenu" class="menu upleft" hidden>
+      <div class="sub">화면</div>
+      <select id="theme"><option value="auto">테마: 자동(OS 따라)</option><option value="light">테마: 밝게</option><option value="dark">테마: 어둡게</option></select>
       <div class="sub">음성</div>
       <label>"산초야" 호출 대기 <span class="hint">마이크 항상 켜짐</span> <input type="checkbox" id="wakeOn"></label>
       <label>답 읽어주기 <input type="checkbox" id="ttsOn"></label>
+      <button id="meetStart">🎙 회의록 녹취 시작 <span class="hint">끝내면 회의록으로 정리</span></button>
+      <div class="sub">연결 (선택)</div>
+      <input class="set" data-key="vaultPath" placeholder="옵시디언 볼트 폴더 (예: C:\Users\me\My-ai)">
+      <input class="set" data-key="telegramToken" type="password" placeholder="텔레그램 봇 토큰 — 예약 결과를 휴대폰으로">
+      <input class="set" data-key="telegramChat" placeholder="텔레그램 chat id">
+      <input class="set" data-key="geminiKey" type="password" placeholder="비상두뇌 Gemini API 키 — Claude 한도 걸릴 때만">
+      <input class="set" data-key="token" type="password" placeholder="외부 접속 토큰 — 터널로 밖에 열 때">
       <div class="sub">산초</div>
       <button id="update">업데이트 <span class="hint">GitHub 새 판 받기</span></button>
       <button id="restart">재시작 <span class="hint">관문 통과 시</span></button>
@@ -109,8 +135,17 @@
   </div>
 </aside>
 <main>
-  <header><span id="title">새 대화</span><span id="modelChip" class="chip small"></span><span id="wakeInd" class="chip small" hidden>👂 "산초야" 대기 중</span><span id="running" class="running" hidden></span></header>
+  <header>
+    <span id="title">새 대화</span><span id="modelChip" class="chip small"></span>
+    <span class="chip small"><i class="led" id="brainLed"></i><span id="brainState">CORE ONLINE</span></span>
+    <button class="chip" id="hudBtn" title="뇌 그래프 — 산초의 기억·위키·스킬·대화가 하나의 뇌로 보입니다 (파이스 코어)">🧠</button>
+    <span id="wakeInd" class="chip small" hidden>👂 "산초야" 대기 중</span><span id="running" class="running" hidden></span>
+  </header>
   <div id="log"><div id="col"></div></div>
+  <div id="hud" hidden>
+    <canvas id="neural"></canvas>
+    <div class="hudbar"><span class="mono">NEURAL MESH · 산초</span><button id="graphSrc" class="chip">ORB</button><button id="hudFit" class="chip">맞춤</button><button id="hudClose" class="chip">닫기 ✕</button></div>
+  </div>
   <div id="composerWrap">
     <div id="composer">
       <div id="files" class="files"></div>
@@ -149,9 +184,14 @@
         </div>
       </div>
     </div>
-    <div class="hint center" id="tip">Enter 전송 · Shift+Enter 줄바꿈 · Esc 중지 · 파일은 ＋ 또는 붙여넣기 · 🎤 눌러 말하기</div>
+    <div class="hint center" id="tip">Enter 전송 · Shift+Enter 줄바꿈 · Esc 중지 · 파일은 ＋ 또는 붙여넣기 · 🎤 눌러 말하기 · 🧠 뇌 그래프</div>
   </div>
 </main>
+<div id="meet" hidden>
+  <div class="mhead"><b>🎙 회의 녹취 중</b><span id="meetTime" class="hint">0분</span></div>
+  <textarea id="meetText" readonly placeholder="말이 여기에 쌓입니다…"></textarea>
+  <div class="mbtns"><button id="meetCancel" class="chip">취소</button><button id="meetEnd" class="chip">끝내고 회의록 정리</button></div>
+</div>
 <div id="lightbox" hidden><img id="lbimg" alt=""></div>
 <script>
 const $ = (s) => document.querySelector(s);
@@ -165,8 +205,22 @@ const closeMenus = () => document.querySelectorAll('.menu').forEach((x) => { x.h
 const 모델명 = { fable: 'Fable 5.1', opus: 'Opus', sonnet: 'Sonnet', haiku: 'Haiku' };
 const 노력값 = ['low', 'medium', 'high', 'xhigh', 'max'], 노력명 = ['낮음', '중간', '높음', '매우 높음', '최대'];
 
+// ---- 테마: 자동(OS) / 밝게 / 어둡게 — <html data-theme> 이 진실(뇌 그래프도 이걸 본다) ----
+function applyTheme(v) { if (v === 'light' || v === 'dark') document.documentElement.dataset.theme = v; else delete document.documentElement.dataset.theme; localStorage.sancho_theme = v; $('#theme').value = v; }
+applyTheme(localStorage.sancho_theme || 'auto');
+$('#theme').onchange = (e) => applyTheme(e.target.value);
+
+// ---- 접속 토큰(밖에서 쓸 때): 모든 API 에 헤더로, 이미지·링크엔 쿼리로 ----
+const tok = () => localStorage.sancho_token || '';
+const hdr = () => ({ 'content-type': 'application/json', ...(tok() ? { 'x-token': tok() } : {}) });
+async function api(path, body, retried) {
+  const r = await fetch(path, { method: body ? 'POST' : 'GET', headers: hdr(), body: body ? JSON.stringify(body) : undefined });
+  if (r.status === 401 && !retried) { const t = prompt('접속 토큰을 입력하세요 (⚙ 설정의 "외부 접속 토큰")'); if (t) { localStorage.sancho_token = t; return api(path, body, true); } }
+  return r.json();
+}
+
 // ---- 파일: 아이콘 · 미리보기 · 카드 ----
-const dl = (p) => '/api/download?path=' + encodeURIComponent(p);
+const dl = (p) => '/api/download?path=' + encodeURIComponent(p) + (tok() ? '&token=' + encodeURIComponent(tok()) : '');
 const ext = (n) => String(n).split('.').pop().toLowerCase();
 const isImg = (n) => /^(png|jpe?g|gif|webp|svg)$/.test(ext(n));
 const 볼수있음 = (n) => isImg(n) || /^(pdf|txt|md|csv|json|html)$/.test(ext(n));
@@ -199,12 +253,16 @@ col.addEventListener('click', async (e) => {
 });
 const setIf = (node, html) => { if (node.dataset.sig !== html) { node.innerHTML = html; node.dataset.sig = html; } };   // 내용이 같으면 다시 안 그린다(펼친 항목이 접히지 않게)
 
+// ---- 뇌(파이스 코어): 헤더 LED + 🧠 그래프 층. neural.js 는 처음 열 때만 읽는다 ----
+let neuralLoaded = false;
+function loadNeural() { if (neuralLoaded) return; neuralLoaded = true; const s = document.createElement('script'); s.src = '/neural.js?v=1'; document.body.appendChild(s); }
+$('#hudBtn').onclick = () => { const h = $('#hud'); h.hidden = !h.hidden; if (!h.hidden) { loadNeural(); setTimeout(() => window.PAISNeural?.refreshVault?.(), 50); } };
+$('#hudClose').onclick = () => { $('#hud').hidden = true; };
+$('#hudFit').onclick = () => window.PAISNeural?.fit?.();
+function brain(on) { $('#brainLed').classList.toggle('busy', on); $('#brainState').textContent = on ? 'THINKING' : 'CORE ONLINE'; on ? window.PAISNeural?.setActive?.() : window.PAISNeural?.setIdle?.(); }
+
 function updateSend() { sendBtn.disabled = !busy && !input.value.trim() && !pending.length; }
-function 버튼(on) { busy = on; sendBtn.classList.toggle('stop', on); sendBtn.textContent = on ? '■' : '↑'; sendBtn.title = on ? '중지 (Esc)' : '전송 (Enter)'; updateSend(); }
-async function api(path, body) {
-  const r = await fetch(path, { method: body ? 'POST' : 'GET', headers: { 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
-  return r.json();
-}
+function 버튼(on) { busy = on; sendBtn.classList.toggle('stop', on); sendBtn.textContent = on ? '■' : '↑'; sendBtn.title = on ? '중지 (Esc)' : '전송 (Enter)'; updateSend(); brain(on); }
 
 // ---- 첨부: ＋ 버튼, 끌어다 놓기, 붙여넣기. 이미지는 미리보기, 누르면 크게 ----
 function addFiles(list) { for (const f of list || []) if (f) pending.push(f); renderFiles(); }
@@ -220,14 +278,14 @@ comp.ondragleave = () => comp.classList.remove('drag');
 comp.ondrop = (e) => { e.preventDefault(); comp.classList.remove('drag'); addFiles([...e.dataTransfer.files]); };
 input.onpaste = (e) => { const fs = [...(e.clipboardData?.files || [])]; if (fs.length) { e.preventDefault(); addFiles(fs); } };
 async function upload(f) {
-  const r = await fetch('/api/upload', { method: 'POST', headers: { 'x-name': encodeURIComponent(f.name || 'file') }, body: f });
+  const r = await fetch('/api/upload', { method: 'POST', headers: { 'x-name': encodeURIComponent(f.name || 'file'), ...(tok() ? { 'x-token': tok() } : {}) }, body: f });
   const j = await r.json().catch(() => ({})); if (!r.ok || j.error) throw new Error(j.error || '업로드 실패'); return j.path;
 }
 
-// ---- 음성: 🎤 눌러 말하기 · "산초야" 호출 대기 · 답 읽어주기 (브라우저 내장 인식·합성 — Chrome·Edge) ----
+// ---- 음성: 🎤 눌러 말하기 · "산초야" 호출 대기 · 답 읽어주기 · 🎙 회의록 (브라우저 내장 인식·합성 — Chrome·Edge) ----
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const prefs = { wake: localStorage.sancho_wake === '1', tts: localStorage.sancho_tts === '1' };
-let rec = null, listening = false, wakeRec = null, voiceTurn = false;
+let rec = null, listening = false, wakeRec = null, voiceTurn = false, meet = null;
 const 호출어 = /(산초|산쵸|삼초|산처|싼초|산조|산쪼|상초)\s*(야|아|님|씨)?[,!.?~\s]*/, 호출어앞 = new RegExp('^\\s*' + 호출어.source);
 const 호출어제거 = (t) => t.replace(호출어앞, '');
 function speak(text) {
@@ -242,7 +300,7 @@ function micUI(on) { $('#micBtn').classList.toggle('on', on); $('#micBtn').textC
 function wakeUI() { $('#wakeInd').hidden = !wakeRec; $('#wakeOn').checked = prefs.wake; $('#ttsOn').checked = prefs.tts; }
 function 삐() { try { const a = new AudioContext(), o = a.createOscillator(), g = a.createGain(); o.connect(g); g.connect(a.destination); o.frequency.value = 880; g.gain.value = 0.06; o.start(); o.stop(a.currentTime + 0.12); } catch {} }
 function 듣기시작() {   // 한 번 듣고, 말이 1.2초 끊기면 보낸다
-  if (!SR || listening || busy) return;
+  if (!SR || listening || busy || meet) return;
   호출대기중지(); speechSynthesis?.cancel?.();
   rec = new SR(); rec.lang = 'ko-KR'; rec.interimResults = true; rec.continuous = true;
   let final = '', timer = null; listening = true; micUI(true);
@@ -256,22 +314,44 @@ function 듣기시작() {   // 한 번 듣고, 말이 1.2초 끊기면 보낸다
   try { rec.start(); } catch { 마무리(); }
 }
 function 호출대기시작() {   // "산초야 …" 를 기다린다. 이름 뒤에 바로 말이 이어지면 그대로 보내고, 이름만 부르면 삐 소리 뒤 듣는다
-  if (!prefs.wake || !SR || listening || wakeRec) return wakeUI();
+  if (!prefs.wake || !SR || listening || wakeRec || meet) return wakeUI();
   wakeRec = new SR(); wakeRec.lang = 'ko-KR'; wakeRec.continuous = true; wakeRec.interimResults = false;
   wakeRec.onresult = (e) => {
     const t = e.results[e.results.length - 1][0].transcript, m = t.match(호출어); if (!m || busy) return;
     삐(); const rest = t.slice(m.index + m[0].length).trim(); 호출대기중지();
     if (rest.length > 1) { input.value = rest; voiceTurn = true; send(); } else 듣기시작();
   };
-  wakeRec.onend = () => { wakeRec = null; wakeUI(); if (prefs.wake && !listening) setTimeout(호출대기시작, 500); };
+  wakeRec.onend = () => { wakeRec = null; wakeUI(); if (prefs.wake && !listening && !meet) setTimeout(호출대기시작, 500); };
   wakeRec.onerror = (e) => { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { prefs.wake = false; localStorage.sancho_wake = '0'; $('#tip').textContent = '마이크 사용이 막혀 있어요 — 주소창의 마이크 아이콘에서 허용해 주세요'; } };
   try { wakeRec.start(); } catch { wakeRec = null; } wakeUI();
 }
 function 호출대기중지() { if (wakeRec) { const w = wakeRec; wakeRec = null; w.onend = null; try { w.stop(); } catch {} } wakeUI(); }
-if (!SR) { $('#micBtn').disabled = true; $('#micBtn').title = '이 브라우저는 음성 인식을 지원하지 않아요 (Chrome·Edge 에서 쓰세요)'; }
+if (!SR) { $('#micBtn').disabled = true; $('#micBtn').title = '이 브라우저는 음성 인식을 지원하지 않아요 (Chrome·Edge 에서 쓰세요)'; $('#meetStart').disabled = true; }
 $('#micBtn').onclick = () => listening ? (listening = false, rec?.stop(), micUI(false), 호출대기시작()) : 듣기시작();
 $('#wakeOn').onchange = (e) => { prefs.wake = e.target.checked; localStorage.sancho_wake = prefs.wake ? '1' : '0'; prefs.wake ? 호출대기시작() : 호출대기중지(); };
 $('#ttsOn').onchange = (e) => { prefs.tts = e.target.checked; localStorage.sancho_tts = prefs.tts ? '1' : '0'; if (!prefs.tts) speechSynthesis?.cancel?.(); };
+// 회의록: 계속 받아쓰다가 끝내면 녹취를 첨부해 회의록 정리를 시킨다(파이스 meeting.html 에 해당)
+function 회의시작() {
+  if (!SR || meet) return; closeMenus(); 호출대기중지(); if (listening) { listening = false; try { rec.stop(); } catch {} micUI(false); }
+  const r = new SR(); r.lang = 'ko-KR'; r.continuous = true; r.interimResults = true;
+  meet = { rec: r, start: Date.now(), text: '', on: true, timer: 0 };
+  const ta = $('#meetText'); ta.value = ''; $('#meetTime').textContent = '0분'; $('#meet').hidden = false;
+  r.onresult = (e) => { let interim = ''; for (let i = e.resultIndex; i < e.results.length; i++) { const res = e.results[i]; if (res.isFinal) meet.text += `[${new Date().toTimeString().slice(0, 5)}] ${res[0].transcript.trim()}\n`; else interim += res[0].transcript; } ta.value = meet.text + (interim ? '… ' + interim : ''); ta.scrollTop = ta.scrollHeight; };
+  r.onend = () => { if (meet?.on) setTimeout(() => { try { r.start(); } catch {} }, 300); };   // 크롬은 잠잠하면 끊는다 → 다시 켠다
+  r.onerror = () => {};
+  try { r.start(); } catch {}
+  meet.timer = setInterval(() => { if (meet) $('#meetTime').textContent = Math.round((Date.now() - meet.start) / 60000) + '분'; }, 15000);
+}
+function 회의끝(정리) {
+  if (!meet) return; meet.on = false; clearInterval(meet.timer); try { meet.rec.stop(); } catch {}
+  const text = meet.text; meet = null; $('#meet').hidden = true;
+  if (!정리 || !text.trim()) { 호출대기시작(); return; }
+  const d = new Date(), name = `회의록_${d.toLocaleDateString('sv-SE')}_${d.toTimeString().slice(0, 5).replace(':', '')}.txt`;
+  pending.push(new File([text], name, { type: 'text/plain' })); renderFiles();
+  input.value = '첨부한 회의 녹취를 회의록으로 정리해줘. 안건, 논의 내용, 결정 사항, 할 일(담당·기한)을 표로. 파일함에 워드(docx)로도 저장해줘.';
+  input.oninput(); send();
+}
+$('#meetStart').onclick = 회의시작; $('#meetEnd').onclick = () => 회의끝(true); $('#meetCancel').onclick = () => 회의끝(false);
 
 async function send() {
   const text = input.value.trim(), files = pending.splice(0), voice = voiceTurn; voiceTurn = false;
@@ -280,11 +360,12 @@ async function send() {
   const paths = [];
   try { for (const f of files) paths.push(await upload(f)); } catch (e) { addCard('첨부 실패', [e.message], true); 버튼(false); return; }
   addUser(text, paths.map((p, i) => ({ path: p, name: files[i].name })));
-  const r = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, files: paths, voice }) });
+  const r = await fetch('/api/chat', { method: 'POST', headers: hdr(), body: JSON.stringify({ text, files: paths, voice }) });
   if (!r.ok) { const e = await r.json().catch(() => ({})); addCard('오류', [e.error || ('오류 ' + r.status)], true); 버튼(false); return; }
   const think = el('think', '<span class="spin">✳</span> 생각 중…');
   const reader = r.body.getReader(), dec = new TextDecoder();
-  let buf = '', bot = null, acc = '', gotDone = false; const edited = new Map();
+  let buf = '', bot = null, acc = '', gotDone = false, raf = 0; const edited = new Map();
+  const render = () => { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; if (bot) bot.innerHTML = md(acc); logEl.scrollTop = logEl.scrollHeight; }); };   // 글자마다 그리지 않고 프레임마다
   try {
     while (true) {
       const { value, done } = await reader.read();
@@ -295,9 +376,11 @@ async function send() {
         const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
         if (!chunk.startsWith('data: ')) continue;
         let e; try { e = JSON.parse(chunk.slice(6)); } catch { continue; }
-        if (e.t === 'text') { acc += (acc ? '\n\n' : '') + e.text; if (!bot) bot = el('bot'); bot.innerHTML = md(acc); col.appendChild(think); }
-        else if (e.t === 'tool') { addTool(e.name, e.input); if (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(e.name) && e.input) edited.set(e.input, { path: e.input, name: e.input.split(/[\\/]/).pop() }); col.appendChild(think); }
+        if (e.t === 'delta') { acc += e.text; if (!bot) bot = el('bot'); render(); col.appendChild(think); }
+        else if (e.t === 'text') { acc += (acc ? '\n\n' : '') + e.text; if (!bot) bot = el('bot'); render(); col.appendChild(think); }
+        else if (e.t === 'tool') { addTool(e.name, e.input); window.PAISNeural?.pulse?.(); if (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(e.name) && e.input) edited.set(e.input, { path: e.input, name: e.input.split(/[\\/]/).pop() }); col.appendChild(think); }
         else if (e.t === 'files') for (const f of e.files) edited.set(f.path, f);   // 두뇌가 만든 파일(서버가 알아냄)
+        else if (e.t === 'note') el('note', e.text);
         else if (e.t === 'done') {
           gotDone = true; think.remove(); if (e.session) col.dataset.sid = e.session;
           if (!e.ok) addCard('⚠️ 실패', [e.text], true);
@@ -308,7 +391,7 @@ async function send() {
       }
     }
   } catch {}
-  think.remove();
+  think.remove(); if (bot) bot.innerHTML = md(acc);
   if (!gotDone) el('note', '연결이 끊겼어요 — 재시작 중이면 몇 초 뒤 돌아옵니다');
   버튼(false); refresh();
   if ((voice || prefs.tts) && acc) speak(acc);
@@ -321,7 +404,7 @@ input.onkeydown = (e) => {
   if (e.isComposing || e.keyCode === 229) return;   // 한글 조합 중 Enter 는 글자 확정용 — 보내지 않는다
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
 };
-document.addEventListener('keydown', (e) => { if (e.key !== 'Escape') return; if (!$('#lightbox').hidden) $('#lightbox').hidden = true; else { speechSynthesis?.cancel?.(); if (busy) api('/api/stop', {}); } });
+document.addEventListener('keydown', (e) => { if (e.key !== 'Escape') return; if (!$('#lightbox').hidden) $('#lightbox').hidden = true; else if (!$('#hud').hidden) $('#hud').hidden = true; else { speechSynthesis?.cancel?.(); if (busy) api('/api/stop', {}); } });
 document.addEventListener('click', (e) => { if (!e.target.closest('.menu')) closeMenus(); });
 for (const [b, m] of [['#permBtn', '#permMenu'], ['#modelBtn', '#modelMenu'], ['#effortBtn', '#effortMenu'], ['#gear', '#gearMenu']]) {
   $(b).onclick = (e) => { e.stopPropagation(); const open = $(m).hidden; closeMenus(); $(m).hidden = !open; };
@@ -331,6 +414,9 @@ const effIn = $('#effort');
 effIn.oninput = () => { $('#effName').textContent = 노력명[effIn.value]; };
 effIn.onchange = async () => { await api('/api/settings', { effort: 노력값[effIn.value] }); refresh(); };
 for (const id of ['allowShell', 'allowHome', 'allowApps', 'allowSelfEdit']) $('#' + id).onchange = async (e) => { await api('/api/settings', { [id]: e.target.checked }); refresh(); };
+for (const inp of document.querySelectorAll('input.set')) inp.onchange = async () => {   // 연결 설정: 바꾸면 바로 저장. 접속 토큰은 이 브라우저에도 남겨 둔다
+  const v = inp.value.trim(); await api('/api/settings', { [inp.dataset.key]: v }); if (inp.dataset.key === 'token') localStorage.sancho_token = v; refresh();
+};
 $('#new').onclick = async () => { if (busy) return; await api('/api/new', {}); refresh(); };
 $('#sessions').onclick = async (e) => {   // 대화 목록: 고정 📌 · 삭제 ✕ · 더 보기 · 이동
   const t = e.target.closest('button,[data-more],[data-sid]'); if (!t) return;
@@ -367,16 +453,18 @@ const empty = (t) => `<div class="hint" style="padding:4px 8px">${t}</div>`;
 const sessItem = (x, cur) => `<div class="item ${x.id === cur ? 'active' : ''}" data-sid="${esc(x.id)}" title="${esc(x.title)}"><span>${esc(x.title)}</span><span class="t">${ago(x.ts)}</span><span class="acts"><button data-pin="${esc(x.id)}" data-pinned="${x.pinned ? 1 : 0}" title="${x.pinned ? '고정 해제' : '고정 (3개까지)'}">${x.pinned ? '📍' : '📌'}</button><button data-del="${esc(x.id)}" title="목록에서 지우기">✕</button></span></div>`;
 async function refresh() {
   let s;
-  try { s = await api('/api/state'); } catch { $('#status').innerHTML = '<span class="dot"></span>서버 응답 없음 — 재시작 중이면 곧 돌아와요'; return; }
+  try { s = await api('/api/state'); if (s.error) throw new Error(s.error); } catch { $('#status').innerHTML = '<span class="dot"></span>서버 응답 없음 — 재시작 중이면 곧 돌아와요'; return; }
   const model = 모델명[s.settings.model] || s.settings.model, ei = Math.max(0, 노력값.indexOf(s.settings.effort));
   $('#modelBtn').textContent = model + ' ▾'; $('#effortBtn').textContent = '노력 ' + 노력명[ei] + ' ▾'; $('#modelChip').textContent = model + ' · ' + 노력명[ei];
   if (document.activeElement !== effIn) { effIn.value = ei; $('#effName').textContent = 노력명[ei]; }
   for (const id of ['allowShell', 'allowHome', 'allowApps', 'allowSelfEdit']) $('#' + id).checked = !!s.settings[id];
+  for (const inp of document.querySelectorAll('input.set')) if (document.activeElement !== inp) inp.value = s.settings[inp.dataset.key] || '';
   const perms = [s.settings.allowShell && '명령', s.settings.allowHome && '홈 폴더', s.settings.allowApps && '앱', s.settings.allowSelfEdit && '자기 수정'].filter(Boolean);
   $('#permBtn').textContent = (perms.length ? '권한: ' + perms.join(' · ') : '권한: 기본') + ' ▾';
   $('#status').innerHTML = `<span class="dot ${s.claude.ok ? 'ok' : ''}"></span>${s.claude.ok ? 'Claude Code ' + esc(s.claude.version.replace(' (Claude Code)', '')) : 'Claude Code 없음 — README 참고'}`;
   const run = $('#running'); run.hidden = !s.busy && !s.pendingRestart;
   run.innerHTML = (s.busy ? `<span class="spin">✳</span> 실행 중인 작업 1개 · ${esc(s.busy)}` : '') + (s.pendingRestart ? ' · 일이 끝나면 재시작' : '');
+  if (!busy) brain(!!s.busy);   // 예약 작업이 돌 때도 뇌가 깜빡인다
   const cur = s.sessions.find((x) => x.id === s.session);
   $('#title').textContent = cur ? cur.title : '새 대화';
   const pinned = s.sessions.filter((x) => x.pinned), recent = s.sessions.filter((x) => !x.pinned), shown = showAll ? recent : recent.slice(0, 5);
