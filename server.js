@@ -4,8 +4,8 @@
 // 의존 패키지 0. Node 18 이상.
 import { createServer } from 'node:http';
 import { spawn, execFile, execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync, appendFileSync, mkdirSync, readdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { readFileSync, writeFileSync, appendFileSync, mkdirSync, readdirSync, existsSync, statSync, cpSync, createReadStream } from 'node:fs';
+import { join, dirname, resolve, sep, basename, extname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
@@ -28,6 +28,8 @@ const 모델ID = { sonnet: 'sonnet', opus: 'opus', haiku: 'haiku', fable: 'claud
 const 노력 = ['low', 'medium', 'high', 'xhigh', 'max'];                                            // claude --effort 값(2.1.269 실측)
 const 연결앱 = ['mcp__claude_ai_Gmail', 'mcp__claude_ai_Google_Calendar', 'mcp__claude_ai_Google_Drive', 'mcp__claude_ai_Microsoft_365'];   // claude.ai 커넥터 서버 이름(공백·점 → _)
 const ls = (dir, filter = () => true) => { try { return readdirSync(dir).filter(filter); } catch { return []; } };
+// 기본 스킬(산초 폴더의 skills/*) 을 data/.claude/skills 에 처음 한 번 복사한다 — 사용자가 고친 뒤엔 덮어쓰지 않는다
+for (const n of ls(join(ROOT, 'skills'))) if (!existsSync(join(DATA, '.claude', 'skills', n))) cpSync(join(ROOT, 'skills', n), join(DATA, '.claude', 'skills', n), { recursive: true });
 const 설정 = () => ({ ...기본설정, ...readJson(p('settings.json'), {}) });
 const 상태 = () => ({ session: null, runs: {}, sessions: [], ...readJson(p('state.json'), {}) });   // session: 지금 대화 id, sessions: 대화 목록 [{id,title,ts}], runs: 예약별 마지막 실행 날짜
 const 상태저장 = (patch) => writeJson(p('state.json'), { ...상태(), ...patch });
@@ -64,6 +66,7 @@ function 시스템프롬프트() {
 5) wiki/<주제>.md — 조사·정리한 지식. 나중에도 쓸 내용이면 여기 저장·갱신하고, 관련 질문엔 먼저 여기를 본다.
 6) history.jsonl — 지난 대화 기록. "전에 말한 …" 을 찾을 땐 Grep 한다.
 7) uploads/ — 주인이 채팅에 올린 파일. 말 끝에 [첨부 파일] 목록이 붙으면 Read 로 읽고 답한다(이미지·PDF 도 Read 로 볼 수 있다).
+8) 파일함/ — 네가 만든 파일(엑셀·PPT·워드·PDF·이미지 등)은 여기 저장한다. 만든 파일은 대시보드에 카드로 떠서 주인이 바로 열 수 있다. 만드는 법은 office-docs 스킬을 따른다.
 배달: 주인이 예약 결과를 메일 등으로 받고 싶다고 하면 prompt 에 "결과를 <채널>로 보내라" 를 넣는다. ${s.allowApps ? '연결된 앱(Gmail·Google 캘린더·드라이브·Microsoft 365) 도구를 쓸 수 있다.' : '연결된 앱(Gmail 등) 도구는 꺼져 있다. 필요하면 주인에게 설정에서 켜달라고 말한다.'}
 ${(s.allowShell || s.allowSelfEdit) ? '명령 실행(Bash)이 허용돼 있다. 파괴적인 명령은 실행 전에 주인에게 확인한다.' : '명령 실행(Bash)은 꺼져 있다. 필요하면 주인에게 대시보드 설정에서 켜달라고 말한다.'}
 ${s.allowHome ? `주인의 홈 폴더(${homedir()})를 읽고 고칠 수 있다.` : '이 데이터 폴더 밖의 파일은 건드릴 수 없다.'}
@@ -246,16 +249,40 @@ async function 갱신() {   // GitHub 의 새 판 받기. 관문에 걸리면 �
 }
 
 // ---------- 기록 · 대화 목록 ----------
-const 기록추가 = (role, text, sid) => appendFileSync(p('history.jsonl'), JSON.stringify({ ts: new Date().toISOString(), role, text, sid }) + '\n');
+const 기록추가 = (role, text, sid, files) => appendFileSync(p('history.jsonl'), JSON.stringify({ ts: new Date().toISOString(), role, text, sid, ...(files?.length ? { files } : {}) }) + '\n');
 const 기록 = (sid, n = 200) => readText(p('history.jsonl')).trim().split('\n').filter(Boolean)
   .map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter((h) => h && sid && h.sid === sid).slice(-n);   // 새 대화(sid 없음)는 빈 화면
 // 대화 목록 도입(2026-09-12) 전 기록엔 sid 가 없다 — 지금 대화로 귀속시킨다(1회)
 { const raw = readText(p('history.jsonl')); if (raw.includes('"text"') && !raw.includes('"sid"')) writeFileSync(p('history.jsonl'), raw.trim().split('\n').filter(Boolean).map((l) => { try { return JSON.stringify({ ...JSON.parse(l), sid: 상태().session }); } catch { return l; } }).join('\n') + '\n'); }
-function 대화기록(sid, firstText) {   // 대화 목록 맨 위로(제목은 첫 말 40자, Claude 앱처럼)
+function 대화기록(sid, firstText) {   // 대화 목록 맨 위로(제목은 첫 말 40자, Claude 앱처럼). 고정(pinned) 표시는 유지
   const st = 상태(); const old = st.sessions.find((s) => s.id === sid);
-  const list = [{ id: sid, title: old?.title || firstText.replace(/\s+/g, ' ').slice(0, 40), ts: new Date().toISOString() }, ...st.sessions.filter((s) => s.id !== sid)];
+  const list = [{ ...old, id: sid, title: old?.title || firstText.replace(/\s+/g, ' ').slice(0, 40), ts: new Date().toISOString() }, ...st.sessions.filter((s) => s.id !== sid)];
   상태저장({ session: sid, sessions: list.slice(0, 50) });
 }
+
+// ---------- 파일: 두뇌가 만든 파일 알아내기 · 열기 · 내려받기 ----------
+const 제외 = new Set(['history.jsonl', 'state.json', 'settings.json', 'memory.md', 'schedule.json', 'uploads', 'journal', 'wiki']);
+function 스냅샷(dir = DATA, out = new Map(), depth = 0) {   // 데이터 폴더 안 파일들의 수정 시각(도구 파일·첨부·일지·위키는 빼고)
+  for (const n of ls(dir)) {
+    if (depth === 0 && (n.startsWith('.') || 제외.has(n))) continue;
+    const full = join(dir, n); let st; try { st = statSync(full); } catch { continue; }
+    if (st.isDirectory()) { if (depth < 3) 스냅샷(full, out, depth + 1); } else out.set(full, st.mtimeMs);
+  }
+  return out;
+}
+const 새파일 = (전) => [...스냅샷()].filter(([f, m]) => 전.get(f) !== m).map(([f]) => ({ path: f, name: basename(f), size: statSync(f).size }));   // 이번 턴에 새로 생기거나 바뀐 파일
+const MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.pdf': 'application/pdf',
+  '.txt': 'text/plain; charset=utf-8', '.md': 'text/markdown; charset=utf-8', '.csv': 'text/csv; charset=utf-8', '.json': 'application/json; charset=utf-8', '.html': 'text/html; charset=utf-8',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation' };
+const 안에 = (abs, dir) => abs === dir || abs.startsWith(dir.endsWith(sep) ? dir : dir + sep);
+function 허용경로(q) {   // 데이터 폴더 안, (허용했을 때) 홈 폴더·산초 폴더 안의 실제 파일만
+  if (!q) return null;
+  const abs = resolve(/^([a-zA-Z]:[\\/]|\/)/.test(q) ? q : join(DATA, q));
+  const s = 설정();
+  const ok = 안에(abs, DATA) || (s.allowHome && 안에(abs, homedir())) || (s.allowSelfEdit && 안에(abs, ROOT));
+  try { return ok && statSync(abs).isFile() ? abs : null; } catch { return null; }
+}
+const 첨부이름 = (f) => basename(f).replace(/^[a-z0-9]{6,9}-/, '');   // uploads/mtytchox-회의메모.txt → 회의메모.txt
 const 일지 = (n = 2) => readdirSync(JOURNAL).filter((f) => f.endsWith('.md')).sort().slice(-n)
   .map((f) => ({ date: f.slice(0, -3), text: readText(join(JOURNAL, f)) }));
 
@@ -268,8 +295,10 @@ async function 채팅(req, res) {
   const files = Array.isArray(body.files) ? body.files.filter((f) => typeof f === 'string' && f.startsWith('uploads/')) : [];
   const text = String(body.text || '').trim() || (files.length ? '첨부한 파일을 확인해 주세요.' : '');
   if (!text) return send(res, 400, { error: '빈 메시지예요' });
-  const prompt = files.length ? `${text}\n\n[첨부 파일 — Read 도구로 읽어라]\n${files.map((f) => '- ' + f).join('\n')}` : text;
-  const 표시 = files.length ? `${text}\n📎 ${files.map((f) => f.replace(/^uploads\/[^-]+-/, '')).join(', ')}` : text;
+  const prompt = text + (files.length ? `\n\n[첨부 파일 — Read 도구로 읽어라]\n${files.map((f) => '- ' + f).join('\n')}` : '')
+    + (body.voice ? '\n\n(지금은 음성 대화 중이다. 두세 문장으로 짧게, 표·코드·목록 없이 말로 답하라.)' : '');
+  const 첨부 = files.map((f) => ({ path: f, name: 첨부이름(f) }));
+  const 전 = 스냅샷();   // 답이 끝난 뒤 새로 생긴 파일을 알아내기 위해
   if (!CLAUDE) return send(res, 503, { error: 'Claude Code 가 설치돼 있지 않아요. README 의 설치 순서를 보세요.' });
   if (현재) return send(res, 409, { error: `지금 다른 일(${현재.kind})을 하고 있어요. ■ 를 눌러 멈추거나 끝나길 기다려 주세요.` });
   res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache', connection: 'keep-alive' });
@@ -286,7 +315,9 @@ async function 채팅(req, res) {
         if (e.ok && e.session) 대화기록(e.session, text);                                // 성공한 답만 이어간다(실패한 실행의 id 를 resume 하면 또 실패)
         else if (!e.ok && /session|resume/i.test(e.text)) 상태저장({ session: null });   // 이어가기 자체가 실패면 다음엔 새 대화로
         const sid = 상태().session;
-        기록추가('user', 표시, sid); 기록추가('assistant', e.ok ? answer : `⚠️ ${e.text}`, sid);
+        const made = e.ok ? 새파일(전) : [];
+        if (made.length) sse({ t: 'files', files: made });   // 두뇌가 만든 파일 → 카드(열기·보기·내려받기)
+        기록추가('user', text, sid, 첨부); 기록추가('assistant', e.ok ? answer : `⚠️ ${e.text}`, sid, made);
         (설정().allowSelfEdit && e.ok ? 자기수정마무리(text) : Promise.resolve(null))
           .catch((err) => ({ ok: false, text: `자기 수정 마무리 실패: ${err.message}` }))
           .then((r) => { if (r) { sse({ t: 'selfedit', ...r }); 기록추가('assistant', `🔁 ${r.text}`, sid); } res.end(); 일끝(); });
@@ -327,6 +358,28 @@ createServer(async (req, res) => {
       const { id } = await readBody(req);
       if (!상태().sessions.some((s) => s.id === id)) return send(res, 404, { error: '없는 대화예요' });
       상태저장({ session: id }); return send(res, 200, { ok: true });
+    }
+    if (route === 'POST /api/session/pin') {   // 고정(Claude 앱의 "고정됨") — 3개까지
+      const { id, pinned } = await readBody(req); const st = 상태();
+      if (pinned && st.sessions.filter((s) => s.pinned && s.id !== id).length >= 3) return send(res, 409, { error: '고정은 3개까지예요. 하나를 풀고 다시 하세요.' });
+      상태저장({ sessions: st.sessions.map((s) => s.id === id ? { ...s, pinned: !!pinned } : s) }); return send(res, 200, { ok: true });
+    }
+    if (route === 'POST /api/session/remove') {
+      const { id } = await readBody(req); const st = 상태();
+      상태저장({ sessions: st.sessions.filter((s) => s.id !== id), session: st.session === id ? null : st.session }); return send(res, 200, { ok: true });
+    }
+    if (route === 'GET /api/download') {   // 보기·내려받기(브라우저가 그릴 수 있는 건 그대로 보여준다)
+      const abs = 허용경로(String(url.searchParams.get('path') || ''));
+      if (!abs) return send(res, 404, { error: '볼 수 없는 파일이에요' });
+      res.writeHead(200, { 'content-type': MIME[extname(abs).toLowerCase()] || 'application/octet-stream', 'content-disposition': `inline; filename*=UTF-8''${encodeURIComponent(basename(abs))}` });
+      return createReadStream(abs).pipe(res);
+    }
+    if (route === 'POST /api/open') {   // 이 컴퓨터의 기본 앱으로 열기(엑셀·파워포인트·워드 …)
+      const abs = 허용경로(String((await readBody(req)).path || ''));
+      if (!abs) return send(res, 404, { error: '열 수 없는 파일이에요' });
+      if (process.platform === 'win32') execFile('cmd', ['/c', 'start', '', abs], { windowsHide: true }, () => {});
+      else execFile(process.platform === 'darwin' ? 'open' : 'xdg-open', [abs], () => {});
+      return send(res, 200, { ok: true });
     }
     if (route === 'POST /api/stop') return send(res, 200, { stopped: 중지() });
     if (route === 'POST /api/schedule/remove') { const { id } = await readBody(req); writeJson(p('schedule.json'), 예약목록().filter((j) => j.id !== id)); return send(res, 200, { ok: true }); }

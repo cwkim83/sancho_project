@@ -3,7 +3,7 @@
 //   node selftest.js            → 시험 실행 (서버를 임시 폴더·8791 포트로 띄우고 검사)
 //   node selftest.js -p …       → 가짜 두뇌 (server.js 가 SANCHO_CLAUDE=selftest.js 로 이 파일을 claude 대신 실행)
 import { spawn } from 'node:child_process';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -26,6 +26,7 @@ function 가짜두뇌() {
     out({ type: 'system', subtype: 'init', session_id: 'fake-session-1', model: 'fake' });
     out({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Read', input: { file_path: 'memory.md' } }] } });
     if (prompt.includes('천천히')) await new Promise((r) => setTimeout(r, 30_000));   // ■ 중지 시험용
+    if (prompt.includes('파일 만들어')) { mkdirSync('파일함', { recursive: true }); writeFileSync(join('파일함', '가짜.xlsx'), 'x'); }   // 만든 파일 알아내기 시험용(cwd = 데이터 폴더)
     out({ type: 'assistant', message: { content: [{ type: 'text', text: `가짜 답: ${prompt.trim().slice(0, 40)}${prompt.includes('[첨부 파일') ? ' +첨부' : ''}` }] } });
     out({ type: 'result', subtype: 'success', is_error: false, session_id: 'fake-session-1', duration_ms: 12, total_cost_usd: 0 });
   });
@@ -62,6 +63,23 @@ async function 시험() {
     const ev1b = await 채팅(BASE, '이 파일 봐', null, [up.path]);
     assert.ok(ev1b.find((e) => e.t === 'text')?.text.includes('+첨부'), '첨부 목록이 두뇌에 전달된다');
 
+    // 1b-2) 두뇌가 만든 파일은 files 이벤트로 오고, 내려받기·열기 경로는 데이터 폴더 안만 허용된다
+    const ev1c = await 채팅(BASE, '파일 만들어');
+    const made = ev1c.find((e) => e.t === 'files');
+    assert.ok(made && made.files.some((f) => f.name === '가짜.xlsx' && f.size === 1), `만든 파일 알아내기 ${JSON.stringify(made)}`);
+    assert.equal(await (await fetch(`${BASE}/api/download?path=${encodeURIComponent(up.path)}`)).text(), 'hello', '첨부 내려받기');
+    assert.equal((await fetch(`${BASE}/api/download?path=${encodeURIComponent(made.files[0].path)}`)).status, 200, '만든 파일 내려받기(절대 경로)');
+    assert.equal((await fetch(`${BASE}/api/download?path=${encodeURIComponent('../server.js')}`)).status, 404, '데이터 폴더 밖은 막는다');
+    assert.equal((await fetch(`${BASE}/api/open`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: '../server.js' }) })).status, 404, '밖의 파일 열기도 막는다');
+
+    // 1d) 대화 목록: 고정·해제·삭제
+    const sid0 = JSON.parse(readFileSync(join(data, 'state.json'), 'utf8')).session;
+    assert.equal((await fetch(`${BASE}/api/session/pin`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: sid0, pinned: true }) })).status, 200, '고정');
+    assert.equal(JSON.parse(readFileSync(join(data, 'state.json'), 'utf8')).sessions[0].pinned, true, '고정 표시 저장');
+    await fetch(`${BASE}/api/session/remove`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: sid0 }) });
+    const st0 = JSON.parse(readFileSync(join(data, 'state.json'), 'utf8'));
+    assert.ok(st0.sessions.length === 0 && st0.session === null, '삭제하면 목록에서 빠지고 현재 대화도 비운다');
+
     // 1c) 위키·스킬 목록과 파일 읽기(그 두 폴더만)
     writeFileSync(join(data, 'wiki', '시험.md'), '# 위키 시험');
     const st1 = await (await fetch(`${BASE}/api/state`)).json();
@@ -92,7 +110,7 @@ async function 시험() {
     assert.ok(Date.now() - tStop < 3000, `3초 안에 끊긴다 (${Date.now() - tStop}ms)`);
     assert.equal(await exited, 75, '일이 끝나면 코드 75 로 종료(재시작 요청)');
 
-    console.log('산초 자가시험 통과: 화면 문법 · 채팅 SSE · 대화 id · 기록 · 첨부 · 위키/스킬 파일 · 예약 tick · 일지 · 재시작 관문·예약 · ■ 중지 · 종료 75');
+    console.log('산초 자가시험 통과: 화면 문법 · 채팅 SSE · 대화 id · 기록 · 첨부 · 만든 파일·내려받기·열기 경계 · 대화 고정/삭제 · 위키/스킬 파일 · 예약 tick · 일지 · 재시작 관문·예약 · ■ 중지 · 종료 75');
   } finally {
     server.kill();
     rmSync(data, { recursive: true, force: true });
