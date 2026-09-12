@@ -1,6 +1,6 @@
 @echo off
-rem 산초 실행기. 서버가 75 로 끝나면 다시 켜고(재시작 요청), 비정상 종료면 마지막 정상판(git tag last-good)으로 되돌린다.
-rem 메시지는 영문 — cmd 창의 코드페이지에 따라 한글이 깨질 수 있어서.
+rem Sancho launcher. ASCII only: cmd misreads UTF-8 Korean in .bat files (2026-09-12).
+rem Exit code 75 = restart requested. Any other non-zero exit = crash -> roll back to git tag last-good and start again.
 cd /d "%~dp0"
 where node >nul 2>nul
 if %errorlevel%==0 (set "NODE=node") else (set "NODE=%ProgramFiles%\nodejs\node.exe")
