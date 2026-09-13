@@ -324,7 +324,10 @@ function 읽을글로(text) {
 // 문장 단위로 끊어 읽어야 숨을 쉬고, 긴 글에서 중간에 끊기는 일도 없다.
 // 끝났을 때 done() 을 부른다 — 말하는 중에 마이크를 켜면 제 목소리를 제가 받아적는다.
 function speak(text, done) {
-  const 끝 = () => { 말하는중 = false; done && done(); };
+  let 끝났나 = false, 보험 = null;
+  // 크롬은 onend 를 안 쏘고 조용히 끝낼 때가 있다. 그러면 말하는중 이 true 로 굳어
+  // "산초야" 가 영영 안 먹는다 — 글자 수로 잰 시간이 지나면 강제로 끝낸다.
+  const 끝 = () => { if (끝났나) return; 끝났나 = true; clearTimeout(보험); 말하는중 = false; done && done(); };
   if (!('speechSynthesis' in window) || !text) return 끝();
   speechSynthesis.cancel();
   const 글 = 읽을글로(text);
@@ -332,6 +335,7 @@ function speak(text, done) {
   const 문장들 = (글.match(/[^.!?…\n]+[.!?…]*/g) || [글]).map((s) => s.trim()).filter(Boolean);
   if (!문장들.length) return 끝();
   말하는중 = true;
+  보험 = setTimeout(끝, 3000 + 글.length * 180);   // 한글 한 자 ≈ 0.18초 + 여유
   문장들.forEach((s, i) => {
     const u = new SpeechSynthesisUtterance(i ? ' ' + s : s);   // 문장 사이 한 박자
     u.lang = 'ko-KR';
@@ -385,18 +389,32 @@ function 듣기시작(재시도 = 0) {
   rec.onend = () => { if (listening) 다시(); };
   try { rec.start(); } catch { 마무리(); }
 }
-function 호출대기시작() {   // "산초야 …" 를 기다린다. 이름 뒤에 바로 말이 이어지면 그대로 보내고, 이름만 부르면 삐 소리 뒤 듣는다
+// "산초야 …" 를 기다린다. 이름 뒤에 말이 이어지면 그대로 보내고, 이름만 부르면 삐 소리 뒤 듣는다.
+//
+// 늦게 반응하던 이유 둘을 여기서 잡는다:
+//  ① interimResults=false 였다 — 크롬이 문장을 **확정**할 때까지 1~2초를 기다렸다. 이름은 중간 결과로도 충분히 알아본다.
+//  ② 크롬이 인식을 끊으면 500ms 쉬고 다시 켰다 — 그 반 초 동안은 귀머거리다. 곧바로 다시 켠다.
+function 호출대기시작() {
   if (!prefs.wake || !SR || listening || wakeRec || meet) return wakeUI();
-  wakeRec = new SR(); wakeRec.lang = 'ko-KR'; wakeRec.continuous = true; wakeRec.interimResults = false;
-  wakeRec.onresult = (e) => {
-    if (말하는중) return;   // 산초가 말하는 중엔 못 들은 척 — 제 목소리에 제가 반응하면 안 된다
-    const t = e.results[e.results.length - 1][0].transcript, m = t.match(호출어); if (!m || busy) return;
-    삐(); const rest = t.slice(m.index + m[0].length).trim(); 호출대기중지();
+  wakeRec = new SR(); wakeRec.lang = 'ko-KR'; wakeRec.continuous = true; wakeRec.interimResults = true;
+  let 깨어남 = false, 뒷말타이머 = null;
+  const 넘기기 = (rest) => {
+    clearTimeout(뒷말타이머); 호출대기중지();
     if (rest.length > 1) { input.value = rest; voiceTurn = true; send(); } else 듣기시작();
   };
-  wakeRec.onend = () => { wakeRec = null; wakeUI(); if (prefs.wake && !listening && !meet) setTimeout(호출대기시작, 500); };
+  wakeRec.onresult = (e) => {
+    if (말하는중 || busy) return;   // 산초가 말하는 중엔 못 들은 척 — 제 목소리에 제가 반응하면 안 된다
+    const r = e.results[e.results.length - 1], t = r[0].transcript, m = t.match(호출어);
+    if (!m) return;
+    if (!깨어남) { 깨어남 = true; 삐(); }   // 이름을 듣는 **즉시** 삐 — 기다리는 느낌이 없어진다
+    const rest = t.slice(m.index + m[0].length).trim();
+    if (r.isFinal) return 넘기기(rest);
+    // 아직 말하는 중일 수 있다. 0.9초 더 말이 없으면 거기까지를 뒷말로 친다.
+    clearTimeout(뒷말타이머); 뒷말타이머 = setTimeout(() => 넘기기(rest), 900);
+  };
+  wakeRec.onend = () => { wakeRec = null; wakeUI(); if (prefs.wake && !listening && !meet && !깨어남) 호출대기시작(); };
   wakeRec.onerror = (e) => { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { prefs.wake = false; localStorage.sancho_wake = '0'; $('#tip').textContent = '마이크 사용이 막혀 있어요 — 주소창의 마이크 아이콘에서 허용해 주세요'; } };
-  try { wakeRec.start(); } catch { wakeRec = null; } wakeUI();
+  try { wakeRec.start(); } catch { wakeRec = null; setTimeout(호출대기시작, 400); } wakeUI();
 }
 function 호출대기중지() { if (wakeRec) { const w = wakeRec; wakeRec = null; w.onend = null; try { w.stop(); } catch {} } wakeUI(); }
 if (!SR) { $('#micBtn').disabled = true; $('#micBtn').title = '이 브라우저는 음성 인식을 지원하지 않아요 (Chrome·Edge 에서 쓰세요)'; $('#meetStart').disabled = true; }
