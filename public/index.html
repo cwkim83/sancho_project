@@ -99,17 +99,23 @@
   .ninfo{position:absolute;z-index:8;width:min(320px,72vw);padding:12px 14px;border-radius:12px;background:var(--card);border:1px solid var(--line);box-shadow:0 8px 28px var(--shadow)} .ninfo.hidden{display:none}
   .ninfo b{display:block;font-size:14px;margin-bottom:4px;word-break:break-all} .ninfo .ni-meta{font:10px ui-monospace,Consolas,monospace;color:var(--muted);letter-spacing:.04em}
   .ninfo .ni-body{margin-top:8px;font-size:12px;line-height:1.6;white-space:pre-wrap;word-break:break-word;max-height:170px;overflow:auto}
-  /* 대표 대시보드 — 헤더 아래 전체를 덮는 층(뇌 그래프와 같은 자리). AXroa Executive OS 를 산초 말로 옮김 */
-  #dash{position:absolute;top:48px;left:0;right:0;bottom:0;background:var(--bg);z-index:6;overflow:auto;padding:22px 26px 40px} #dash[hidden]{display:none}
-  #dash .deck{max-width:1040px;margin:0 auto}
-  #dash .dh{font:11px ui-monospace,Consolas,monospace;letter-spacing:.16em;color:var(--muted);text-transform:uppercase}
-  #dash h2{font-size:26px;margin:2px 0 2px;letter-spacing:-.01em} #dash .sub2{color:var(--muted);font-size:13.5px;margin-bottom:18px}
+  /* 사이드바 메뉴 (AXroa Executive OS 식 왼쪽 내비) */
+  #nav{display:flex;flex-direction:column;gap:2px;padding:4px 8px 8px}
+  .navi{display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:none;border:0;color:var(--fg);font-size:13.5px;padding:8px 10px;border-radius:9px;cursor:pointer}
+  .navi:hover{background:var(--card)} .navi.on{background:var(--accent);color:#fff;font-weight:600}
+  .navi .ni{font-size:15px;width:18px;text-align:center}
+  /* 메뉴 뷰 — 헤더 아래 전체를 덮는 층(뇌 그래프와 같은 자리) */
+  #view{position:absolute;top:48px;left:0;right:0;bottom:0;background:var(--bg);z-index:6;overflow:auto;padding:22px 26px 40px} #view[hidden]{display:none}
+  #view .deck{max-width:1040px;margin:0 auto}
+  #view .dh{font:11px ui-monospace,Consolas,monospace;letter-spacing:.16em;color:var(--muted);text-transform:uppercase}
+  #view h2{font-size:26px;margin:2px 0 2px;letter-spacing:-.01em} #view .sub2{color:var(--muted);font-size:13.5px;margin-bottom:18px}
   .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
   .tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 16px 14px}
   .tile .k{font:10px ui-monospace,Consolas,monospace;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}
   .tile .v{font-size:30px;font-weight:650;margin-top:6px;line-height:1} .tile .v small{font-size:13px;font-weight:400;color:var(--muted);margin-left:3px}
   .tile.warn .v{color:#e0a52b} .tile.go .v{color:#2fa46b}
-  #dash .grp{display:flex;align-items:baseline;gap:8px;margin:6px 0 12px} #dash .grp h3{font-size:15px} #dash .grp .hint{font-size:12px}
+  #view .grp{display:flex;align-items:baseline;gap:8px;margin:20px 0 12px} #view .grp h3{font-size:15px} #view .grp .hint{font-size:12px} #view .grp .sp{margin-left:auto}
+  #view .qbtn{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:6px 12px;font-size:12.5px;color:var(--fg);cursor:pointer} #view .qbtn:hover{border-color:var(--accent)}
   .depts{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:26px}
   .dept{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;cursor:pointer;transition:border-color .15s,transform .1s}
   .dept:hover{border-color:var(--accent);transform:translateY(-1px)} .dept:active{transform:none}
@@ -120,11 +126,33 @@
   .feed{border-left:2px solid var(--line);margin-left:6px;padding-left:18px}
   .feed .row{position:relative;padding:0 0 15px} .feed .row::before{content:'';position:absolute;left:-25px;top:4px;width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--bg)}
   .feed .when{font:10px ui-monospace,Consolas,monospace;color:var(--muted);letter-spacing:.04em} .feed .what{font-size:13px;margin-top:2px;line-height:1.55} .feed .what b{font-weight:600}
+  /* 업무 일정 · WBS */
+  .wbs{display:flex;flex-direction:column;gap:10px}
+  .phase{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .phase>.ph{display:flex;align-items:center;gap:10px;padding:12px 15px;font-weight:600;font-size:14px;border-bottom:1px solid var(--line)}
+  .phase .bar{flex:1;height:6px;border-radius:3px;background:var(--line);overflow:hidden;max-width:220px} .phase .bar i{display:block;height:100%;background:var(--accent)}
+  .phase .pct{font:11px ui-monospace,Consolas,monospace;color:var(--muted);min-width:36px;text-align:right}
+  .task{display:flex;align-items:center;gap:10px;padding:9px 15px;font-size:13px;border-top:1px solid var(--line)} .task:first-child{border-top:0}
+  .task .cb{width:15px;height:15px;border-radius:4px;border:1.5px solid var(--muted);flex-shrink:0;display:grid;place-items:center;font-size:10px;color:#fff} .task.done .cb{background:#2fa46b;border-color:#2fa46b} .task.done .tt{color:var(--muted);text-decoration:line-through}
+  .task .who{margin-left:auto;font-size:11px;color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:20px;padding:2px 9px}
+  /* 메일 */
+  .mlist{display:flex;flex-direction:column;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .mrow{display:flex;align-items:center;gap:12px;padding:11px 14px;background:var(--card);cursor:pointer} .mrow:hover{background:var(--bg)}
+  .mrow .tag{font-size:10px;padding:2px 8px;border-radius:20px;flex-shrink:0;font-weight:600} .mrow .frm{font-weight:600;font-size:13px;min-width:110px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .mrow .subj{font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1} .mrow .when{font:10px ui-monospace,Consolas,monospace;color:var(--muted);flex-shrink:0}
+  .setup{background:var(--card);border:1px dashed var(--line);border-radius:14px;padding:22px;text-align:center;color:var(--muted);font-size:13px;line-height:1.7}
 </style>
 </head>
 <body>
 <aside id="side">
   <div class="brand"><span class="star">✳</span> 산초</div>
+  <nav id="nav">
+    <button class="navi" data-view="dash"><span class="ni">📊</span> 대시보드</button>
+    <button class="navi" data-view="wbs"><span class="ni">🗓</span> 업무 일정 · WBS</button>
+    <button class="navi" data-view="mail"><span class="ni">📧</span> 메일 확인 · 분류</button>
+    <button class="navi" data-view="org"><span class="ni">🏢</span> 조직</button>
+    <button class="navi on" data-view="chat"><span class="ni">💬</span> 대화</button>
+  </nav>
   <button id="new" class="newbtn">＋ 새 대화</button>
   <div class="sbody">
     <div class="sec"><h4>대화</h4><div id="sessions"></div></div>
@@ -161,21 +189,11 @@
   <header>
     <span id="title">새 대화</span><span id="modelChip" class="chip small"></span>
     <span class="chip small"><i class="led" id="brainLed"></i><span id="brainState">CORE ONLINE</span></span>
-    <button class="chip" id="dashBtn" title="대표 대시보드 — 오늘 일·부서·진행 기록을 한 화면에">📊</button>
     <button class="chip" id="hudBtn" title="뇌 그래프 — 산초의 기억·위키·스킬·대화가 하나의 뇌로 보입니다 (파이스 코어)">🧠</button>
     <span id="wakeInd" class="chip small" hidden>👂 "산초야" 대기 중</span><span id="running" class="running" hidden></span>
   </header>
   <div id="log"><div id="col"></div></div>
-  <div id="dash" hidden><div class="deck">
-    <div class="dh">산초 · EXECUTIVE OS</div>
-    <h2>주인님, 오늘 일을 정리했습니다.</h2>
-    <div class="sub2">한 번의 지시를 산초가 부서에 나눠 실행하고, 결과를 여기로 모읍니다.</div>
-    <div class="tiles" id="dashTiles"></div>
-    <div class="grp"><h3>부서</h3><span class="hint">누르면 그 부서에 바로 일을 시킵니다</span></div>
-    <div class="depts" id="dashDepts"></div>
-    <div class="grp"><h3>진행 기록</h3><span class="hint">예약·부서 작업이 끝나면 여기 쌓입니다</span></div>
-    <div class="feed" id="dashFeed"></div>
-  </div></div>
+  <div id="view" hidden><div class="deck" id="viewDeck"></div></div>
   <div id="hud" hidden>
     <canvas id="neural"></canvas>
     <div class="hudbar"><span class="mono">NEURAL MESH · 산초</span><button id="graphSrc" class="chip">ORB</button><button id="hudFit" class="chip">맞춤</button><button id="hudClose" class="chip">닫기 ✕</button></div>
@@ -528,7 +546,7 @@ input.onkeydown = (e) => {
   if (e.isComposing || e.keyCode === 229) return;   // 한글 조합 중 Enter 는 글자 확정용 — 보내지 않는다
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
 };
-document.addEventListener('keydown', (e) => { if (e.key !== 'Escape') return; if (!$('#lightbox').hidden) $('#lightbox').hidden = true; else if (!$('#dash').hidden) $('#dash').hidden = true; else if (!$('#hud').hidden) $('#hud').hidden = true; else { speechSynthesis?.cancel?.(); if (busy) api('/api/stop', {}); } });
+document.addEventListener('keydown', (e) => { if (e.key !== 'Escape') return; if (!$('#lightbox').hidden) $('#lightbox').hidden = true; else if (현재뷰 !== 'chat') 뷰전환('chat'); else if (!$('#hud').hidden) $('#hud').hidden = true; else { speechSynthesis?.cancel?.(); if (busy) api('/api/stop', {}); } });
 document.addEventListener('click', (e) => { if (!e.target.closest('.menu')) closeMenus(); });
 for (const [b, m] of [['#permBtn', '#permMenu'], ['#modelBtn', '#modelMenu'], ['#effortBtn', '#effortMenu'], ['#gear', '#gearMenu']]) {
   $(b).onclick = (e) => { e.stopPropagation(); const open = $(m).hidden; closeMenus(); $(m).hidden = !open; };
@@ -541,13 +559,13 @@ for (const id of ['allowShell', 'allowHome', 'allowApps', 'allowSelfEdit']) $('#
 for (const inp of document.querySelectorAll('input.set')) inp.onchange = async () => {   // 연결 설정: 바꾸면 바로 저장. 접속 토큰은 이 브라우저에도 남겨 둔다
   const v = inp.value.trim(); await api('/api/settings', { [inp.dataset.key]: v }); if (inp.dataset.key === 'token') localStorage.sancho_token = v; refresh();
 };
-$('#new').onclick = async () => { if (busy) return; await api('/api/new', {}); refresh(); };
+$('#new').onclick = async () => { if (busy) return; 뷰전환('chat'); await api('/api/new', {}); refresh(); };
 $('#sessions').onclick = async (e) => {   // 대화 목록: 고정 📌 · 삭제 ✕ · 더 보기 · 이동
   const t = e.target.closest('button,[data-more],[data-sid]'); if (!t) return;
   if (t.dataset.pin) { const r = await api('/api/session/pin', { id: t.dataset.pin, pinned: t.dataset.pinned !== '1' }); if (r.error) alert(r.error); return refresh(); }
   if (t.dataset.del) { if (confirm('이 대화를 목록에서 지울까요?')) await api('/api/session/remove', { id: t.dataset.del }); return refresh(); }
   if (t.dataset.more) { showAll = !showAll; return refresh(); }
-  if (t.dataset.sid && !busy) { await api('/api/session', { id: t.dataset.sid }); refresh(); }
+  if (t.dataset.sid && !busy) { 뷰전환('chat'); await api('/api/session', { id: t.dataset.sid }); refresh(); }
 };
 $('#sched').onclick = async (e) => {
   const run = e.target.dataset.run, del = e.target.dataset.del;
@@ -577,52 +595,99 @@ $('#quit').onclick = async () => { if (!confirm('산초를 완전히 끌까요? 
 
 const empty = (t) => `<div class="hint" style="padding:4px 8px">${t}</div>`;
 const sessItem = (x, cur) => `<div class="item ${x.id === cur ? 'active' : ''}" data-sid="${esc(x.id)}" title="${esc(x.title)}"><span>${esc(x.title)}</span><span class="t">${ago(x.ts)}</span><span class="acts"><button data-pin="${esc(x.id)}" data-pinned="${x.pinned ? 1 : 0}" title="${x.pinned ? '고정 해제' : '고정 (3개까지)'}">${x.pinned ? '📍' : '📌'}</button><button data-del="${esc(x.id)}" title="목록에서 지우기">✕</button></span></div>`;
-// ---- 대표 대시보드 (AXroa Executive OS 를 산초 말로) ----------------------
-// 부서 = 일을 맡길 담당. 누르면 그 부서 말투로 지시가 입력창에 채워진다.
-// 지금은 산초(=비서·오케스트레이터)가 그 지시를 받아 직접 처리한다 — 서브에이전트로 진짜 나눠 굴리는 건 다음 단계.
+// ---- 왼쪽 메뉴 → 뷰 전환 (AXroa Executive OS 를 산초 말로) -----------------------
+// 대화(chat)면 채팅 화면, 그 외엔 #view 층을 덮어 그 메뉴를 그린다. 산초가 곧 오케스트레이터다:
+// 각 뷰의 버튼/부서는 채팅창에 완전한 지시를 채워 넣어, 그 일을 산초가 실제로 실행하게 한다.
 const 부서 = [
-  { id: 'dev', ico: '🛠', nm: '개발부', role: '코드 작성·수정, 산초 자기 화면·기능 개선', 지시: '개발부에게 맡깁니다. ' },
-  { id: 'doc', ico: '📄', nm: '문서부', role: '보고서·엑셀·PPT·워드 문서 작성', 지시: '문서부에게 맡깁니다. ' },
-  { id: 'research', ico: '🔎', nm: '조사부', role: '웹 검색, 자료·경쟁사·기술 동향 조사', 지시: '조사부에게 맡깁니다. ' },
-  { id: 'office', ico: '🗂', nm: '비서실', role: '메일·일정·예약·연락 관리', 지시: '비서실에게 맡깁니다. ' },
-  { id: 'qa', ico: '✔', nm: '품질부', role: '검사 성적서·품질 문서, 결과 검토', 지시: '품질부에게 맡깁니다. ' },
+  { id: 'dev', ico: '🛠', nm: '개발부', role: '코드 작성·수정, 산초 자기 화면·기능 개선', 지시: '개발부 일입니다. ' },
+  { id: 'doc', ico: '📄', nm: '문서부', role: '보고서·엑셀·PPT·워드 문서 작성', 지시: '문서부 일입니다. ' },
+  { id: 'research', ico: '🔎', nm: '조사부', role: '웹 검색, 자료·경쟁사·기술 동향 조사', 지시: '조사부 일입니다. ' },
+  { id: 'office', ico: '🗂', nm: '비서실', role: '메일·일정·예약·연락 관리', 지시: '비서실 일입니다. ' },
+  { id: 'qa', ico: '✔', nm: '품질부', role: '검사 성적서·품질 문서, 결과 검토', 지시: '품질부 일입니다. ' },
 ];
-let lastState = null;
-function 대시그리기(s) {
-  if (!s) return;
-  const 오늘 = new Date().toISOString().slice(0, 10);
-  const 오늘알림 = (s.journal || []).filter((j) => j.date === 오늘).reduce((n, j) => n + (j.text.match(/^## /gm) || []).length, 0);
-  const 완료 = (s.journal || []).reduce((n, j) => n + (j.text.match(/^## /gm) || []).length, 0);
-  const tiles = [
-    { k: '진행 중', v: s.busy ? 1 : 0, cls: s.busy ? 'go' : '' },
-    { k: '예약', v: (s.schedules || []).length, u: '건', cls: '' },
-    { k: '오늘 보고', v: 오늘알림, u: '건', cls: 오늘알림 ? 'go' : '' },
-    { k: '전체 기록', v: 완료, u: '건', cls: '' },
-  ];
-  setIf($('#dashTiles'), tiles.map((t) => `<div class="tile ${t.cls}"><div class="k">${t.k}</div><div class="v">${t.v}${t.u ? `<small>${t.u}</small>` : ''}</div></div>`).join(''));
-  setIf($('#dashDepts'), 부서.map((d) => {
-    const on = s.busy && s.busy.includes(d.nm);
-    return `<div class="dept" data-dept="${d.id}"><div class="top"><span class="ico">${d.ico}</span><span class="nm">${d.nm}</span></div><div class="role">${esc(d.role)}</div><div class="st ${on ? 'on' : ''}"><i></i>${on ? '작업 중' : '대기'}</div></div>`;
-  }).join(''));
-  const feed = (s.journal || []).flatMap((j) => j.text.split(/\n(?=## )/).filter((x) => x.trim()).map((x) => {
-    const lines = x.trim().split('\n'); return { date: j.date, head: lines[0].replace(/^## /, ''), body: lines.slice(1).join('\n').trim().slice(0, 160) };
-  })).reverse().slice(0, 14);
-  setIf($('#dashFeed'), feed.length
-    ? feed.map((e) => `<div class="row"><div class="when">${esc(e.date)}</div><div class="what"><b>${esc(e.head)}</b>${e.body ? ' — ' + esc(e.body) : ''}</div></div>`).join('')
-    : `<div class="row"><div class="what hint">아직 기록이 없어요 — 예약을 걸거나 부서에 일을 시키면 여기 쌓입니다.</div></div>`);
+let lastState = null, 현재뷰 = 'chat';
+const 지시넣기 = (t) => { 뷰전환('chat'); input.value = t; input.focus(); input.oninput(); };
+function 뷰전환(name) {
+  현재뷰 = name;
+  for (const b of document.querySelectorAll('.navi')) b.classList.toggle('on', b.dataset.view === name);
+  const chat = name === 'chat';
+  $('#view').hidden = chat;
+  if (chat) return;
+  $('#hud').hidden = true;
+  뷰그리기(name, lastState);
 }
-$('#dashBtn').onclick = () => { const open = $('#dash').hidden; $('#hud').hidden = true; $('#dash').hidden = !open; if (open) 대시그리기(lastState); };
-$('#dashDepts').onclick = (e) => {
-  const c = e.target.closest('[data-dept]'); if (!c) return;
-  const d = 부서.find((x) => x.id === c.dataset.dept); if (!d) return;
-  $('#dash').hidden = true;
-  input.value = d.지시; input.focus(); input.oninput();
-};
+document.getElementById('nav').addEventListener('click', (e) => { const b = e.target.closest('.navi'); if (b) 뷰전환(b.dataset.view); });
+
+const 알림항목 = (s) => (s?.journal || []).flatMap((j) => j.text.split(/\n(?=## )/).filter((x) => x.trim()).map((x) => {
+  const lines = x.trim().split('\n'); return { date: j.date, head: lines[0].replace(/^## /, ''), body: lines.slice(1).join('\n').trim() };
+})).reverse();
+
+function 뷰그리기(name, s) {
+  const D = $('#viewDeck');
+  if (name === 'dash') {
+    const 오늘 = new Date().toISOString().slice(0, 10);
+    const 오늘보고 = (s?.journal || []).filter((j) => j.date === 오늘).reduce((n, j) => n + (j.text.match(/^## /gm) || []).length, 0);
+    const 전체 = 알림항목(s);
+    const tiles = [
+      { k: '진행 중', v: s?.busy ? 1 : 0, u: '건', cls: s?.busy ? 'go' : '' },
+      { k: '예약', v: (s?.schedules || []).length, u: '건' },
+      { k: '오늘 보고', v: 오늘보고, u: '건', cls: 오늘보고 ? 'go' : '' },
+      { k: '전체 기록', v: 전체.length, u: '건' },
+    ];
+    D.innerHTML = `<div class="dh">산초 · EXECUTIVE OS</div><h2>주인님, 오늘 일을 정리했습니다.</h2>
+      <div class="sub2">한 번의 지시를 산초가 부서에 나눠 실행하고, 결과를 여기로 모읍니다.</div>
+      <div class="tiles">${tiles.map((t) => `<div class="tile ${t.cls || ''}"><div class="k">${t.k}</div><div class="v">${t.v}<small>${t.u}</small></div></div>`).join('')}</div>
+      <div class="grp"><h3>부서</h3><span class="hint">누르면 그 부서에 바로 일을 시킵니다</span></div>
+      <div class="depts">${부서.map((d) => { const on = s?.busy && s.busy.includes(d.nm); return `<div class="dept" data-dept="${d.id}"><div class="top"><span class="ico">${d.ico}</span><span class="nm">${d.nm}</span></div><div class="role">${esc(d.role)}</div><div class="st ${on ? 'on' : ''}"><i></i>${on ? '작업 중' : '대기'}</div></div>`; }).join('')}</div>
+      <div class="grp"><h3>진행 기록</h3><span class="hint">예약·부서 작업이 끝나면 여기 쌓입니다</span></div>
+      <div class="feed">${전체.slice(0, 14).map((e) => `<div class="row"><div class="when">${esc(e.date)}</div><div class="what"><b>${esc(e.head)}</b>${e.body ? ' — ' + esc(e.body.slice(0, 160)) : ''}</div></div>`).join('') || '<div class="row"><div class="what hint">아직 기록이 없어요.</div></div>'}</div>`;
+    return;
+  }
+  if (name === 'org') {
+    D.innerHTML = `<div class="dh">산초 · 조직</div><h2>부서</h2>
+      <div class="sub2">산초가 비서실장이 되어 일을 부서에 나눕니다. 부서를 누르면 그 부서 일로 지시가 채워집니다.</div>
+      <div class="depts">${부서.map((d) => { const on = s?.busy && s.busy.includes(d.nm); return `<div class="dept" data-dept="${d.id}"><div class="top"><span class="ico">${d.ico}</span><span class="nm">${d.nm}</span></div><div class="role">${esc(d.role)}</div><div class="st ${on ? 'on' : ''}"><i></i>${on ? '작업 중' : '대기'}</div></div>`; }).join('')}</div>`;
+    return;
+  }
+  if (name === 'wbs') {
+    // 예약을 "잡힌 일정"으로, 진행 기록을 "끝난 일"로 본 간단한 WBS. 진짜 프로젝트 분해는 "WBS 짜줘"로 산초가 채운다.
+    const sch = s?.schedules || [], 완료수 = 알림항목(s).length;
+    const phases = [
+      { nm: '📌 잡힌 일정 (예약)', tasks: sch.map((j) => ({ t: `${j.time} ${j.repeat === 'once' ? (j.date || '한 번') : '매일'} · ${j.prompt}`, done: false, who: '비서실' })) },
+      { nm: `✅ 끝난 일 (${완료수})`, tasks: 알림항목(s).slice(0, 8).map((e) => ({ t: e.head, done: true, who: e.date.slice(5) })) },
+    ];
+    D.innerHTML = `<div class="dh">산초 · 업무 일정</div><h2>업무 일정 · WBS</h2>
+      <div class="sub2">할 일을 단계로 쪼개고 담당·진행률을 봅니다. 새 프로젝트는 아래 버튼으로 산초에게 맡기세요.</div>
+      <div class="grp"><span class="sp"></span>
+        <button class="qbtn" data-fill="새 프로젝트의 WBS(작업 분해 구조)를 짜줘. 단계 → 작업 → 담당 부서(개발·문서·조사·비서·품질) → 예상 기한으로 표를 만들고, 정해지면 각 작업을 예약이나 부서 지시로 등록할 수 있게 정리해줘. 프로젝트 이름과 목표는 내가 지금 말할게: ">＋ WBS 짜줘</button></div>
+      <div class="wbs">${phases.map((p) => {
+        const done = p.tasks.filter((t) => t.done).length, pct = p.tasks.length ? Math.round(done / p.tasks.length * 100) : 0;
+        return `<div class="phase"><div class="ph"><span>${esc(p.nm)}</span><span class="bar"><i style="width:${pct}%"></i></span><span class="pct">${pct}%</span></div>${p.tasks.map((t) => `<div class="task ${t.done ? 'done' : ''}"><span class="cb">${t.done ? '✓' : ''}</span><span class="tt">${esc(t.t)}</span><span class="who">${esc(t.who)}</span></div>`).join('') || '<div class="task"><span class="tt hint">항목이 없어요.</span></div>'}</div>`;
+      }).join('')}</div>`;
+    return;
+  }
+  if (name === 'mail') {
+    D.innerHTML = `<div class="dh">산초 · 메일</div><h2>메일 확인 · 분류</h2>
+      <div class="sub2">받은 메일을 산초가 읽고 중요·보통·광고로 갈라 드립니다.</div>
+      <div class="grp"><span class="sp"></span>
+        <button class="qbtn" data-fill="네이버 메일 최근 것 확인해줘. tools/mail.js 로 받은편지함을 읽어 목록을 보여줘.">📥 받은 메일</button>
+        <button class="qbtn" data-fill="안 읽은 메일만 확인해줘. tools/mail.js unread 로 읽어줘.">● 안 읽은 것</button>
+        <button class="qbtn" data-fill="받은 메일을 읽고 중요 / 보통 / 광고·뉴스레터로 분류해서 표로 보여줘. 중요한 건 왜 중요한지 한 줄로 붙여줘. tools/mail.js 를 써.">🏷 분류해줘</button></div>
+      <div class="setup">아직 메일 계정을 연결하지 않았습니다.<br>네이버 메일에서 <b>IMAP 사용</b>을 켜고 (2단계 인증 시 <b>앱 비밀번호</b> 발급), 아이디와 비밀번호를 채팅으로 주시면 <b>data/mail.json</b> 에 넣어 바로 읽어 드립니다.<br><br>연결되면 이 자리에 받은 메일이 목록으로 뜨고, 위 버튼으로 분류합니다.</div>`;
+    return;
+  }
+}
+$('#viewDeck').addEventListener('click', (e) => {
+  const dept = e.target.closest('[data-dept]');
+  if (dept) { const d = 부서.find((x) => x.id === dept.dataset.dept); if (d) 지시넣기(d.지시); return; }
+  const fill = e.target.closest('[data-fill]');
+  if (fill) 지시넣기(fill.dataset.fill);
+});
 
 async function refresh() {
   let s;
   try { s = await api('/api/state'); if (s.error) throw new Error(s.error); } catch { $('#status').innerHTML = '<span class="dot"></span>서버 응답 없음 — 재시작 중이면 곧 돌아와요'; return; }
-  lastState = s; if (!$('#dash').hidden) 대시그리기(s);
+  lastState = s; if (현재뷰 !== 'chat' && !$('#view').hidden) 뷰그리기(현재뷰, s);
   const model = 모델명[s.settings.model] || s.settings.model, ei = Math.max(0, 노력값.indexOf(s.settings.effort));
   $('#modelBtn').textContent = model + ' ▾'; $('#effortBtn').textContent = '노력 ' + 노력명[ei] + ' ▾'; $('#modelChip').textContent = model + ' · ' + 노력명[ei];
   if (document.activeElement !== effIn) { effIn.value = ei; $('#effName').textContent = 노력명[ei]; }
