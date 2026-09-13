@@ -650,19 +650,28 @@ function 뷰그리기(name, s) {
     return;
   }
   if (name === 'wbs') {
-    // 예약을 "잡힌 일정"으로, 진행 기록을 "끝난 일"로 본 간단한 WBS. 진짜 프로젝트 분해는 "WBS 짜줘"로 산초가 채운다.
-    const sch = s?.schedules || [], 완료수 = 알림항목(s).length;
-    const phases = [
-      { nm: '📌 잡힌 일정 (예약)', tasks: sch.map((j) => ({ t: `${j.time} ${j.repeat === 'once' ? (j.date || '한 번') : '매일'} · ${j.prompt}`, done: false, who: '비서실' })) },
-      { nm: `✅ 끝난 일 (${완료수})`, tasks: 알림항목(s).slice(0, 8).map((e) => ({ t: e.head, done: true, who: e.date.slice(5) })) },
-    ];
-    D.innerHTML = `<div class="dh">산초 · 업무 일정</div><h2>업무 일정 · WBS</h2>
-      <div class="sub2">할 일을 단계로 쪼개고 담당·진행률을 봅니다. 새 프로젝트는 아래 버튼으로 산초에게 맡기세요.</div>
-      <div class="grp"><span class="sp"></span>
-        <button class="qbtn" data-fill="새 프로젝트의 WBS(작업 분해 구조)를 짜줘. 단계 → 작업 → 담당 부서(개발·문서·조사·비서·품질) → 예상 기한으로 표를 만들고, 정해지면 각 작업을 예약이나 부서 지시로 등록할 수 있게 정리해줘. 프로젝트 이름과 목표는 내가 지금 말할게: ">＋ WBS 짜줘</button></div>
-      <div class="wbs">${phases.map((p) => {
-        const done = p.tasks.filter((t) => t.done).length, pct = p.tasks.length ? Math.round(done / p.tasks.length * 100) : 0;
-        return `<div class="phase"><div class="ph"><span>${esc(p.nm)}</span><span class="bar"><i style="width:${pct}%"></i></span><span class="pct">${pct}%</span></div>${p.tasks.map((t) => `<div class="task ${t.done ? 'done' : ''}"><span class="cb">${t.done ? '✓' : ''}</span><span class="tt">${esc(t.t)}</span><span class="who">${esc(t.who)}</span></div>`).join('') || '<div class="task"><span class="tt hint">항목이 없어요.</span></div>'}</div>`;
+    const w = s?.wbs;
+    const 채워넣기 = '새 프로젝트의 WBS(작업 분해 구조)를 짜서 data/wbs.json 에 저장해줘. {project, goal, due, phases:[{name, tasks:[{t, who, due, done}]}]} 형식으로 쓰고, 담당(who)은 개발·문서·조사·비서·품질 중에서 골라줘. 프로젝트 이름과 목표는 지금 말할게: ';
+    if (!w || !w.phases?.length) {
+      D.innerHTML = `<div class="dh">산초 · 업무 일정</div><h2>업무 일정 · WBS</h2>
+        <div class="sub2">할 일을 단계로 쪼개고 담당·진행률을 봅니다.</div>
+        <div class="setup">아직 등록된 WBS가 없습니다.<br>아래 버튼을 눌러 프로젝트 이름·목표를 말씀하시면 산초가 짜서 이 화면에 넣습니다.<br><br><button class="qbtn" data-fill="${esc(채워넣기)}">＋ WBS 짜줘</button></div>`;
+      return;
+    }
+    const 전체 = w.phases.flatMap((p) => p.tasks || []), 끝 = 전체.filter((t) => t.done).length;
+    const 총pct = 전체.length ? Math.round(끝 / 전체.length * 100) : 0;
+    D.innerHTML = `<div class="dh">산초 · 업무 일정</div><h2>${esc(w.project || '업무 일정')} · WBS</h2>
+      <div class="sub2">${esc(w.goal || '')}${w.due ? ` · 마감 ${esc(w.due)}` : ''}</div>
+      <div class="tiles">
+        <div class="tile go"><div class="k">진행률</div><div class="v">${총pct}<small>%</small></div></div>
+        <div class="tile"><div class="k">전체 작업</div><div class="v">${전체.length}<small>건</small></div></div>
+        <div class="tile go"><div class="k">완료</div><div class="v">${끝}<small>건</small></div></div>
+        <div class="tile"><div class="k">남은 작업</div><div class="v">${전체.length - 끝}<small>건</small></div></div>
+      </div>
+      <div class="grp"><span class="sp"></span><button class="qbtn" data-fill="${esc(채워넣기)}">＋ 새 WBS</button></div>
+      <div class="wbs">${w.phases.map((p) => {
+        const tasks = p.tasks || [], done = tasks.filter((t) => t.done).length, pct = tasks.length ? Math.round(done / tasks.length * 100) : 0;
+        return `<div class="phase"><div class="ph"><span>${esc(p.name)}</span><span class="bar"><i style="width:${pct}%"></i></span><span class="pct">${pct}%</span></div>${tasks.map((t) => `<div class="task ${t.done ? 'done' : ''}"><span class="cb">${t.done ? '✓' : ''}</span><span class="tt">${esc(t.t)}</span>${t.due ? `<span class="who">~${esc(t.due)}</span>` : ''}<span class="who">${esc(t.who || '')}</span></div>`).join('') || '<div class="task"><span class="tt hint">항목이 없어요.</span></div>'}</div>`;
       }).join('')}</div>`;
     return;
   }

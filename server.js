@@ -400,6 +400,7 @@ createServer(async (req, res) => {
         claude: { path: CLAUDE, version: CLAUDE_VERSION, ok: !!CLAUDE }, settings: 설정(), session: st.session, sessions: st.sessions, busy: 현재 ? 현재.kind : null, pendingRestart: 재시작예약,
         schedules: 예약목록().map((j) => ({ ...j, lastRun: st.runs[j.id] || null })), memory: readText(p('memory.md')), journal: 일지(), history: 기록(st.session),
         skills: ls(join(DATA, '.claude', 'skills')), wiki: ls(join(DATA, 'wiki'), (f) => f.endsWith('.md')),
+        wbs: (() => { try { return JSON.parse(readText(p('wbs.json')) || 'null'); } catch { return null; } })(),
         canAutostart: !!시작바로가기, autostart: !!(시작바로가기 && existsSync(시작바로가기)),
       });
     }
