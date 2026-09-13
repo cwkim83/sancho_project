@@ -98,8 +98,27 @@ data/  =  산초의 기억 (전부 텍스트 파일)
 
 ## 파이스에서 가져온 것 · 안 가져온 것
 
-가져옴: 음성 호출·읽어주기 · 뇌 그래프(neural.js 원본 그대로) · 예약과 일지 · 기억(자동 기억 포함) · 자기 갱신·자기 수정(관문 강화) · 배달(텔레그램, Gmail 은 연결된 앱으로) · 비상두뇌(Gemini) · 안전모델(Sonnet 재시도) · 옵시디언 볼트 · 외부 접속 토큰 · 회의록 · 스킬·위키·대화 검색(Hermes 계열).
-안 가져옴: 회사 전용(NAS 색인, 세종 플랫폼 동기화, 부서 조직도, 계약 메모리, Gmail 라벨 색인) — 필요하면 스킬로 붙이는 게 맞습니다. 감시 프로그램(runner/rescue) 은 sancho.bat 의 복구 루프가 대신합니다.
+파이스 도구 66개를 하나씩 대조했습니다.
+
+| 파이스 | 산초 |
+|---|---|
+| 파일·명령·웹(list/read/write/delete_file, run_command, fetch_url, web_search, browse) | Claude Code 내장 도구 |
+| 자기 코드(read/list/modify/push/update_own_code, restart_self) | 자기 수정 토글 + 업데이트·재시작(관문) |
+| 스킬(create/list/run/import_skill), 플레이북 원장·되돌리기 | data/.claude/skills + git |
+| 기억(remember/forget/recall/search_memory), 자동 기억(reflect) | memory.md + 규칙(자동 기억·잊기) |
+| 대화 검색(search_history, search_sessions) | history.jsonl Grep |
+| 예약(schedule/list/remove), 감시(add/list/remove_watcher) | schedule.json: daily · once · **every(감시)** |
+| 옵시디언(obsidian_list/read/write/search, search_vault) | 볼트 폴더 설정 + 규칙 |
+| 위키(index_wiki), 프로젝트(projects) | wiki/ + 프로젝트 노트 규칙 |
+| Google 캘린더·Gmail(list/create_event, search/read/send_gmail…) | 연결된 앱(claude.ai 커넥터) |
+| 배달(deliver) | 텔레그램 + Gmail |
+| 위임(delegate) | Claude Code 의 Task 하위 에이전트 |
+| 백업(backup_workspace) | ⚙ 백업(zip) |
+| 클립보드(read/write_clipboard), 화면 캡처(capture_screen) | pc-tools 스킬 |
+| 첨부 이해(attach: 이미지·PDF·Office·HWPX) | Read(이미지·PDF) + office-docs·pc-tools 스킬 |
+| 비상두뇌·안전모델, 뇌 그래프, 음성·TTS, 회의록, 외부 접속 토큰 | 그대로 |
+
+안 가져옴: 회사·개인 장비 전용 — NAS 색인, 세종 플랫폼 동기화, 부서 조직도, 계약 메모리, Gmail 라벨 자동 분류·색인, 원자력 브리핑(nuclear), 아이폰 조작(phone), 카메라(camera_snap), NotebookLM(notebook), Drive 공사 폴더, 데모 게이트, 부서 관측 로그, 의미 검색(vault_semantic — 볼트가 커지면 다음 판), 서버 TTS(ElevenLabs), claude.ai 커스텀 커넥터(mcp.js). 감시 프로그램(runner/rescue) 은 sancho.bat 의 복구 루프가 대신합니다.
 
 ## 다음 판에 붙일 것
 

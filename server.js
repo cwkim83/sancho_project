@@ -59,6 +59,7 @@ function 시스템프롬프트() {
 2) schedule.json — 예약 작업 배열. 주인이 "매일 7시에 …해줘", "내일 9시에 …알려줘" 처럼 말하면 항목을 추가한다(없으면 만든다).
    형식: [{"id":"짧은영문id","time":"07:00","repeat":"daily","prompt":"실행할 때 너에게 줄 지시"}]
    - repeat 는 "daily"(매일) 또는 "once"(한 번). once 면 "date":"YYYY-MM-DD" 도 넣는다.
+   - 감시(watcher): "10분마다 …확인해서 변하면 알려줘" 처럼 반복 확인은 {"id":"…","repeat":"every","minutes":10,"prompt":"…"} 로 넣는다(최소 5분). prompt 끝에 "변화가 없으면 '변화 없음' 한 줄만 답하라" 를 붙인다 — 그 답은 일지에 쌓이지 않는다.
    - prompt 는 주인 말을 그대로 옮기지 말고, 나중에 네가 이 대화 없이 혼자 읽고 바로 실행할 수 있는 완전한 지시문으로 쓴다.
    - 삭제 요청이면 그 항목을 배열에서 뺀다. 추가·삭제 뒤엔 결과를 한 줄로 알린다.
    - 예약 시각이 되면 ${s.name} 서버가 prompt 를 너에게 보내 실행하고 결과를 journal/ 에 쌓아 주인에게 보여준다.
@@ -68,7 +69,10 @@ function 시스템프롬프트() {
 6) history.jsonl — 지난 대화 기록. "전에 말한 …" 을 찾을 땐 Grep 한다.
 7) uploads/ — 주인이 채팅에 올린 파일. 말 끝에 [첨부 파일] 목록이 붙으면 Read 로 읽고 답한다(이미지·PDF 도 Read 로 볼 수 있다).
 8) 파일함/ — 네가 만든 파일(엑셀·PPT·워드·PDF·이미지 등)은 여기 저장한다. 만든 파일은 대시보드에 카드로 떠서 주인이 바로 열 수 있다. 만드는 법은 office-docs 스킬을 따른다.
-자동 기억: 대화 중 주인에 관해 새로 알게 된 사실(선호·일정·사람·습관·목표)은 묻지 않아도 memory.md 에 한 줄 덧붙인다. 이미 있는 내용·사소한 것은 빼고, 적었으면 답 끝에 "(기억함)" 이라고 짧게 표시한다.
+자동 기억: 대화 중 주인에 관해 새로 알게 된 사실(선호·일정·사람·습관·목표)은 묻지 않아도 memory.md 에 한 줄 덧붙인다. 이미 있는 내용·사소한 것은 빼고, 적었으면 답 끝에 "(기억함)" 이라고 짧게 표시한다. 잊으라 하면 그 줄을 지운다.
+프로젝트: 주인이 어떤 프로젝트(공사·과제·행사)를 이어서 말하면 wiki/프로젝트-<이름>.md 에 목표·단계·진행·다음 할 일을 유지하고, 관련 질문엔 먼저 그 파일을 본다.
+큰 일은 나눠서: 조사·정리·검토처럼 갈래가 여럿인 일은 Task(하위 에이전트)로 나눠 병렬로 맡기고 결과를 합친다(파이스의 delegate 에 해당).
+PC 다루기(클립보드·화면 캡처·알림·앱 열기·HWPX)는 pc-tools 스킬, 문서 만들기는 office-docs 스킬을 따른다.
 ${s.vaultPath ? `옵시디언 볼트: ${s.vaultPath} — 주인이 "노트에 적어", "볼트에서 찾아" 하면 이 폴더의 .md 파일을 Write/Grep/Read 한다. 새 노트는 볼트 안 ${s.name}/ 폴더에 만든다.` : ''}
 ${s.telegramToken ? `텔레그램: 주인이 "텔레그램으로 보내" 하면 settings.json 의 telegramToken·telegramChat 으로 Bash curl -s -X POST https://api.telegram.org/bot<토큰>/sendMessage -d chat_id=<chat> --data-urlencode text=<내용> 을 호출한다(명령 실행 권한 필요).` : ''}
 배달: 주인이 예약 결과를 메일 등으로 받고 싶다고 하면 prompt 에 "결과를 <채널>로 보내라" 를 넣는다. ${s.allowApps ? '연결된 앱(Gmail·Google 캘린더·드라이브·Microsoft 365) 도구를 쓸 수 있다.' : '연결된 앱(Gmail 등) 도구는 꺼져 있다. 필요하면 주인에게 설정에서 켜달라고 말한다.'}
@@ -165,11 +169,12 @@ function 중지() {
 }
 
 // ---------- 예약(시계) ----------
-function 예약목록() {
+function 예약목록() {   // daily(매일 HH:MM) · once(그 날 HH:MM) · every(N분마다 — 감시용, 최소 5분)
   const v = readJson(p('schedule.json'), []);
   return (Array.isArray(v) ? v : [])
-    .filter((j) => j && j.id && j.prompt && /^\d{1,2}:\d{2}$/.test(String(j.time || '').trim()))
-    .map((j) => ({ ...j, id: String(j.id), time: String(j.time).trim().padStart(5, '0'), repeat: j.repeat === 'once' ? 'once' : 'daily' }));
+    .filter((j) => j && j.id && j.prompt && (j.repeat === 'every' ? Number(j.minutes) >= 5 : /^\d{1,2}:\d{2}$/.test(String(j.time || '').trim())))
+    .map((j) => j.repeat === 'every' ? { ...j, id: String(j.id), minutes: Number(j.minutes), time: `매 ${Number(j.minutes)}분` }
+      : { ...j, id: String(j.id), time: String(j.time).trim().padStart(5, '0'), repeat: j.repeat === 'once' ? 'once' : 'daily' });
 }
 
 // 텔레그램 배달(선택): 예약 결과를 휴대폰으로. 파이스의 deliver 에 해당. 토큰·chat id 는 설정에.
@@ -203,9 +208,9 @@ function 예약실행(j) {
         일끝();
         // 일지엔 마지막 답(final)만 남긴다 — 중간 혼잣말("I'll check…")까지 쌓이면 읽기 어렵다(2026-09-12 실측)
         const 결과 = e.ok ? (e.final || out) : `⚠️ 실패: ${e.text}`;
-        appendFileSync(join(JOURNAL, `${today}.md`), `## ${hhmm(new Date())} · ${j.id}\n${결과}\n\n`);
-        텔레그램(`[${설정().name} · ${j.id}]\n${결과}`);
-        const st = 상태(); st.runs[j.id] = today; 상태저장(st);
+        const 조용 = j.repeat === 'every' && /^\s*변화 없음/.test(결과);   // 감시 결과가 "변화 없음" 이면 일지·배달 생략
+        if (!조용) { appendFileSync(join(JOURNAL, `${today}.md`), `## ${hhmm(new Date())} · ${j.id}\n${결과}\n\n`); 텔레그램(`[${설정().name} · ${j.id}]\n${결과}`); }
+        const st = 상태(); if (j.repeat === 'every') st.lastAt = { ...(st.lastAt || {}), [j.id]: Date.now() }; else st.runs[j.id] = today; 상태저장(st);
         if (j.repeat === 'once') writeJson(p('schedule.json'), 예약목록().filter((x) => x.id !== j.id));
       }
     },
@@ -217,8 +222,9 @@ function 예약실행(j) {
 // 서버가 꺼져 있어 놓친 회차는 켜진 뒤 첫 tick 에 1회 실행한다.
 function tick() {
   if (현재) return;
-  const now = new Date(), today = ymd(now), hm = hhmm(now), runs = 상태().runs;
+  const now = new Date(), today = ymd(now), hm = hhmm(now), st = 상태(), runs = st.runs;
   for (const j of 예약목록()) {
+    if (j.repeat === 'every') { if (Date.now() - (st.lastAt?.[j.id] || 0) < j.minutes * 60000) continue; return 예약실행(j); }
     const once = j.repeat === 'once';
     if (once && j.date && j.date > today) continue;                 // 아직 그 날이 아니다
     const 지난날 = once && j.date && j.date < today;                 // 날짜를 넘겨 놓친 1회 예약은 바로
@@ -306,7 +312,7 @@ function 대화기록(sid, firstText) {   // 대화 목록 맨 위로(제목은 
 }
 
 // ---------- 파일: 두뇌가 만든 파일 알아내기 · 열기 · 내려받기 ----------
-const 제외 = new Set(['history.jsonl', 'state.json', 'settings.json', 'memory.md', 'schedule.json', 'uploads', 'journal', 'wiki']);
+const 제외 = new Set(['history.jsonl', 'state.json', 'settings.json', 'memory.md', 'schedule.json', 'uploads', 'journal', 'wiki', 'backups']);
 function 스냅샷(dir = DATA, out = new Map(), depth = 0) {   // 데이터 폴더 안 파일들의 수정 시각(도구 파일·첨부·일지·위키는 빼고)
   for (const n of ls(dir)) {
     if (depth === 0 && (n.startsWith('.') || 제외.has(n))) continue;
@@ -403,6 +409,14 @@ createServer(async (req, res) => {
         wbs: (() => { try { return JSON.parse(readText(p('wbs.json')) || 'null'); } catch { return null; } })(),
         canAutostart: !!시작바로가기, autostart: !!(시작바로가기 && existsSync(시작바로가기)),
       });
+    }
+    if (route === 'POST /api/backup') {   // 데이터 폴더 통째로 zip(파이스 backup_workspace) → data/backups/. 카드로 내려받기
+      mkdirSync(p('backups'), { recursive: true });
+      const zip = p(`backups/sancho-${ymd(new Date())}-${hhmm(new Date()).replace(':', '')}.zip`);
+      const ps = `Get-ChildItem -LiteralPath '${DATA}' -Exclude backups | Compress-Archive -DestinationPath '${zip}' -Force`;
+      execFile('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(ps, 'utf16le').toString('base64')], { windowsHide: true, timeout: 120000 },
+        (e, _o, err) => e ? send(res, 500, { error: `백업 실패: ${String(err || e.message).slice(0, 300)}` }) : send(res, 200, { path: zip, name: basename(zip), size: statSync(zip).size }));
+      return;
     }
     if (route === 'POST /api/quit') {   // 완전 종료(코드 0 → sancho.bat 루프도 끝난다). 숨겨서 돌아가니 끄는 길은 이것뿐
       send(res, 200, { ok: true, note: '산초를 끕니다. 다시 켤 때는 sancho.bat 을 실행하거나 컴퓨터를 다시 켜세요.' });

@@ -180,6 +180,7 @@
       <label id="autoLbl">Windows 시작 시 자동 실행 <span class="hint">시작 프로그램 바로가기</span> <input type="checkbox" id="autostart"></label>
       <button id="update">업데이트 <span class="hint">GitHub 새 판 받기</span></button>
       <button id="restart">재시작 <span class="hint">관문 통과 시</span></button>
+      <button id="backup">백업 <span class="hint">기억·예약·대화·파일함을 zip 으로</span></button>
       <button id="quit">산초 끄기 <span class="hint">완전 종료 · 다시 켤 땐 sancho.bat</span></button>
       <div id="upmsg" class="hint"></div>
     </div>
@@ -591,6 +592,7 @@ async function 업그레이드(path, label) {
 $('#autostart').onchange = async (e) => { const r = await api('/api/autostart', { on: e.target.checked }); if (r.error) alert(r.error); refresh(); };
 $('#update').onclick = () => 업그레이드('/api/update', '업데이트');
 $('#restart').onclick = () => 업그레이드('/api/restart', '재시작');
+$('#backup').onclick = async () => { $('#upmsg').textContent = '백업 중…'; const r = await api('/api/backup', {}); if (r.error) { $('#upmsg').textContent = '⚠️ ' + r.error; return; } $('#upmsg').textContent = '백업 완료 — 채팅 창에 카드가 떴어요'; closeMenus(); fileCard('백업', [r]); };
 $('#quit').onclick = async () => { if (!confirm('산초를 완전히 끌까요? 다시 켤 때는 sancho.bat 을 실행하거나 컴퓨터를 다시 켜야 합니다.')) return; const r = await api('/api/quit', {}); $('#upmsg').textContent = r.note || r.error || ''; };
 
 const empty = (t) => `<div class="hint" style="padding:4px 8px">${t}</div>`;
@@ -716,7 +718,7 @@ async function refresh() {
     + (shown.map((x) => sessItem(x, s.session)).join('') || empty('아직 없음'))
     + (recent.length > 5 ? `<div class="item" data-more="1"><span class="hint">${showAll ? '접기 ▴' : `더 보기 ${recent.length - 5}개 ▾`}</span></div>` : ''));
   setIf($('#sched'), s.schedules.length
-    ? s.schedules.map((j) => `<div class="item" title="${esc(j.prompt)}"><span><b>${esc(j.time)}</b> ${j.repeat === 'once' ? esc(j.date || '한 번') : '매일'} · ${esc(j.prompt)}</span><span class="acts"><button data-run="${esc(j.id)}" title="지금 실행">▶</button><button data-del="${esc(j.id)}" title="삭제">✕</button></span></div>`).join('')
+    ? s.schedules.map((j) => `<div class="item" title="${esc(j.prompt)}"><span><b>${esc(j.time)}</b> ${j.repeat === 'once' ? esc(j.date || '한 번') : j.repeat === 'every' ? '감시' : '매일'} · ${esc(j.prompt)}</span><span class="acts"><button data-run="${esc(j.id)}" title="지금 실행">▶</button><button data-del="${esc(j.id)}" title="삭제">✕</button></span></div>`).join('')
     : empty('없음 — 채팅으로 "매일 7시에 …해줘"'));
   const entries = s.journal.flatMap((j) => j.text.split(/\n(?=## )/).filter((x) => x.trim()).map((x) => {
     const lines = x.trim().split('\n'); return { date: j.date, head: lines[0].replace(/^## /, ''), body: lines.slice(1).join('\n').trim() };
