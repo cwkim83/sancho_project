@@ -507,39 +507,63 @@
     const near = hover ? neighbors.get(hover.id) : null;
     const dim = (n) => (hover && n !== hover && !near.has(n.id) ? 0.18 : 1);
 
-    // 엣지 — 대기(뇌) 모드에서는 실핏줄처럼 옅게
-    ctx.lineWidth = Math.max(0.6, 0.9 * view.k);
+    const hsla = (h, a) => `hsla(${h},${dark ? 68 : 62}%,${dark ? 62 : 45}%,${a})`;
+    const colOf = (n, al) => (n.hue == null ? rgba(al) : hsla(n.hue, al));
+
+    // 엣지 — graphify 처럼 살짝 휜 선에, 양 끝 무리 색이 번지는 그러데이션.
+    // 곡선이면 두 노드를 잇는 길이 겹쳐도 각각이 보인다(직선은 한 줄로 뭉친다).
+    // 선이 많으면 그러데이션을 포기한다 — 링크마다 gradient 를 만드는 값이 비싸다.
+    const 색선 = links.length <= 400;
+    ctx.lineWidth = Math.max(0.7, 1.1 * view.k);
     for (const l of links) {
       const on = hover && (l.a === hover || l.b === hover);
-      let alpha = (hover ? (on ? 0.55 : 0.06) : (dark ? 0.22 : 0.18));
+      let alpha = (hover ? (on ? 0.75 : 0.05) : (dark ? 0.30 : 0.24));
       if (calm) alpha *= 0.45;
-      ctx.strokeStyle = rgba(alpha);
-      ctx.beginPath(); ctx.moveTo(sx(l.a.x), sy(l.a.y)); ctx.lineTo(sx(l.b.x), sy(l.b.y)); ctx.stroke();
+      const x1 = sx(l.a.x), y1 = sy(l.a.y), x2 = sx(l.b.x), y2 = sy(l.b.y);
+      if (색선) {
+        const g = ctx.createLinearGradient(x1, y1, x2, y2);
+        g.addColorStop(0, colOf(l.a, alpha)); g.addColorStop(1, colOf(l.b, alpha));
+        ctx.strokeStyle = g;
+      } else ctx.strokeStyle = rgba(alpha);
+      // 중점을 선에 수직으로 살짝 밀어 이차 곡선을 만든다(휨 12%)
+      const dx = x2 - x1, dy = y2 - y1;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.quadraticCurveTo((x1 + x2) / 2 - dy * 0.12, (y1 + y2) / 2 + dx * 0.12, x2, y2);
+      ctx.stroke();
     }
 
-    // 사고 중 신호 — 링크를 타고 흐르는 점(기존 "생각하는 느낌"을 유지)
+    // 사고 중 신호 — 링크를 타고 흐르는 점. 선이 휘었으니 점도 같은 곡선을 탄다.
     for (const s of signals) {
-      const x = sx(s.l.a.x + (s.l.b.x - s.l.a.x) * s.p), y = sy(s.l.a.y + (s.l.b.y - s.l.a.y) * s.p);
-      ctx.fillStyle = rgba(0.85);
-      ctx.beginPath(); ctx.arc(x, y, 1.8 * Math.max(0.7, view.k), 0, 7); ctx.fill();
+      const x1 = sx(s.l.a.x), y1 = sy(s.l.a.y), x2 = sx(s.l.b.x), y2 = sy(s.l.b.y);
+      const dx = x2 - x1, dy = y2 - y1;
+      const cx = (x1 + x2) / 2 - dy * 0.12, cy = (y1 + y2) / 2 + dx * 0.12;
+      const u = 1 - s.p;
+      const x = u * u * x1 + 2 * u * s.p * cx + s.p * s.p * x2;
+      const y = u * u * y1 + 2 * u * s.p * cy + s.p * s.p * y2;
+      ctx.fillStyle = colOf(s.l.b, 0.95);
+      ctx.beginPath(); ctx.arc(x, y, 2 * Math.max(0.7, view.k), 0, 7); ctx.fill();
     }
 
-    // 노드 — CODE 모드는 커뮤니티 색, NOTES 모드는 액센트 단색
-    const showLabel = view.k > 0.62;
-    const hsla = (h, a) => `hsla(${h},62%,${dark ? 60 : 45}%,${a})`;
+    // 노드 — 무리(community)마다 다른 색, 허브일수록 크고 밝게. 빛번짐은 어두울 때만(낮에는 지저분하다).
+    const 빛번짐 = dark && nodes.length <= 400;
     for (const n of nodes) {
       const a = dim(n);
       const x = sx(n.x), y = sy(n.y);
       const pulse = mode === 'active' ? 1 + 0.12 * Math.sin(t * 0.09 + n.x) : 1;
       const r = n.r * view.k * pulse;
-      const col = (al) => (n.hue == null ? rgba(al) : hsla(n.hue, al));
-      const g = ctx.createRadialGradient(x, y, 0, x, y, Math.max(r * 3.2, 6));
-      g.addColorStop(0, col(0.30 * a)); g.addColorStop(1, col(0));
+      const col = (al) => colOf(n, al);
+      const g = ctx.createRadialGradient(x, y, 0, x, y, Math.max(r * 3.4, 7));
+      g.addColorStop(0, col(0.34 * a)); g.addColorStop(1, col(0));
       ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(x, y, Math.max(r * 3.2, 6), 0, 7); ctx.fill();
-      ctx.fillStyle = col((n === hover ? 1 : 0.82) * a);
+      ctx.beginPath(); ctx.arc(x, y, Math.max(r * 3.4, 7), 0, 7); ctx.fill();
+      if (빛번짐) { ctx.shadowBlur = Math.min(22, r * 2.4); ctx.shadowColor = col(0.85 * a); }
+      ctx.fillStyle = col((n === hover ? 1 : 0.85) * a);
       ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+      ctx.shadowBlur = 0;
 
+      // 허브는 먼저 이름이 뜬다 — 멀리서 봐도 무리의 중심이 뭔지 읽힌다(graphify 의 라벨 규칙)
+      const showLabel = view.k > 0.62 || (n.deg >= 3 && view.k > 0.35);
       if (n.name && !calm && (showLabel || n === hover || (near && near.has(n.id)))) {
         ctx.fillStyle = dark ? `rgba(235,240,245,${0.72 * a})` : `rgba(20,30,40,${0.72 * a})`;
         ctx.font = `${Math.min(13, Math.max(9, 10 * view.k))}px "IBM Plex Sans KR", sans-serif`;
