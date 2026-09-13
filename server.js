@@ -69,6 +69,7 @@ function 시스템프롬프트() {
 6) history.jsonl — 지난 대화 기록. "전에 말한 …" 을 찾을 땐 Grep 한다.
 7) uploads/ — 주인이 채팅에 올린 파일. 말 끝에 [첨부 파일] 목록이 붙으면 Read 로 읽고 답한다(이미지·PDF 도 Read 로 볼 수 있다).
 8) 파일함/ — 네가 만든 파일(엑셀·PPT·워드·PDF·이미지 등)은 여기 저장한다. 만든 파일은 대시보드에 카드로 떠서 주인이 바로 열 수 있다. 만드는 법은 office-docs 스킬을 따른다.
+9) wbs/<프로젝트>.json — 공정표(WBS, 세종 플랫폼의 WBS 를 옮긴 것). 주인이 "WBS 만들어", "공정표에 … 추가", "… 진도율 60%로" 하면 이 파일을 만들고 고친다. 형식과 규칙은 wbs 스킬을 따른다(대단락 lv 0 · 작업 lv 1 · 세부 lv 2, 필드 code·name·lv·mgr·s·e·weight·pct·memo). 진도율은 말단 작업의 pct 만 적고 상위·전체는 대시보드가 가중 합산하며, 계획 대비(PV·EV·SPI)와 간트도 대시보드 WBS 화면이 그린다. 고친 뒤 "왼쪽 WBS 에서 보세요" 라고 알린다.
 자동 기억: 대화 중 주인에 관해 새로 알게 된 사실(선호·일정·사람·습관·목표)은 묻지 않아도 memory.md 에 한 줄 덧붙인다. 이미 있는 내용·사소한 것은 빼고, 적었으면 답 끝에 "(기억함)" 이라고 짧게 표시한다. 잊으라 하면 그 줄을 지운다.
 프로젝트: 주인이 어떤 프로젝트(공사·과제·행사)를 이어서 말하면 wiki/프로젝트-<이름>.md 에 목표·단계·진행·다음 할 일을 유지하고, 관련 질문엔 먼저 그 파일을 본다.
 큰 일은 나눠서: 조사·정리·검토처럼 갈래가 여럿인 일은 Task(하위 에이전트)로 나눠 병렬로 맡기고 결과를 합친다(파이스의 delegate 에 해당).
@@ -312,7 +313,32 @@ function 대화기록(sid, firstText) {   // 대화 목록 맨 위로(제목은 
 }
 
 // ---------- 파일: 두뇌가 만든 파일 알아내기 · 열기 · 내려받기 ----------
-const 제외 = new Set(['history.jsonl', 'state.json', 'settings.json', 'memory.md', 'schedule.json', 'uploads', 'journal', 'wiki', 'backups']);
+const 제외 = new Set(['history.jsonl', 'state.json', 'settings.json', 'memory.md', 'schedule.json', 'uploads', 'journal', 'wiki', 'backups', 'wbs']);
+
+// ---------- WBS(공정표) — 세종 플랫폼 wbs.html 의 계산부를 옮김: 가중 합산 진도율 · 계획 대비(EVMS: PV/EV/SV/SPI) · S-곡선 · 지연 판정 ----------
+// 파일: data/wbs/<프로젝트>.json = { name, no?, items:[{code,name,lv,mgr,s,e,weight,pct,memo}] } — 순서대로 나열, 계층은 lv 로(자식은 부모 바로 뒤에 lv+1)
+function wbs계산(doc) {
+  const items = (Array.isArray(doc.items) ? doc.items : []).map((x) => ({ ...x, lv: Number(x.lv) || 0, pct: Math.max(0, Math.min(100, Number(x.pct) || 0)), weight: x.weight == null || x.weight === '' ? null : Number(x.weight) }));
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const kids = (i) => { const o = []; for (let j = i + 1; j < items.length; j++) { if (items[j].lv <= items[i].lv) break; if (items[j].lv === items[i].lv + 1) o.push(j); } return o; };
+  const desc = (i) => { const o = []; for (let j = i + 1; j < items.length; j++) { if (items[j].lv <= items[i].lv) break; o.push(j); } return o; };
+  const pctOf = (i) => { const k = kids(i); if (!k.length) return items[i].pct; let w = 0, sum = 0; for (const j of k) { const wt = items[j].weight ?? 100 / k.length; w += wt; sum += wt * pctOf(j); } return w ? sum / w : 0; };   // 자식은 가중 평균(가중치 없으면 균등)
+  const rangeOf = (i) => { const d = desc(i), ss = d.map((j) => items[j].s).filter(Boolean).sort(), ee = d.map((j) => items[j].e).filter(Boolean).sort(); return { s: items[i].s || ss[0] || '', e: items[i].e || ee[ee.length - 1] || '' }; };
+  const plan = (s, e, t = today) => { if (!s || !e) return null; const sd = new Date(s), ed = new Date(e); if (isNaN(sd) || isNaN(ed) || ed <= sd) return null; return t <= sd ? 0 : t >= ed ? 100 : (t - sd) / (ed - sd) * 100; };   // 계획 진척 = 기간 대비 경과(직선)
+  const rows = items.map((x, i) => {
+    const r = rangeOf(i), pct = +pctOf(i).toFixed(1), pv = plan(r.s, r.e), late = !!r.e && today > new Date(r.e) && pct < 100;
+    return { ...x, s: r.s, e: r.e, pct, plan: pv == null ? null : +pv.toFixed(1), diff: pv == null ? null : +(pct - pv).toFixed(1), status: pct >= 100 ? '완료' : late ? '지연' : pct > 0 ? '진행중' : '미시작', hasKids: kids(i).length > 0 };
+  });
+  const tops = rows.filter((r) => r.lv === 0); let PV = 0, EV = 0, W = 0;
+  for (const t of tops) { const wt = t.weight ?? 100 / tops.length; W += wt; EV += wt * t.pct; PV += wt * (t.plan || 0); }
+  const pv = W ? +(PV / W).toFixed(1) : 0, ev = W ? +(EV / W).toFixed(1) : 0;
+  const dated = rows.filter((r) => r.s && r.e), sMin = dated.map((r) => r.s).sort()[0] || '', eMax = dated.map((r) => r.e).sort().slice(-1)[0] || '';
+  const curve = [];
+  if (sMin && eMax) { let d = new Date(new Date(sMin).getFullYear(), new Date(sMin).getMonth(), 1); const pe = new Date(eMax); let n = 0;
+    while (d <= pe && n++ < 60) { const me = new Date(d.getFullYear(), d.getMonth() + 1, 0); let p = 0, w = 0; for (const t of tops) { const wt = t.weight ?? 100 / tops.length; w += wt; p += wt * (plan(t.s, t.e, me) || 0); } curve.push({ label: `${me.getFullYear()}-${String(me.getMonth() + 1).padStart(2, '0')}`, date: ymd(me), pv: w ? +(p / w).toFixed(1) : 0 }); d.setMonth(d.getMonth() + 1); } }
+  return { name: doc.name || '', no: doc.no || '', rows, pv, ev, sv: +(ev - pv).toFixed(1), spi: pv > 0 ? +(ev / pv).toFixed(2) : null, late: rows.filter((r) => !r.hasKids && r.status === '지연').length, sMin, eMax, today: ymd(today), curve };
+}
+const wbs파일 = (name) => /^[^\\/:*?"<>|]{1,80}$/.test(name) ? join(DATA, 'wbs', `${name}.json`) : null;
 function 스냅샷(dir = DATA, out = new Map(), depth = 0) {   // 데이터 폴더 안 파일들의 수정 시각(도구 파일·첨부·일지·위키는 빼고)
   for (const n of ls(dir)) {
     if (depth === 0 && (n.startsWith('.') || 제외.has(n))) continue;
@@ -408,6 +434,7 @@ createServer(async (req, res) => {
         skills: ls(join(DATA, '.claude', 'skills')), wiki: ls(join(DATA, 'wiki'), (f) => f.endsWith('.md')),
         wbs: (() => { try { return JSON.parse(readText(p('wbs.json')) || 'null'); } catch { return null; } })(),
         canAutostart: !!시작바로가기, autostart: !!(시작바로가기 && existsSync(시작바로가기)),
+        wbs: ls(join(DATA, 'wbs'), (f) => f.endsWith('.json')).map((f) => { const d = readJson(join(DATA, 'wbs', f), {}); const c = wbs계산(d); return { name: f.slice(0, -5), title: d.name || f.slice(0, -5), pct: c.ev, spi: c.spi, late: c.late }; }),
       });
     }
     if (route === 'POST /api/backup') {   // 데이터 폴더 통째로 zip(파이스 backup_workspace) → data/backups/. 카드로 내려받기
@@ -426,6 +453,25 @@ createServer(async (req, res) => {
       try { await 자동실행(!!(await readBody(req)).on); return send(res, 200, { autostart: existsSync(시작바로가기) }); } catch (e) { return send(res, 409, { error: e.message }); }
     }
     if (route === 'GET /neural.js') return send(res, 200, readFileSync(join(ROOT, 'public', 'neural.js')), 'application/javascript; charset=utf-8');
+    if (route === 'GET /wbs.html') return send(res, 200, readFileSync(join(ROOT, 'public', 'wbs.html')), 'text/html; charset=utf-8');
+    if (route === 'GET /api/wbs') {   // ?name= 없으면 프로젝트 목록(요약), 있으면 그 공정표의 계산 결과
+      const name = url.searchParams.get('name');
+      if (!name) return send(res, 200, ls(join(DATA, 'wbs'), (f) => f.endsWith('.json')).map((f) => { const d = readJson(join(DATA, 'wbs', f), {}); const c = wbs계산(d); return { name: f.slice(0, -5), title: d.name || f.slice(0, -5), items: c.rows.length, pct: c.ev, pv: c.pv, spi: c.spi, late: c.late }; }));
+      const file = wbs파일(name); if (!file || !existsSync(file)) return send(res, 404, { error: '없는 공정표예요' });
+      const raw = readJson(file, null); if (!raw) return send(res, 409, { error: `${name}.json 이 JSON 형식이 아니에요 — 산초에게 고쳐 달라고 하세요` });
+      return send(res, 200, { ...wbs계산(raw), name: raw.name || name, file: name, history: ls(join(DATA, 'wbs', '_history'), (f) => f.startsWith(name + '_')).sort().reverse().slice(0, 20) });
+    }
+    if (route === 'POST /api/wbs/snapshot') {   // 지금 판을 이력에 남긴다(플랫폼의 Rev 이력)
+      const { name } = await readBody(req); const file = wbs파일(name); if (!file || !existsSync(file)) return send(res, 404, { error: '없는 공정표예요' });
+      mkdirSync(join(DATA, 'wbs', '_history'), { recursive: true });
+      const snap = `${name}_${ymd(new Date())}-${hhmm(new Date()).replace(':', '')}.json`; cpSync(file, join(DATA, 'wbs', '_history', snap)); return send(res, 200, { ok: true, snap });
+    }
+    if (route === 'POST /api/wbs/restore') {   // 이력의 판으로 되돌린다(되돌리기 전 지금 판도 이력에 남김)
+      const { name, snap } = await readBody(req); const file = wbs파일(name), src = join(DATA, 'wbs', '_history', String(snap || ''));
+      if (!file || !/^[^\\/]+\.json$/.test(String(snap || '')) || !existsSync(src)) return send(res, 404, { error: '없는 이력이에요' });
+      if (existsSync(file)) { mkdirSync(join(DATA, 'wbs', '_history'), { recursive: true }); cpSync(file, join(DATA, 'wbs', '_history', `${name}_${ymd(new Date())}-${hhmm(new Date()).replace(':', '')}_복원전.json`)); }
+      cpSync(src, file); return send(res, 200, { ok: true });
+    }
     if (route === 'GET /api/graph') {   // 뇌 그래프 재료(파이스 neural.js 용): 산초 → 기억·위키·스킬·대화·예약 → 항목, 위키 [[링크]]는 서로 연결
       const nodes = [{ id: '산초', name: 설정().name, deg: 8 }], links = [];
       const cat = (name) => { nodes.push({ id: 'cat:' + name, name, folder: name, deg: 4 }); links.push({ source: '산초', target: 'cat:' + name }); };

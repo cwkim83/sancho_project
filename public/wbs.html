@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WBS · 산초</title>
+<style>
+  /* 세종 플랫폼 WBS 의 통합 표(코드·작업·담당·기간·가중치·진도율·상태 + 간트)와 EVMS 카드·S-곡선을 산초 화면 톤으로 옮김 */
+  :root{--bg:#faf9f5;--text:#1f1e1b;--muted:#77746c;--line:#e4e1d9;--accent:#d97757;--card:#fff;--soft:#f4f2ec;--hover:rgba(0,0,0,.04);--navy:#1e40af}
+  @media (prefers-color-scheme: dark){:root:not([data-theme=light]){--bg:#1e1d1a;--text:#e9e7e0;--muted:#9c9990;--line:#3b3934;--accent:#e08a6d;--card:#2a2925;--soft:#34322d;--hover:rgba(255,255,255,.06);--navy:#93b4ff}}
+  :root[data-theme=dark]{--bg:#1e1d1a;--text:#e9e7e0;--muted:#9c9990;--line:#3b3934;--accent:#e08a6d;--card:#2a2925;--soft:#34322d;--hover:rgba(255,255,255,.06);--navy:#93b4ff}
+  *{box-sizing:border-box}
+  body{margin:0;font:13px/1.5 system-ui,'Malgun Gothic',sans-serif;background:var(--bg);color:var(--text)}
+  .wrap{max-width:1500px;margin:0 auto;padding:16px 20px 60px}
+  header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+  header h1{font-size:17px;margin:0;display:flex;align-items:center;gap:8px} .star{color:var(--accent)}
+  .chip{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:4px 11px;font:inherit;font-size:12.5px;color:var(--text);cursor:pointer;white-space:nowrap}
+  .chip:hover{background:var(--soft)} select.chip{padding:4px 8px}
+  .hint{font-size:12px;color:var(--muted)} .right{margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:10px 0 14px}
+  .kcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px} .kcard .k{font-size:11.5px;color:var(--muted)} .kcard .v{font-size:22px;font-weight:700;margin-top:2px} .kcard .d{font-size:11.5px;color:var(--muted)}
+  .ok{color:#16a34a} .bad{color:#dc2626} .warn{color:#d97706}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:auto}
+  table{border-collapse:collapse;width:100%;min-width:1100px;table-layout:fixed}
+  thead th{position:sticky;top:0;background:var(--soft);font-size:11px;font-weight:600;color:var(--muted);padding:8px;border-bottom:1px solid var(--line);text-align:left;z-index:2}
+  tbody td{padding:0 8px;height:32px;border-bottom:1px solid var(--line);font-size:12.5px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;vertical-align:middle}
+  tbody tr:hover{background:var(--hover)} tr.lv0 td.nm{font-weight:700;color:var(--navy)} tr.lv0 td{background:color-mix(in srgb,var(--soft) 55%,transparent)}
+  .tgl{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:4px;background:var(--line);border:0;cursor:pointer;font-size:10px;margin-right:4px;color:var(--text)} .tgl-ph{display:inline-block;width:20px}
+  .pill{display:inline-block;padding:1px 8px;border-radius:9px;font-size:10.5px;font-weight:700}
+  .p-완료{background:#dcfce7;color:#166534} .p-진행중{background:#fef3c7;color:#92400e} .p-미시작{background:#f3f4f6;color:#6b7280} .p-지연{background:#fee2e2;color:#b91c1c}
+  .pbar{position:relative;height:16px;background:var(--soft);border-radius:4px;overflow:hidden} .pbar i{position:absolute;left:0;top:0;bottom:0;border-radius:4px} .pbar b{position:absolute;inset:0;text-align:center;font-size:10.5px;line-height:16px;font-weight:700}
+  .gwrap{position:relative;height:32px;background-repeat:repeat-x} .gbar{position:absolute;top:8px;height:16px;background:var(--soft);border:1px solid var(--line);border-radius:3px;overflow:hidden} .gfill{height:100%;background:linear-gradient(90deg,#86efac,#16a34a)} .gbar.late .gfill{background:linear-gradient(90deg,#fca5a5,#dc2626)}
+  .today{position:absolute;top:0;bottom:0;width:2px;background:#ef4444;opacity:.8;z-index:1}
+  .mhead{display:flex} .mhead span{flex:1;text-align:center;font-size:10.5px;border-left:1px solid var(--line);overflow:hidden;white-space:nowrap}
+  .curve{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-top:14px} .curve h3{margin:0 0 6px;font-size:13px}
+  .menu{position:absolute;z-index:10;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:6px;min-width:260px;max-height:50vh;overflow:auto;display:flex;flex-direction:column;gap:2px} .menu[hidden]{display:none}
+  .menu button{display:flex;justify-content:space-between;gap:10px;padding:6px 10px;border-radius:8px;border:0;background:transparent;font:inherit;text-align:left;cursor:pointer;color:var(--text);font-size:12.5px} .menu button:hover{background:var(--soft)}
+  .empty{padding:60px 20px;text-align:center;color:var(--muted);font-size:14px;line-height:1.8}
+  #msg{font-size:12px;color:var(--muted)}
+  @media print{header .right,.tgl{display:none} .panel{border:0} body{background:#fff}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><span class="star">✳</span> WBS 공정표</h1>
+    <select id="proj" class="chip"></select>
+    <span id="range" class="hint"></span>
+    <div class="right">
+      <button class="chip" id="toggleAll">모두 접기</button>
+      <button class="chip" id="snap" title="지금 판을 이력에 남깁니다">스냅샷 저장</button>
+      <div style="position:relative"><button class="chip" id="histBtn">이력 ▾</button><div id="histMenu" class="menu" hidden></div></div>
+      <button class="chip" onclick="window.print()">인쇄</button>
+      <a class="chip" href="/" style="text-decoration:none">← 산초</a>
+      <span id="msg"></span>
+    </div>
+  </header>
+  <div id="cards" class="cards"></div>
+  <div id="table" class="panel"></div>
+  <div id="curve" class="curve" hidden></div>
+</div>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const th = localStorage.sancho_theme; if (th === 'light' || th === 'dark') document.documentElement.dataset.theme = th;   // 산초 화면과 같은 테마
+const tok = () => localStorage.sancho_token || '';
+const hdr = () => ({ 'content-type': 'application/json', ...(tok() ? { 'x-token': tok() } : {}) });
+const api = async (p, body) => (await fetch(p, { method: body ? 'POST' : 'GET', headers: hdr(), body: body ? JSON.stringify(body) : undefined })).json();
+let cur = null, data = null, collapsed = new Set(), allCollapsed = false;
+
+// 일정 건강색(플랫폼 scheduleHealthRGB 이식): 계획 대비 차이(%p) → 빨강(−30) … 노랑(0) … 초록 … 파랑(+35)
+const STOPS = [[-30, [153, 27, 27]], [-15, [220, 38, 38]], [-7, [249, 115, 22]], [-2, [245, 158, 11]], [0, [163, 230, 53]], [4, [34, 197, 94]], [12, [21, 128, 61]], [22, [37, 99, 235]], [35, [29, 78, 216]]];
+function healthRGB(diff) {
+  if (diff == null || isNaN(diff)) return [148, 163, 184];
+  const d = Math.max(STOPS[0][0], Math.min(STOPS.at(-1)[0], diff)); let lo = STOPS[0], hi = STOPS.at(-1);
+  for (let i = 0; i < STOPS.length - 1; i++) if (d >= STOPS[i][0] && d <= STOPS[i + 1][0]) { lo = STOPS[i]; hi = STOPS[i + 1]; break; }
+  const t = hi[0] === lo[0] ? 0 : (d - lo[0]) / (hi[0] - lo[0]); return lo[1].map((c, i) => Math.round(c + (hi[1][i] - c) * t));
+}
+const healthGrad = (diff) => { const rgb = healthRGB(diff), light = rgb.map((c) => Math.round(c + (255 - c) * .55)); return `linear-gradient(90deg, rgb(${light}), rgb(${rgb}))`; };
+
+async function loadList() {
+  const list = await api('/api/wbs'); if (list.error) { $('#table').innerHTML = `<div class="empty">${esc(list.error)}</div>`; return; }
+  const want = new URLSearchParams(location.search).get('p') || cur || list[0]?.name;
+  $('#proj').innerHTML = list.map((x) => `<option value="${esc(x.name)}" ${x.name === want ? 'selected' : ''}>${esc(x.title)} · ${x.pct}%</option>`).join('');
+  if (!list.length) { $('#table').innerHTML = '<div class="empty">아직 공정표가 없어요.<br>산초 채팅에 "WBS 만들어줘: 프로젝트 이름, 대단락과 작업, 기간" 이라고 말씀하세요.</div>'; $('#cards').innerHTML = ''; return; }
+  cur = want; await load();
+}
+async function load() {
+  data = await api('/api/wbs?name=' + encodeURIComponent(cur));
+  if (data.error) { $('#table').innerHTML = `<div class="empty">${esc(data.error)}</div>`; $('#cards').innerHTML = ''; return; }
+  history.replaceState(null, '', '/wbs.html?p=' + encodeURIComponent(cur)); document.title = `WBS · ${data.name}`;
+  $('#range').textContent = data.sMin ? `${data.sMin} ~ ${data.eMax} · 오늘 ${data.today}${data.no ? ' · ' + data.no : ''}` : '기간 미정';
+  const spiCls = data.spi == null ? '' : data.spi >= 1 ? 'ok' : data.spi >= .9 ? 'warn' : 'bad';
+  $('#cards').innerHTML = [
+    ['전체 진도율 (EV)', data.ev + '%', '가중 합산 실적'],
+    ['계획 진척 (PV)', data.pv + '%', '오늘 기준 계획'],
+    ['일정 차이 (SV)', (data.sv > 0 ? '+' : '') + data.sv + '%p', data.sv >= 0 ? '계획보다 앞섬' : '계획보다 뒤짐', data.sv >= 0 ? 'ok' : 'bad'],
+    ['일정성과 (SPI)', data.spi == null ? '—' : data.spi, data.spi == null ? '계획 없음' : data.spi >= 1 ? 'EV ÷ PV · 정상' : 'EV ÷ PV · 지연', spiCls],
+    ['지연 작업', data.late + '개', '완료일 지남', data.late ? 'bad' : 'ok'],
+  ].map(([k, v, d, c]) => `<div class="kcard"><div class="k">${k}</div><div class="v ${c || ''}">${v}</div><div class="d">${d}</div></div>`).join('');
+  renderTable(); renderCurve(); renderHistory();
+}
+function months() {   // 간트 달력: 프로젝트 시작월 ~ 끝월(최대 36개월)
+  if (!data.sMin || !data.eMax) return [];
+  const out = []; let d = new Date(new Date(data.sMin).getFullYear(), new Date(data.sMin).getMonth(), 1); const end = new Date(data.eMax);
+  while (d <= end && out.length < 36) { out.push({ y: d.getFullYear(), m: d.getMonth() + 1, start: new Date(d), end: new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59) }); d.setMonth(d.getMonth() + 1); }
+  return out;
+}
+function renderTable() {
+  const ms = months(), g0 = ms[0]?.start, g1 = ms.at(-1)?.end, span = g0 && g1 ? g1 - g0 : 0;
+  const x = (dateStr) => !span ? 0 : Math.max(0, Math.min(100, (new Date(dateStr) - g0) / span * 100));
+  const todayX = span ? x(data.today) : null;
+  const hidden = new Set();   // 접힌 부모의 후손
+  data.rows.forEach((r, i) => { if (collapsed.has(i)) for (let j = i + 1; j < data.rows.length && data.rows[j].lv > r.lv; j++) hidden.add(j); });
+  const rows = data.rows.map((r, i) => hidden.has(i) ? '' : `<tr class="lv${r.lv}">
+    <td>${esc(r.code || '')}</td>
+    <td class="nm" title="${esc(r.name)}" style="padding-left:${8 + r.lv * 18}px">${r.hasKids ? `<button class="tgl" data-i="${i}">${collapsed.has(i) ? '▶' : '▼'}</button>` : '<span class="tgl-ph"></span>'}${esc(r.name)}</td>
+    <td>${esc(r.mgr || '')}</td><td>${esc(r.s || '')}</td><td>${esc(r.e || '')}</td>
+    <td style="text-align:right">${r.lv === 0 ? (r.weight ?? '균등') : (r.weight ?? '')}</td>
+    <td><div class="pbar" title="계획 ${r.plan ?? '—'}% · 차이 ${r.diff ?? '—'}"><i style="width:${r.pct}%;background:${healthGrad(r.diff)}"></i><b>${r.pct}%</b></div></td>
+    <td><span class="pill p-${r.status}">${r.status}</span></td>
+    <td title="${esc(r.memo || '')}">${esc(r.memo || '')}</td>
+    <td style="padding:0"><div class="gwrap" style="${ms.length ? `background-image:linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:${100 / ms.length}% 100%` : ''}">
+      ${r.s && r.e && span ? `<div class="gbar ${r.status === '지연' ? 'late' : ''}" style="left:${x(r.s)}%;width:${Math.max(.6, x(r.e) - x(r.s))}%"><div class="gfill" style="width:${r.pct}%"></div></div>` : ''}
+      ${todayX != null ? `<div class="today" style="left:${todayX}%"></div>` : ''}</div></td></tr>`).join('');
+  $('#table').innerHTML = `<table><colgroup><col style="width:60px"><col style="width:260px"><col style="width:80px"><col style="width:96px"><col style="width:96px"><col style="width:60px"><col style="width:110px"><col style="width:70px"><col style="width:140px"><col></colgroup>
+    <thead><tr><th>코드</th><th>작업명</th><th>담당</th><th>시작</th><th>완료</th><th style="text-align:right">가중치</th><th>진도율</th><th>상태</th><th>비고</th><th style="padding:0"><div class="mhead">${ms.map((m) => `<span>${m.m === 1 || m === ms[0] ? m.y + '년 ' : ''}${m.m}월</span>`).join('')}</div></th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="10" class="empty">항목이 없어요</td></tr>'}</tbody></table>`;
+  $('#table').onclick = (e) => { const b = e.target.closest('.tgl'); if (!b) return; const i = +b.dataset.i; collapsed.has(i) ? collapsed.delete(i) : collapsed.add(i); renderTable(); };
+}
+function renderCurve() {   // S-곡선: 월말 계획(PV) 선 + 오늘 실적(EV) 점
+  const c = data.curve || []; const box = $('#curve'); if (c.length < 2) { box.hidden = true; return; } box.hidden = false;
+  const W = 720, H = 180, L = 36, B = 24, px = (i) => L + i / (c.length - 1) * (W - L - 10), py = (v) => H - B - v / 100 * (H - B - 12);
+  const line = c.map((p, i) => `${px(i).toFixed(1)},${py(p.pv).toFixed(1)}`).join(' ');
+  const ti = c.findIndex((p) => p.date >= data.today), tx = ti < 0 ? px(c.length - 1) : ti === 0 ? px(0) : px(ti - 1) + (px(ti) - px(ti - 1)) * Math.min(1, Math.max(0, (new Date(data.today) - new Date(c[ti - 1].date)) / (new Date(c[ti].date) - new Date(c[ti - 1].date))));
+  box.innerHTML = `<h3>S-곡선 · 계획(PV) 대 실적(EV)</h3><svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="max-width:${W}px;font-size:10px">
+    ${[0, 25, 50, 75, 100].map((v) => `<line x1="${L}" x2="${W - 10}" y1="${py(v)}" y2="${py(v)}" stroke="var(--line)"/><text x="4" y="${py(v) + 3}" fill="var(--muted)">${v}%</text>`).join('')}
+    <polyline points="${line}" fill="none" stroke="var(--navy)" stroke-width="2"/>
+    ${c.map((p, i) => `<text x="${px(i)}" y="${H - 6}" text-anchor="middle" fill="var(--muted)">${p.label.slice(5)}월</text>`).join('')}
+    <line x1="${tx}" x2="${tx}" y1="8" y2="${H - B}" stroke="#ef4444" stroke-dasharray="3 3"/>
+    <circle cx="${tx}" cy="${py(data.ev)}" r="5" fill="var(--accent)"/><text x="${tx + 8}" y="${py(data.ev) + 4}" fill="var(--accent)" font-weight="700">EV ${data.ev}%</text>
+    <text x="${tx + 8}" y="${py(data.pv) - 6}" fill="var(--navy)">PV ${data.pv}%</text></svg>`;
+}
+function renderHistory() {
+  const h = data.history || [];
+  $('#histMenu').innerHTML = h.length ? h.map((f) => `<button data-snap="${esc(f)}"><span>${esc(f.slice(cur.length + 1, -5).replace('_복원전', ' (복원 전)'))}</span><span class="hint">↩ 복원</span></button>`).join('') : '<div class="hint" style="padding:6px 10px">아직 이력이 없어요 — "스냅샷 저장"</div>';
+}
+$('#proj').onchange = (e) => { cur = e.target.value; collapsed = new Set(); load(); };
+$('#toggleAll').onclick = () => { allCollapsed = !allCollapsed; collapsed = new Set(allCollapsed ? data.rows.map((r, i) => r.hasKids ? i : -1).filter((i) => i >= 0) : []); $('#toggleAll').textContent = allCollapsed ? '모두 펼치기' : '모두 접기'; renderTable(); };
+$('#snap').onclick = async () => { const r = await api('/api/wbs/snapshot', { name: cur }); $('#msg').textContent = r.error || `이력에 저장했어요 (${r.snap})`; load(); };
+$('#histBtn').onclick = (e) => { e.stopPropagation(); $('#histMenu').hidden = !$('#histMenu').hidden; };
+document.addEventListener('click', (e) => { if (!e.target.closest('.menu')) $('#histMenu').hidden = true; });
+$('#histMenu').onclick = async (e) => { const snap = e.target.closest('button')?.dataset.snap; if (!snap || !confirm('이 판으로 되돌릴까요? 지금 판은 이력에 남습니다.')) return; const r = await api('/api/wbs/restore', { name: cur, snap }); $('#msg').textContent = r.error || '되돌렸어요'; $('#histMenu').hidden = true; load(); };
+loadList();
+setInterval(() => { if (cur && $('#histMenu').hidden) load(); }, 15000);   // 산초가 채팅으로 고치면 15초 안에 반영
+</script>
+</body>
+</html>

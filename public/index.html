@@ -164,6 +164,7 @@
   <button id="new" class="newbtn">＋ 새 대화</button>
   <div class="sbody">
     <div class="sec"><h4>대화</h4><div id="sessions"></div></div>
+    <div class="sec"><h4>WBS <span class="hint">공정표</span></h4><div id="wbs"></div></div>
     <div class="sec"><h4>예약</h4><div id="sched"></div></div>
     <div class="sec"><h4>알림</h4><div id="journal"></div></div>
     <div class="sec"><h4>스킬</h4><div id="skills"></div></div>
@@ -733,6 +734,9 @@ async function refresh() {
   setIf($('#sessions'), (pinned.length ? '<div class="sub">고정됨</div>' + pinned.map((x) => sessItem(x, s.session)).join('') + '<div class="sub">최근</div>' : '')
     + (shown.map((x) => sessItem(x, s.session)).join('') || empty('아직 없음'))
     + (recent.length > 5 ? `<div class="item" data-more="1"><span class="hint">${showAll ? '접기 ▴' : `더 보기 ${recent.length - 5}개 ▾`}</span></div>` : ''));
+  setIf($('#wbs'), (s.wbs || []).length
+    ? s.wbs.map((w) => `<a class="item" href="/wbs.html?p=${encodeURIComponent(w.name)}" target="_blank" style="text-decoration:none;color:inherit" title="${esc(w.title)}"><span>${esc(w.title)}</span><span class="t">${w.pct}%${w.late ? ` · <span style="color:#dc2626">지연 ${w.late}</span>` : ''}</span></a>`).join('')
+    : empty('없음 — 채팅으로 "WBS 만들어줘: 프로젝트, 대단락, 기간"'));
   setIf($('#sched'), s.schedules.length
     ? s.schedules.map((j) => `<div class="item" title="${esc(j.prompt)}"><span><b>${esc(j.time)}</b> ${j.repeat === 'once' ? esc(j.date || '한 번') : j.repeat === 'every' ? '감시' : '매일'} · ${esc(j.prompt)}</span><span class="acts"><button data-run="${esc(j.id)}" title="지금 실행">▶</button><button data-del="${esc(j.id)}" title="삭제">✕</button></span></div>`).join('')
     : empty('없음 — 채팅으로 "매일 7시에 …해줘"'));

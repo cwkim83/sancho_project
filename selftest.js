@@ -39,8 +39,7 @@ function 가짜두뇌() {
 // ---------- 시험 ----------
 async function 시험() {
   // 0) 화면 스크립트 문법 — 파이스에서 ')' 하나로 화면이 통째로 죽은 적이 있다(2026-09-11). 실행 중 오류까지는 못 잡는다.
-  const html = readFileSync(join(dirname(HERE), 'public', 'index.html'), 'utf8');
-  for (const m of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) new Script(m[1], { filename: 'index.html' });
+  for (const f of ['index.html', 'wbs.html']) { const html = readFileSync(join(dirname(HERE), 'public', f), 'utf8'); for (const m of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) new Script(m[1], { filename: f }); }
 
   const data = mkdtempSync(join(tmpdir(), 'sancho-test-'));
   const PORT = 8791, BASE = `http://127.0.0.1:${PORT}`;
@@ -96,6 +95,25 @@ async function 시험() {
     assert.ok(g.nodes.some((n) => n.id === '산초') && g.nodes.some((n) => n.id === 'wiki/시험.md') && g.links.length >= 2, '뇌 그래프 재료');
     assert.equal((await fetch(`${BASE}/neural.js`)).status, 200, 'neural.js 제공');
 
+    // 1d-2) WBS: 가중 합산 진도율 · 계획 대비 · 지연 판정 · 목록 · 스냅샷/복원
+    mkdirSync(join(data, 'wbs'), { recursive: true });
+    writeFileSync(join(data, 'wbs', '시험공사.json'), JSON.stringify({ name: '시험 공사', items: [
+      { code: '1', name: '입고', lv: 0, weight: 40 }, { code: '1.1', name: '강판', lv: 1, s: '2020-01-01', e: '2020-01-10', pct: 100 }, { code: '1.2', name: '파이프', lv: 1, s: '2020-01-01', e: '2020-01-10', pct: 50 },
+      { code: '2', name: '제작', lv: 0, weight: 60 }, { code: '2.1', name: '용접', lv: 1, s: '2099-01-01', e: '2099-02-01', pct: 0 }] }));
+    const w = await (await fetch(`${BASE}/api/wbs?name=${encodeURIComponent('시험공사')}`)).json();
+    assert.equal(w.rows[0].pct, 75, '대단락 진도율 = 자식 균등 평균 (100+50)/2');
+    assert.equal(w.ev, 30, '전체 EV = 40%×75 + 60%×0');
+    assert.equal(w.pv, 40, '전체 PV = 40%×100(기간 지남) + 60%×0(미래)');
+    assert.equal(w.rows[2].status, '지연', '완료일 지났는데 50% → 지연'); assert.equal(w.rows[1].status, '완료'); assert.equal(w.rows[4].status, '미시작');
+    assert.equal(w.rows[0].s, '2020-01-01', '상위 기간은 후손에서'); assert.equal(w.late, 1, '지연 작업 수');
+    const wl = await (await fetch(`${BASE}/api/wbs`)).json(); assert.ok(wl.length === 1 && wl[0].pct === 30, 'WBS 목록 요약');
+    assert.equal((await (await fetch(`${BASE}/api/wbs/snapshot`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: '시험공사' }) })).json()).ok, true, '스냅샷');
+    writeFileSync(join(data, 'wbs', '시험공사.json'), JSON.stringify({ name: '시험 공사', items: [] }));
+    const snap = (await (await fetch(`${BASE}/api/wbs?name=${encodeURIComponent('시험공사')}`)).json()).history[0];
+    assert.equal((await (await fetch(`${BASE}/api/wbs/restore`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: '시험공사', snap }) })).json()).ok, true, '복원');
+    assert.equal((await (await fetch(`${BASE}/api/wbs?name=${encodeURIComponent('시험공사')}`)).json()).rows.length, 5, '복원 뒤 항목 5개');
+    assert.equal((await fetch(`${BASE}/wbs.html`)).status, 200, 'wbs.html 제공');
+
     // 1e) 접속 토큰: 설정에 있으면 API 는 토큰 없이 401, 토큰 있으면 200 (화면과 /health 는 그대로)
     writeFileSync(join(data, 'settings.json'), JSON.stringify({ token: 't1' }));
     assert.equal((await fetch(`${BASE}/api/state`)).status, 401, '토큰 없으면 401');
@@ -127,7 +145,7 @@ async function 시험() {
     assert.ok(Date.now() - tStop < 3000, `3초 안에 끊긴다 (${Date.now() - tStop}ms)`);
     assert.equal(await exited, 75, '일이 끝나면 코드 75 로 종료(재시작 요청)');
 
-    console.log('산초 자가시험 통과: 화면 문법 · 글자 스트림 · 대화 id · 기록 · 첨부 · 만든 파일·내려받기·열기 경계 · 대화 고정/삭제 · 위키/스킬 파일 · 뇌 그래프 · 접속 토큰 · 예약 tick · 일지 · 재시작 관문·예약 · ■ 중지 · 종료 75');
+    console.log('산초 자가시험 통과: 화면 문법 · 글자 스트림 · 대화 id · 기록 · 첨부 · 만든 파일·내려받기·열기 경계 · 대화 고정/삭제 · WBS(합산·EVMS·지연·이력) · 위키/스킬 파일 · 뇌 그래프 · 접속 토큰 · 예약 tick · 일지 · 재시작 관문·예약 · ■ 중지 · 종료 75');
   } finally {
     server.kill();
     rmSync(data, { recursive: true, force: true });
