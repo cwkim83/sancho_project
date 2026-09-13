@@ -141,6 +141,14 @@
   .mrow .tag{font-size:10px;padding:2px 8px;border-radius:20px;flex-shrink:0;font-weight:600} .mrow .frm{font-weight:600;font-size:13px;min-width:110px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .mrow .subj{font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1} .mrow .when{font:10px ui-monospace,Consolas,monospace;color:var(--muted);flex-shrink:0}
   .setup{background:var(--card);border:1px dashed var(--line);border-radius:14px;padding:22px;text-align:center;color:var(--muted);font-size:13px;line-height:1.7}
+  /* 조직원 패널 (AXroa "PEOPLE IN THE HANOK") */
+  .find{width:100%;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 13px;font-size:13px;color:var(--fg);margin-bottom:14px}
+  .roster{display:flex;flex-direction:column;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .mate{display:flex;align-items:center;gap:12px;padding:13px 15px;background:var(--card);cursor:pointer} .mate:hover{background:var(--bg)}
+  .mate .av{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font-size:18px;flex-shrink:0;color:#fff}
+  .mate .who2{min-width:0} .mate .nm2{font-weight:600;font-size:14px} .mate .rl{font-size:12px;color:var(--muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .mate .badge{margin-left:auto;font-size:11px;padding:4px 10px;border-radius:20px;white-space:nowrap;flex-shrink:0}
+  .badge.on{background:rgba(47,164,107,.16);color:#2fa46b} .badge.idle{background:var(--bg);color:var(--muted);border:1px solid var(--line)}
 </style>
 </head>
 <body>
@@ -601,13 +609,13 @@ const sessItem = (x, cur) => `<div class="item ${x.id === cur ? 'active' : ''}" 
 // 대화(chat)면 채팅 화면, 그 외엔 #view 층을 덮어 그 메뉴를 그린다. 산초가 곧 오케스트레이터다:
 // 각 뷰의 버튼/부서는 채팅창에 완전한 지시를 채워 넣어, 그 일을 산초가 실제로 실행하게 한다.
 const 부서 = [
-  { id: 'dev', ico: '🛠', nm: '개발부', role: '코드 작성·수정, 산초 자기 화면·기능 개선', 지시: '개발부 일입니다. ' },
-  { id: 'doc', ico: '📄', nm: '문서부', role: '보고서·엑셀·PPT·워드 문서 작성', 지시: '문서부 일입니다. ' },
-  { id: 'research', ico: '🔎', nm: '조사부', role: '웹 검색, 자료·경쟁사·기술 동향 조사', 지시: '조사부 일입니다. ' },
-  { id: 'office', ico: '🗂', nm: '비서실', role: '메일·일정·예약·연락 관리', 지시: '비서실 일입니다. ' },
-  { id: 'qa', ico: '✔', nm: '품질부', role: '검사 성적서·품질 문서, 결과 검토', 지시: '품질부 일입니다. ' },
+  { id: 'dev', ico: '🛠', col: '#5b6cff', nm: '개발부', role: '코드 작성·수정, 산초 자기 화면·기능 개선', 지시: '개발부 일입니다. ' },
+  { id: 'doc', ico: '📄', col: '#e0842b', nm: '문서부', role: '보고서·엑셀·PPT·워드 문서 작성', 지시: '문서부 일입니다. ' },
+  { id: 'research', ico: '🔎', col: '#2fa46b', nm: '조사부', role: '웹 검색, 자료·경쟁사·기술 동향 조사', 지시: '조사부 일입니다. ' },
+  { id: 'office', ico: '🗂', col: '#9b59d0', nm: '비서실', role: '메일·일정·예약·연락 관리', 지시: '비서실 일입니다. ' },
+  { id: 'qa', ico: '✔', col: '#d24b6a', nm: '품질부', role: '검사 성적서·품질 문서, 결과 검토', 지시: '품질부 일입니다. ' },
 ];
-let lastState = null, 현재뷰 = 'chat';
+let lastState = null, 현재뷰 = 'chat', 조직검색 = '';
 const 지시넣기 = (t) => { 뷰전환('chat'); input.value = t; input.focus(); input.oninput(); };
 function 뷰전환(name) {
   현재뷰 = name;
@@ -646,9 +654,17 @@ function 뷰그리기(name, s) {
     return;
   }
   if (name === 'org') {
-    D.innerHTML = `<div class="dh">산초 · 조직</div><h2>부서</h2>
-      <div class="sub2">산초가 비서실장이 되어 일을 부서에 나눕니다. 부서를 누르면 그 부서 일로 지시가 채워집니다.</div>
-      <div class="depts">${부서.map((d) => { const on = s?.busy && s.busy.includes(d.nm); return `<div class="dept" data-dept="${d.id}"><div class="top"><span class="ico">${d.ico}</span><span class="nm">${d.nm}</span></div><div class="role">${esc(d.role)}</div><div class="st ${on ? 'on' : ''}"><i></i>${on ? '작업 중' : '대기'}</div></div>`; }).join('')}</div>`;
+    const q = 조직검색.trim();
+    const 목록 = 부서.filter((d) => !q || (d.nm + d.role).includes(q));
+    D.innerHTML = `<div class="dh">산초 · 조직</div><h2>오늘은 누가 일할까요?</h2>
+      <div class="sub2">부서를 눌러 담당 업무를 시키세요. 산초가 비서실장이 되어 일을 나누고 취합합니다.</div>
+      <input class="find" id="orgFind" placeholder="부서 이름이나 담당 업무 검색" value="${esc(조직검색)}">
+      <div class="roster">${목록.map((d) => {
+        const on = s?.busy && s.busy.includes(d.nm);
+        return `<div class="mate" data-dept="${d.id}"><div class="av" style="background:${d.col}">${d.ico}</div><div class="who2"><div class="nm2">${esc(d.nm)}</div><div class="rl">${esc(d.role)}</div></div><div class="badge ${on ? 'on' : 'idle'}">${on ? '● 작업 중' : '대기'}</div></div>`;
+      }).join('') || '<div class="mate"><div class="rl hint" style="padding:6px">찾는 부서가 없어요.</div></div>'}</div>`;
+    const f = $('#orgFind');
+    if (f) f.oninput = () => { 조직검색 = f.value; const pos = f.selectionStart; 뷰그리기('org', lastState); const g = $('#orgFind'); if (g) { g.focus(); g.setSelectionRange(pos, pos); } };
     return;
   }
   if (name === 'wbs') {
@@ -698,7 +714,7 @@ $('#viewDeck').addEventListener('click', (e) => {
 async function refresh() {
   let s;
   try { s = await api('/api/state'); if (s.error) throw new Error(s.error); } catch { $('#status').innerHTML = '<span class="dot"></span>서버 응답 없음 — 재시작 중이면 곧 돌아와요'; return; }
-  lastState = s; if (현재뷰 !== 'chat' && !$('#view').hidden) 뷰그리기(현재뷰, s);
+  lastState = s; if (현재뷰 !== 'chat' && !$('#view').hidden && !$('#view').contains(document.activeElement)) 뷰그리기(현재뷰, s);
   const model = 모델명[s.settings.model] || s.settings.model, ei = Math.max(0, 노력값.indexOf(s.settings.effort));
   $('#modelBtn').textContent = model + ' ▾'; $('#effortBtn').textContent = '노력 ' + 노력명[ei] + ' ▾'; $('#modelChip').textContent = model + ' · ' + 노력명[ei];
   if (document.activeElement !== effIn) { effIn.value = ei; $('#effName').textContent = 노력명[ei]; }
