@@ -3,7 +3,7 @@
 //   node selftest.js            → 시험 실행 (서버를 임시 폴더·8791 포트로 띄우고 검사)
 //   node selftest.js -p …       → 가짜 두뇌 (server.js 가 SANCHO_CLAUDE=selftest.js 로 이 파일을 claude 대신 실행)
 import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -39,7 +39,11 @@ function 가짜두뇌() {
 // ---------- 시험 ----------
 async function 시험() {
   // 0) 화면 스크립트 문법 — 파이스에서 ')' 하나로 화면이 통째로 죽은 적이 있다(2026-09-11). 실행 중 오류까지는 못 잡는다.
-  for (const f of ['index.html', 'wbs.html']) { const html = readFileSync(join(dirname(HERE), 'public', f), 'utf8'); for (const m of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) new Script(m[1], { filename: f }); }
+  const PUB = join(dirname(HERE), 'public');
+  const 화면들 = ['index.html', 'wbs.html',
+    ...readdirSync(join(PUB, 'm')).filter((f) => f.endsWith('.html')).map((f) => `m/${f}`),
+    ...(existsSync(join(PUB, 'm', 'tools')) ? readdirSync(join(PUB, 'm', 'tools')).filter((f) => f.endsWith('.html')).map((f) => `m/tools/${f}`) : [])];
+  for (const f of 화면들) { const html = readFileSync(join(PUB, f), 'utf8'); for (const m of html.matchAll(/<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/g)) new Script(m[1], { filename: f }); }
 
   const data = mkdtempSync(join(tmpdir(), 'sancho-test-'));
   const PORT = 8791, BASE = `http://127.0.0.1:${PORT}`;
@@ -114,6 +118,39 @@ async function 시험() {
     assert.equal((await (await fetch(`${BASE}/api/wbs?name=${encodeURIComponent('시험공사')}`)).json()).rows.length, 5, '복원 뒤 항목 5개');
     assert.equal((await fetch(`${BASE}/wbs.html`)).status, 200, 'wbs.html 제공');
 
+    // 1d2) 플랫폼 저장소(/api/db) — 화면(sdb.js)과 두뇌가 같이 쓰는 곳. 쓰기·병합·목록·일괄·삭제·실시간 알림·경계
+    const J = { 'content-type': 'application/json' };
+    const db = (p, o) => fetch(`${BASE}/api/db${p}`, o);
+    assert.equal((await db('/events/e1', { method: 'PUT', headers: J, body: JSON.stringify({ data: { title: '회의', tags: ['a'], meta: { x: 1 } } }) })).status, 200, 'db 쓰기');
+    const merged = (await (await db('/events/e1', { method: 'PUT', headers: J, body: JSON.stringify({ data: { 'meta.y': 2, tags: { __union: ['b'] }, n: { __inc: 3 } }, merge: 'deep' }) })).json()).data;
+    assert.deepEqual([merged.meta, merged.tags, merged.n, merged.title], [{ x: 1, y: 2 }, ['a', 'b'], 3, '회의'], 'db 깊은 병합(점 경로·배열 합치기·숫자 더하기)');
+    assert.ok(merged.createdAt && merged.updatedAt, 'db 시각 도장');
+    const added = await (await db('/events', { method: 'POST', headers: J, body: JSON.stringify({ data: { title: '자동 id' } }) })).json();
+    assert.ok(added.id, 'db 자동 id');
+    assert.equal((await (await db('/events')).json()).length, 2, 'db 목록');
+    assert.equal((await (await db('/nope/x')).json()).exists, false, '없는 문서');
+    assert.equal((await db('/bad%20name')).status, 400, '이상한 컬렉션 이름 거절');
+    assert.equal((await (await db('/_batch', { method: 'POST', headers: J, body: JSON.stringify({ ops: [{ op: 'set', col: 'projects', id: 'p1', data: { name: '탱크' } }, { op: 'delete', col: 'events', id: 'e1' }] }) })).json()).n, 2, 'db 일괄 쓰기');
+    assert.equal((await (await db('/events')).json()).length, 1, 'db 삭제 반영');
+    assert.ok((await (await fetch(`${BASE}/api/search?q=${encodeURIComponent('탱크')}`)).json()).some((r) => r.type === 'projects'), '검색이 플랫폼 데이터를 찾는다');
+    assert.equal((await (await fetch(`${BASE}/api/me`)).json()).uid, 'owner', '/api/me');
+    // 실시간 알림(SSE): 구독한 뒤 쓰면 그 컬렉션 이름이 흘러온다 — 화면(onSnapshot)이 이걸로 다시 그린다
+    const ac = new AbortController();
+    const sse = await fetch(`${BASE}/api/db/_events`, { signal: ac.signal });
+    const rdr = sse.body.getReader(), dec2 = new TextDecoder();
+    let 받음 = '';
+    const 읽기 = (async () => { try { while (!받음.includes('"col":"projects"')) { const { value, done } = await rdr.read(); if (done) break; 받음 += dec2.decode(value, { stream: true }); } } catch {} })();
+    await db('/projects/p2', { method: 'PUT', headers: J, body: JSON.stringify({ data: { name: 'x' } }) });
+    await Promise.race([읽기, new Promise((r) => setTimeout(r, 3000))]);
+    assert.ok(받음.includes('"col":"projects"'), `db 변경 알림(SSE) — 받은 것: ${받음.slice(0, 120)}`);
+    ac.abort();
+    // 플랫폼 화면 파일 서빙과 경계
+    assert.equal((await fetch(`${BASE}/m/platform.css`)).status, 200, 'platform.css 제공');
+    assert.equal((await fetch(`${BASE}/m/sdb.js`)).status, 200, 'sdb.js 제공');
+    assert.equal((await fetch(`${BASE}/m/../server.js`)).status, 404, '/m 밖은 못 읽는다');
+    const st2 = await (await fetch(`${BASE}/api/state`)).json();
+    assert.ok(Array.isArray(st2.modules) && Array.isArray(st2.tools), '/api/state 가 만들어진 화면 목록을 준다');
+
     // 1e) 접속 토큰: 설정에 있으면 API 는 토큰 없이 401, 토큰 있으면 200 (화면과 /health 는 그대로)
     writeFileSync(join(data, 'settings.json'), JSON.stringify({ token: 't1' }));
     assert.equal((await fetch(`${BASE}/api/state`)).status, 401, '토큰 없으면 401');
@@ -145,7 +182,7 @@ async function 시험() {
     assert.ok(Date.now() - tStop < 3000, `3초 안에 끊긴다 (${Date.now() - tStop}ms)`);
     assert.equal(await exited, 75, '일이 끝나면 코드 75 로 종료(재시작 요청)');
 
-    console.log('산초 자가시험 통과: 화면 문법 · 글자 스트림 · 대화 id · 기록 · 첨부 · 만든 파일·내려받기·열기 경계 · 대화 고정/삭제 · WBS(합산·EVMS·지연·이력) · 위키/스킬 파일 · 뇌 그래프 · 접속 토큰 · 예약 tick · 일지 · 재시작 관문·예약 · ■ 중지 · 종료 75');
+    console.log(`산초 자가시험 통과: 화면 문법(${화면들.length}장) · 글자 스트림 · 대화 id · 기록 · 첨부 · 만든 파일·내려받기·열기 경계 · 대화 고정/삭제 · WBS(합산·EVMS·지연·이력) · 플랫폼 저장소(쓰기·병합·일괄·SSE 알림·경계) · 검색 · 위키/스킬 파일 · 뇌 그래프 · 접속 토큰 · 예약 tick · 일지 · 재시작 관문·예약 · ■ 중지 · 종료 75`);
   } finally {
     server.kill();
     rmSync(data, { recursive: true, force: true });

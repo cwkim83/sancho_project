@@ -6,9 +6,9 @@
 <title>WBS · 산초</title>
 <style>
   /* 세종 플랫폼 WBS 의 통합 표(코드·작업·담당·기간·가중치·진도율·상태 + 간트)와 EVMS 카드·S-곡선을 산초 화면 톤으로 옮김 */
-  :root{--bg:#faf9f5;--text:#1f1e1b;--muted:#77746c;--line:#e4e1d9;--accent:#d97757;--card:#fff;--soft:#f4f2ec;--hover:rgba(0,0,0,.04);--navy:#1e40af}
-  @media (prefers-color-scheme: dark){:root:not([data-theme=light]){--bg:#1e1d1a;--text:#e9e7e0;--muted:#9c9990;--line:#3b3934;--accent:#e08a6d;--card:#2a2925;--soft:#34322d;--hover:rgba(255,255,255,.06);--navy:#93b4ff}}
-  :root[data-theme=dark]{--bg:#1e1d1a;--text:#e9e7e0;--muted:#9c9990;--line:#3b3934;--accent:#e08a6d;--card:#2a2925;--soft:#34322d;--hover:rgba(255,255,255,.06);--navy:#93b4ff}
+  /* 산초 플랫폼 화이트 톤(platform.css 와 같은 값) */
+  :root{--bg:#ffffff;--text:#1f2937;--muted:#6b7280;--line:#e6e8ec;--accent:#1e6fd9;--card:#fff;--soft:#f6f7f9;--hover:rgba(30,111,217,.05);--navy:#1e40af}
+  :root[data-theme=dark]{--bg:#111418;--text:#e6e8eb;--muted:#a0a7b1;--line:#2a2f37;--accent:#5b9bf0;--card:#161a20;--soft:#181c22;--hover:rgba(255,255,255,.06);--navy:#93b4ff}
   *{box-sizing:border-box}
   body{margin:0;font:13px/1.5 system-ui,'Malgun Gothic',sans-serif;background:var(--bg);color:var(--text)}
   .wrap{max-width:1500px;margin:0 auto;padding:16px 20px 60px}
@@ -43,6 +43,7 @@
 <body>
 <div class="wrap">
   <header>
+    <button id="back" class="chip" hidden title="프로젝트 목록으로">← 프로젝트</button>
     <h1><span class="star">✳</span> WBS 공정표</h1>
     <select id="proj" class="chip"></select>
     <span id="range" class="hint"></span>
@@ -63,6 +64,9 @@
 const $ = (s) => document.querySelector(s);
 const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const th = localStorage.sancho_theme; if (th === 'light' || th === 'dark') document.documentElement.dataset.theme = th;   // 산초 화면과 같은 테마
+window.addEventListener('message', (e) => { if (e.data?.sancho && e.data.act === 'theme') document.documentElement.dataset.theme = e.data.theme || ''; });
+// 프로젝트 화면(iframe) 안에서 열렸을 때(?embed=1): 뒤로 가기 버튼
+if (new URLSearchParams(location.search).get('embed')) { const b = document.getElementById('back'); b.hidden = false; b.onclick = () => { if (history.length > 1) history.back(); else location.href = '/m/projects.html'; }; }
 const tok = () => localStorage.sancho_token || '';
 const hdr = () => ({ 'content-type': 'application/json', ...(tok() ? { 'x-token': tok() } : {}) });
 const api = async (p, body) => (await fetch(p, { method: body ? 'POST' : 'GET', headers: hdr(), body: body ? JSON.stringify(body) : undefined })).json();

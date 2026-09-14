@@ -1,0 +1,360 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>산초 · 목표 관리</title>
+<link rel="stylesheet" href="/m/platform.css">
+<script src="/m/sdb.js"></script>
+<style>
+/* 목표(OKR) — 세종 플랫폼 v2 index.html 6245-6670 이식. 색은 전부 변수·platform.css pill 색만 */
+.okr-sec { font-size: 13px; font-weight: 700; color: var(--text-light); margin: 18px 0 8px; display: flex; align-items: center; gap: 6px; }
+.okr-sec .cnt, .okr-grp .cnt { font-weight: 400; color: var(--text-lighter); }
+.okr-grp { font-size: 12px; font-weight: 600; color: var(--text-light); margin: 4px 0 6px 28px; }
+.okr-tree { margin-bottom: 6px; }
+.okr-none { padding: 20px; text-align: center; color: var(--text-lighter); font-size: 12px; border: 1px dashed var(--border); border-radius: var(--radius); }
+.okr-none a { cursor: pointer; text-decoration: underline; margin-left: 4px; }
+.okr-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.okr-head .t { flex: 1; min-width: 140px; font-size: 14px; font-weight: 700; }
+.okr-head .pct { font-size: 15px; font-weight: 700; }
+.okr .why { font-size: 12px; color: var(--text-light); margin-bottom: 6px; }
+.okr .meta { font-size: 11px; color: var(--text-lighter); margin-bottom: 8px; }
+.okr .ms-cnt { font-size: 11px; color: var(--text-light); margin: 10px 0 4px; }
+.okr-menu { position: relative; }
+.okr-menu .pop { top: 30px; min-width: 170px; }
+.ms { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border-light); font-size: 13px; }
+.ms .mt { flex: 1; min-width: 0; }
+.ms.full .mt { text-decoration: line-through; color: var(--text-lighter); }
+.ms-box { width: 18px; height: 18px; border-radius: 4px; border: 1.5px solid var(--border); background: var(--white); color: #fff; font-size: 12px; text-align: center; line-height: 15px; flex-shrink: 0; cursor: pointer; }
+.ms-box.full { background: var(--success); border-color: var(--success); }
+.ms-box.part { background: var(--warning); border-color: var(--warning); }
+.ms-pct { cursor: pointer; min-width: 40px; text-align: center; }
+.ms-inp { width: 64px; padding: 2px 6px; font-size: 12px; }
+.ms-due { font-size: 11px; color: var(--text-lighter); white-space: nowrap; }
+.ms-due.late { color: var(--danger); font-weight: 600; }
+.ms .btn { padding: 2px 6px; font-size: 10px; }
+.okr-foot { margin-top: 10px; display: flex; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+.toolbar .fs { width: auto; padding: 6px 10px; font-size: 12.5px; }
+.hint-done { font-size: 11px; color: var(--text-lighter); margin-bottom: 10px; padding: 6px 10px; background: var(--bg2); border-radius: 6px; }
+.modal .fg.row > div { min-width: 0; }
+@media (max-width: 900px) { .okr.dept { margin-left: 12px; } .okr.person { margin-left: 24px; } .okr-grp { margin-left: 12px; } }
+</style>
+</head><body><div class="content-pad" id="root"></div>
+<div class="toast" id="toast"></div>
+<div class="overlay" id="modal"><div class="modal">
+  <div class="modal-head"><div class="modal-title" id="mTitle"></div><button class="btn btn-sm btn-ghost" data-close>✕</button></div>
+  <div class="modal-body" id="mBody"></div>
+  <div class="modal-foot"><button class="btn" data-close>취소</button><button class="btn btn-primary" id="mOk">저장</button></div>
+</div></div>
+<script>
+const { db, doc, collection, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, query, where, orderBy, limit, writeBatch } = window.fb;
+const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const toast = (t, kind = '') => { const el = document.getElementById('toast'); el.textContent = t; el.className = 'toast on ' + kind; clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove('on'), 2200); };
+window.addEventListener('message', (e) => { if (e.data?.sancho && e.data.act === 'theme') document.documentElement.dataset.theme = e.data.theme || ''; });
+let me = null;                                  // 주인(단일 사용자): {uid:'owner', name, title, dept, email}
+window.fb.me().then((u) => { me = u; boot(); });
+
+const $ = (s) => document.querySelector(s);
+const v = (s) => ($(s) ? $(s).value : '').trim();
+const S = { okrs: [], depts: [], users: [], ready: false };   // onSnapshot 이 채운다 — 별도 캐시 없음
+const V = { showDone: false, period: '', dept: '' };          // UI 취향(메모리)
+
+// ── 날짜 ──
+const today = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+const curQuarter = () => { const d = new Date(); return `${d.getFullYear()} Q${Math.floor(d.getMonth() / 3) + 1}`; };
+function dday(end) {
+  if (!end) return { text: '기한 미정', cls: 'gray' };
+  const n = Math.floor((new Date(end) - new Date(today())) / 864e5);
+  if (isNaN(n)) return { text: '기한 미정', cls: 'gray' };
+  if (n < 0) return { text: `마감 ${-n}일 지남`, cls: 'red' };
+  if (n === 0) return { text: '오늘 마감', cls: 'red' };
+  return { text: `D-${n}`, cls: n <= 7 ? 'red' : n <= 14 ? 'orange' : 'gray' };
+}
+
+// ── 진척률 (원본 _milestonePct / _okrProgress / _okrProgressColor) ──
+const clamp = (n) => Math.max(0, Math.min(100, n));
+const msArr = (o) => Array.isArray(o && o.milestones) ? o.milestones : [];
+const msPct = (m) => m == null ? 0 : (m.pct != null && m.pct !== '') ? clamp(Math.round(Number(m.pct)) || 0) : (m.done ? 100 : 0);
+function prog(o) {
+  const ms = msArr(o);
+  if (!ms.length) return (o.pctManual != null && o.pctManual !== '') ? clamp(Math.round(Number(o.pctManual)) || 0) : 0;   // 마일스톤 없을 때만 수동값
+  return Math.round(ms.reduce((a, m) => a + msPct(m), 0) / ms.length);
+}
+const pColor = (p) => p >= 70 ? 'var(--success)' : p >= 40 ? 'var(--primary)' : 'var(--warning)';
+const isDone = (o) => o.status === 'done' || prog(o) >= 100;
+
+// ── 조회 ──
+const user = (id) => S.users.find((u) => u.id === id);
+const uName = (id) => (user(id) || {}).name || '';
+const deptOf = (o) => S.depts.find((d) => d.id === o.dept || d.name === o.dept);
+const deptName = (o) => (deptOf(o) || {}).name || o.dept || '부서 미지정';
+const scopeLabel = (o) => o.scope === 'company' ? '[전사]' : o.scope === 'dept' ? `[${deptName(o)}]` : `[${uName(o.ownerId) || '개인'}]`;
+const byEnd = (a, b) => (a.end || '').localeCompare(b.end || '');
+function matchDept(o) {
+  if (!V.dept) return true;
+  const d = S.depts.find((x) => x.id === V.dept);
+  if (o.scope === 'dept') return o.dept === V.dept || (d && o.dept === d.name);
+  if (o.scope === 'personal') { const u = user(o.ownerId); return !!(u && d && (u.dept === d.name || u.dept === d.id)); }
+  return true;
+}
+
+// ── 쓰기 (모르는 필드 보존: updateDoc = 깊은 병합, 배열은 통째로 교체) ──
+const ref = (id) => doc(db, 'okrs', id);
+async function patch(id, data) { try { await updateDoc(ref(id), data); } catch (e) { toast('저장 실패: ' + e.message, 'err'); } }
+const setMs = (o, ms) => patch(o.id, { milestones: ms });
+
+// ── 산초에게 ──
+function askDraft() {
+  const q = curQuarter(), depts = S.depts.map((d) => d.name).join('·') || '(depts.json 참고)';
+  SANCHO.ask(`data/db/okrs.json 을 갱신해줘: ${q} OKR 초안을 짜서 넣어줘. 문서 형식은 platform 스킬의 okrs 규격(scope company|dept|personal, dept=부서 id, ownerId, title, why, period "${q}", start, end(YYYY-MM-DD), milestones[{id,title,due,pct 0,who}], status "active", parentId). 전사 목표 1~2개, 부서(${depts}) 목표 각 1개는 전사 목표에 parentId 로 정렬, 내(${(me && me.name) || '주인'}, ownerId "owner") 개인 목표 2개. 목표마다 마일스톤 3개씩 마감일을 분기 안에 배치해줘. 기존 문서는 지우지 말고 새 id 로 추가만 해줘.`);
+}
+function askCheck(o) {
+  SANCHO.ask(`data/db/okrs.json 의 목표 "${o.title}"(id ${o.id}) 진척을 점검해줘: 관련 일정(events.json)·업무(tasks.json)·회의록(meetings.json)·메일(mail.json)·Manday(manday.json)를 훑어 마일스톤별 진행 근거를 찾고 milestones[].pct 를 0~100 으로 갱신해줘(완료면 100 과 at=완료일). 근거가 없는 마일스톤은 건드리지 말고, 빠진 마일스톤이 보이면 추가 제안만 해줘. 마일스톤별 갱신 결과를 한 줄씩 보고해줘.`);
+}
+
+// ── 화면 ──
+function render() {
+  const root = $('#root');
+  if (!S.ready) return;
+  const all = S.okrs.filter((o) => o && o.scope);
+  if (!all.length) { root.innerHTML = head(0) + `
+    <div class="empty"><h3>등록된 목표가 없습니다</h3>전사 · 부서 · 개인 목표를 등록하고 마일스톤으로 진척을 관리하세요.<br>산초에게 이 분기 OKR 초안을 맡길 수도 있습니다.
+      <div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><button class="btn btn-primary" data-act="new">+ 신규 목표</button><button class="btn btn-ai" data-act="ai-draft">✳ 산초에게: 이 분기 OKR 초안 짜줘</button></div></div>`; return; }
+  const periods = [...new Set(all.map((o) => o.period).filter(Boolean))].sort().reverse();
+  const f = all.filter((o) => (!V.period || o.period === V.period) && matchDept(o));
+  const doneN = f.filter(isDone).length;
+  const vis = V.showDone ? f : f.filter((o) => !isDone(o));
+  const company = vis.filter((o) => o.scope === 'company').sort(byEnd);
+  const dept = vis.filter((o) => o.scope === 'dept').sort(byEnd);
+  const person = vis.filter((o) => o.scope === 'personal').sort(byEnd);
+  const avg = vis.length ? Math.round(vis.reduce((a, o) => a + prog(o), 0) / vis.length) : 0;
+  const ym = today().slice(0, 7), td = today();
+  const allMs = f.flatMap(msArr);
+  const mm = allMs.filter((m) => (m.due || '').startsWith(ym));
+  const late = allMs.filter((m) => m.due && m.due < td && msPct(m) < 100).length;
+
+  // 부서 목표: depts 순서대로 묶고, 모르는 부서는 뒤에
+  const groups = S.depts.map((d) => ({ key: d.id, name: d.name, icon: d.icon || '🏛', items: dept.filter((o) => o.dept === d.id || o.dept === d.name) })).filter((g) => g.items.length);
+  const known = new Set(groups.flatMap((g) => g.items.map((o) => o.id)));
+  [...new Set(dept.filter((o) => !known.has(o.id)).map((o) => o.dept || ''))].forEach((k) => groups.push({ key: k, name: k || '부서 미지정', icon: '🏛', items: dept.filter((o) => !known.has(o.id) && (o.dept || '') === k) }));
+
+  const none = (msg, scope) => `<div class="okr-none">${msg}<a data-act="new" data-scope="${scope}">+ 첫 목표 등록하기</a></div>`;
+  root.innerHTML = head(doneN) + `
+    ${(!V.showDone && doneN) ? `<div class="hint-done">✅ 완료된 목표 ${doneN}개가 숨겨져 있습니다. 위 "완료 보기" 버튼으로 다시 볼 수 있습니다.</div>` : ''}
+    <div class="kpi-grid">
+      <div class="kpi"><div class="kpi-label">진행 중 목표</div><div class="kpi-value">${vis.length}</div><div class="kpi-trend">전사 ${company.length} · 부서 ${dept.length} · 개인 ${person.length}</div></div>
+      <div class="kpi"><div class="kpi-label">평균 진척률</div><div class="kpi-value" style="color:${pColor(avg)}">${avg}%</div><div class="bar" style="margin-top:8px"><div class="bar-fill" style="width:${avg}%;background:${pColor(avg)}"></div></div></div>
+      <div class="kpi"><div class="kpi-label">이번 달 마감 마일스톤</div><div class="kpi-value ${late ? 'red' : ''}">${mm.length}</div><div class="kpi-trend">미완료 ${mm.filter((m) => msPct(m) < 100).length} · 지연 ${late}</div></div>
+      <div class="kpi"><div class="kpi-label">완료 목표</div><div class="kpi-value green">${doneN}</div><div class="kpi-trend">전체 ${f.length}개 중</div></div>
+    </div>
+    <div class="toolbar">
+      <select class="fs" id="fltPeriod"><option value="">기간: 전체</option>${periods.map((p) => `<option value="${esc(p)}" ${V.period === p ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select>
+      <select class="fs" id="fltDept"><option value="">부서: 전체</option>${S.depts.map((d) => `<option value="${esc(d.id)}" ${V.dept === d.id ? 'selected' : ''}>${esc(d.icon || '')} ${esc(d.name)}</option>`).join('')}</select>
+      <span class="sp"></span><span class="fh" style="margin:0">보이는 목표 ${vis.length} / 전체 ${all.length}</span>
+    </div>
+    <div class="okr-sec">🏢 ${esc((me && me.company) || '전사')} 목표 <span class="cnt">(${company.length})</span></div>
+    <div class="okr-tree">${company.length ? company.map((o) => card(o, '')).join('') : none('등록된 전사 목표가 없습니다.', 'company')}</div>
+    <div class="okr-sec">🏛 부서 목표 <span class="cnt">(${dept.length})</span></div>
+    ${groups.length ? groups.map((g) => `<div class="okr-grp">${esc(g.icon)} ${esc(g.name)} <span class="cnt">(${g.items.length})</span></div><div class="okr-tree">${g.items.map((o) => card(o, 'dept')).join('')}</div>`).join('') : `<div class="okr-tree">${none('등록된 부서 목표가 없습니다.', 'dept')}</div>`}
+    <div class="okr-sec">👤 개인 목표 <span class="cnt">(${person.length})</span></div>
+    <div class="okr-tree">${person.length ? person.map((o) => card(o, 'person')).join('') : none('등록된 개인 목표가 없습니다.', 'personal')}</div>`;
+}
+function head(doneN) {
+  return `<div class="mod-head"><div><div class="mod-title">🎯 목표 관리</div><div class="mod-sub">전사 · 부서 · 개인 목표 — 진척률은 마일스톤 % 평균으로 자동 계산 · 마일스톤은 일정·업무 칸반에도 나타납니다</div></div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      ${doneN ? `<button class="btn" data-act="toggle-done" title="100% 달성·완료 처리한 목표 표시/숨김">${V.showDone ? '🙈 완료 숨기기' : '👁 완료 보기'} <span class="fh" style="margin:0">(${doneN})</span></button>` : ''}
+      <button class="btn btn-ai" data-act="ai-draft">✳ 산초에게 · 이 분기 OKR 초안</button>
+      <button class="btn btn-primary" data-act="new">+ 신규 목표</button>
+    </div></div>`;
+}
+function card(o, cls) {
+  const p = prog(o), c = pColor(p), ms = msArr(o), doneN = ms.filter((m) => msPct(m) >= 100).length;
+  const dd = dday(o.end), parent = o.parentId ? S.okrs.find((x) => x.id === o.parentId) : null;
+  const scopePill = o.scope === 'company' ? '<span class="b-pill blue">🏢 전사</span>' : o.scope === 'dept' ? `<span class="b-pill blue">🏛 ${esc(deptName(o))}</span>` : `<span class="b-pill purple">👤 ${esc(uName(o.ownerId) || '개인')}</span>`;
+  const statusPill = o.status === 'hold' ? '<span class="b-pill orange">보류</span>' : o.status === 'done' ? '<span class="b-pill green">완료</span>' : '';
+  const manual = !ms.length && o.pctManual != null && o.pctManual !== '';
+  return `<div class="okr ${cls}" data-id="${esc(o.id)}">
+    <div class="okr-head">${scopePill}${o.period ? `<span class="b-pill gray">${esc(o.period)}</span>` : ''}${statusPill}
+      <span class="t">${esc(o.title)}</span>
+      ${o.status === 'done' ? '' : `<span class="b-pill ${dd.cls}">${dd.text}</span>`}
+      <span class="pct" style="color:${c}">${p}%</span>
+      ${manual ? '<span class="b-pill orange" title="마일스톤이 없어 직접 지정한 진행률입니다">✎ 수동</span>' : ''}
+      <span class="okr-menu"><button class="btn btn-sm btn-ghost" data-act="menu" title="더 보기">⋯</button>
+        <div class="pop" hidden><div class="um-item" data-act="edit">✎ 수정</div><div class="um-item" data-act="done">${o.status === 'done' ? '↩ 진행 중으로' : '✓ 완료 처리'}</div><div class="um-sep"></div><div class="um-item" data-act="del" style="color:var(--danger)">✕ 삭제</div></div></span>
+    </div>
+    ${o.why ? `<div class="why">${esc(o.why)}</div>` : ''}
+    <div class="meta">${o.start || o.end ? `📅 ${esc(o.start || '?')} ~ ${esc(o.end || '미정')}` : ''}${parent ? ` · ↳ 상위 목표: ${esc(parent.title)}` : ''}</div>
+    <div class="bar"><div class="bar-fill" style="width:${p}%;background:${c}"></div></div>
+    <div class="ms-cnt">📌 마일스톤 ${doneN}/${ms.length}</div>
+    ${ms.map((m, i) => msRow(m, i)).join('')}
+    <div class="okr-foot">
+      <button class="btn btn-sm btn-ai" data-act="ai-check" title="산초가 일정·업무·회의록을 훑어 마일스톤 %를 갱신합니다">✳ 진척 점검</button>
+      ${!ms.length ? `<button class="btn btn-sm" data-act="pct-manual" title="마일스톤이 없을 때는 전체 진행률을 직접 지정할 수 있습니다">${manual ? '✎ 수동 ' + esc(o.pctManual) + '%' : '✎ 진행률 지정'}</button>` : ''}
+      <button class="btn btn-sm" data-act="ms-add">＋ 마일스톤</button>
+      ${o.scope === 'dept' ? '<button class="btn btn-sm" data-act="change" title="부서장에게 이 목표의 변경을 결재로 요청합니다">📝 부서장에 변경 요청</button>' : ''}
+    </div>
+    ${ms.length ? '<div class="fh" style="text-align:right">진행률은 마일스톤 % 평균으로 자동 계산됩니다. 마일스톤의 % 값을 클릭해 수정하세요.</div>' : ''}
+  </div>`;
+}
+function msRow(m, i) {
+  const p = msPct(m), full = p >= 100, part = p > 0 && p < 100, late = !full && m.due && m.due < today();
+  return `<div class="ms ${full ? 'full' : ''}" data-mi="${i}">
+    <span class="ms-box ${full ? 'full' : part ? 'part' : ''}" data-act="ms-toggle" title="클릭: 0% ↔ 100%">${full ? '✓' : ''}</span>
+    <span class="mt">${esc(m.title)}</span>
+    ${m.who ? `<span class="b-pill purple">👤 ${esc(m.who)}</span>` : ''}
+    <span class="b-pill ${full ? 'green' : part ? 'orange' : 'gray'} ms-pct" data-act="ms-pct" title="클릭: 진행률 % 지정">${p}%</span>
+    <span class="ms-due ${late ? 'late' : ''}">${full && m.at ? '완료 ' + esc(m.at) : esc(m.due || '')}</span>
+    <button class="btn btn-sm" data-act="ms-edit" title="마일스톤 수정">✎</button><button class="btn btn-sm" data-act="ms-del" title="마일스톤 삭제">✕</button>
+  </div>`;
+}
+
+// % 배지 → 자리에서 숫자 입력 (원본 prompt 대체). allowEmpty: 비우면 null(자동 계산 복귀)
+function inlinePct(el, cur, allowEmpty, save) {
+  const inp = document.createElement('input'); inp.type = 'number'; inp.min = 0; inp.max = 100; inp.value = cur; inp.className = 'fi ms-inp';
+  el.replaceWith(inp); inp.focus(); inp.select();
+  let fin = false;
+  const done = (ok) => {
+    if (fin) return; fin = true;
+    const raw = inp.value.trim(); render();
+    if (!ok) return;
+    if (raw === '') return allowEmpty ? save(null) : undefined;
+    const n = Number(raw); if (isNaN(n) || n < 0 || n > 100) return toast('0~100 사이의 숫자를 입력하세요.', 'err');
+    if (Math.round(n) !== cur) save(Math.round(n));
+  };
+  inp.onkeydown = (e) => { if (e.isComposing) return; if (e.key === 'Enter') done(true); else if (e.key === 'Escape') done(false); };
+  inp.onblur = () => done(true);
+}
+
+// ── 동작 (data-act 위임) ──
+const ACT = {
+  'new': (_o, _mi, el) => openOkrModal(null, el.dataset.scope),
+  'ai-draft': askDraft,
+  'ai-check': (o) => askCheck(o),
+  'toggle-done': () => { V.showDone = !V.showDone; render(); },
+  'menu': (_o, _mi, el) => { const pop = el.nextElementSibling, was = pop.hidden; closePops(); pop.hidden = !was; },
+  'edit': (o) => openOkrModal(o),
+  'done': (o) => patch(o.id, { status: o.status === 'done' ? 'active' : 'done' }),
+  'del': async (o) => { if (!confirm(`"${o.title}" 목표를 삭제하시겠습니까?\n마일스톤 ${msArr(o).length}개도 함께 삭제됩니다.`)) return; try { await deleteDoc(ref(o.id)); toast('삭제했습니다'); } catch (e) { toast('삭제 실패: ' + e.message, 'err'); } },
+  'change': (o) => openChangeModal(o),
+  'pct-manual': (o, _mi, el) => inlinePct(el, prog(o), true, (n) => patch(o.id, { pctManual: n })),
+  'ms-add': (o) => openMsModal(o),
+  'ms-edit': (o, mi) => openMsModal(o, mi),
+  'ms-toggle': (o, mi) => { const ms = [...msArr(o)], m = ms[mi]; if (!m) return; const on = msPct(m) < 100; ms[mi] = { ...m, pct: on ? 100 : 0, at: on ? today() : null }; setMs(o, ms); },
+  'ms-pct': (o, mi, el) => { const m = msArr(o)[mi]; if (!m) return; inlinePct(el, msPct(m), false, (n) => { const ms = [...msArr(o)]; ms[mi] = { ...m, pct: n, at: n >= 100 ? (m.at || today()) : null }; setMs(o, ms); }); },
+  'ms-del': (o, mi) => { const m = msArr(o)[mi]; if (!m) return; if (!confirm(`마일스톤 "${m.title || ''}"을(를) 삭제하시겠습니까?`)) return; setMs(o, msArr(o).filter((_, i) => i !== mi)); },
+};
+const closePops = () => document.querySelectorAll('.okr-menu .pop').forEach((p) => { p.hidden = true; });
+$('#root').addEventListener('click', (e) => {
+  const el = e.target.closest('[data-act]'); if (!el) return;
+  const cardEl = el.closest('.okr'), id = cardEl && cardEl.dataset.id, o = id ? S.okrs.find((x) => x.id === id) : null;
+  const msEl = el.closest('.ms'), mi = msEl ? Number(msEl.dataset.mi) : null;
+  if (el.dataset.act !== 'menu') closePops();
+  ACT[el.dataset.act] && ACT[el.dataset.act](o, mi, el);
+});
+document.addEventListener('click', (e) => { if (!e.target.closest('.okr-menu')) closePops(); });
+$('#root').addEventListener('change', (e) => {
+  if (e.target.id === 'fltPeriod') { V.period = e.target.value; render(); }
+  if (e.target.id === 'fltDept') { V.dept = e.target.value; render(); }
+});
+
+// ── 모달 셸 (원본 openModal/closeModal) ──
+let mOnOk = null;
+function openModal(title, html, onOk) {
+  $('#mTitle').textContent = title; $('#mBody').innerHTML = html; mOnOk = onOk;
+  $('#modal').classList.add('active');
+  const first = $('#mBody').querySelector('input,select,textarea'); if (first) first.focus();
+}
+function closeModal() { $('#modal').classList.remove('active'); mOnOk = null; }
+$('#mOk').onclick = () => mOnOk && mOnOk();
+$('#modal').addEventListener('click', (e) => { if (e.target === $('#modal') || e.target.closest('[data-close]')) closeModal(); });
+$('#mBody').addEventListener('keydown', (e) => { if (e.isComposing) return; if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); mOnOk && mOnOk(); } });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+// 목표 생성/편집 (원본 openOkrModal 6464). ex=null 이면 신규. 권한 분기 제거, scope company 추가, start·parentId·status 는 §5 규격
+function openOkrModal(ex, defScope) {
+  const scope = ex ? (ex.scope || 'personal') : (defScope || 'personal');
+  const period = ex ? (ex.period ?? '') : (scope === 'personal' ? curQuarter() : `${new Date().getFullYear()} 연간`);
+  const opt = (val, label, sel) => `<option value="${esc(val)}" ${sel ? 'selected' : ''}>${esc(label)}</option>`;
+  const deptOpts = S.depts.map((d) => opt(d.id, `${d.icon || ''} ${d.name}`.trim(), ex && (ex.dept === d.id || ex.dept === d.name))).join('') || opt('', '(등록된 부서 없음 — 조직 메뉴에서 등록)', true);
+  const owner = ex ? (ex.ownerId || 'owner') : 'owner';
+  const userOpts = S.users.filter((u) => u.active !== false).map((u) => opt(u.id, `${u.name} ${u.title || ''}`.trim() + (u.id === 'owner' ? ' (본인)' : ''), u.id === owner)).join('');
+  const parentOpts = opt('', '— 없음 —', !ex || !ex.parentId) + S.okrs.filter((x) => x.id !== (ex && ex.id)).map((x) => opt(x.id, `${scopeLabel(x)} ${x.title || ''}`, ex && ex.parentId === x.id)).join('');
+  const ms = msArr(ex || {});
+  openModal(ex ? '목표 수정' : '신규 목표 등록', `
+    <div class="fg row">
+      <div><label class="fl">범위</label><select class="fs" id="fScope">${opt('company', '🏢 전사', scope === 'company')}${opt('dept', '🏛 부서', scope === 'dept')}${opt('personal', '👤 개인', scope === 'personal')}</select></div>
+      <div><label class="fl">상태</label><select class="fs" id="fStatus">${opt('active', '진행', !ex || (ex.status || 'active') === 'active')}${opt('hold', '보류', ex && ex.status === 'hold')}${opt('done', '완료', ex && ex.status === 'done')}</select></div>
+    </div>
+    <div class="fg" id="rDept"><label class="fl">부서</label><select class="fs" id="fDept">${deptOpts}</select></div>
+    <div class="fg" id="rOwner"><label class="fl">담당자 (개인 목표)</label><select class="fs" id="fOwner">${userOpts || opt('owner', (me && me.name) || '주인', true)}</select></div>
+    <div class="fg"><label class="fl">목표 (Objective)</label><input class="fi" id="fTitle" placeholder="예: 품질 인증 재갱신 완료" value="${esc(ex && ex.title)}"></div>
+    <div class="fg"><label class="fl">왜 이 목표인지 (선택)</label><input class="fi" id="fWhy" placeholder="예: 3년 갱신 필수 · 실패 시 수주 불가" value="${esc(ex && ex.why)}"></div>
+    <div class="fg row">
+      <div><label class="fl">기간</label><input class="fi" id="fPeriod" placeholder="예: 2026 연간, 2026 Q3" value="${esc(period)}"></div>
+      <div><label class="fl">상위 목표 (정렬)</label><select class="fs" id="fParent">${parentOpts}</select></div>
+    </div>
+    <div class="fg row">
+      <div><label class="fl">시작일</label><input class="fi" type="date" id="fStart" value="${esc(ex && ex.start)}"></div>
+      <div><label class="fl">마감일</label><input class="fi" type="date" id="fEnd" value="${esc(ex && ex.end)}"></div>
+    </div>
+    ${ms.length ? '<div class="fh">마일스톤이 있어 진행률은 마일스톤 % 평균으로 자동 계산됩니다. 카드에서 마일스톤별 % 를 지정하세요.</div>'
+      : `<div class="fg"><label class="fl">진행률 % (선택 · 마일스톤이 없을 때만 사용)</label><input class="fi" type="number" min="0" max="100" id="fPct" placeholder="예: 42" value="${esc(ex && ex.pctManual != null ? ex.pctManual : '')}"></div>`}
+    ${ex ? '' : '<div class="fh">저장 후 카드의 "＋ 마일스톤" 버튼으로 마일스톤을 추가하세요.</div>'}
+  `, async () => {
+    const title = v('#fTitle'); if (!title) return toast('목표 제목을 입력하세요.', 'err');
+    const s = v('#fScope');
+    const d = { scope: s, title, why: v('#fWhy'), period: v('#fPeriod'), start: v('#fStart'), end: v('#fEnd'), status: v('#fStatus') || 'active', parentId: v('#fParent') || null,
+      dept: s === 'dept' ? v('#fDept') : null, ownerId: s === 'personal' ? (v('#fOwner') || 'owner') : null };
+    const pi = $('#fPct');
+    if (pi) { const raw = pi.value.trim(); if (raw === '') d.pctManual = null; else { const n = Number(raw); if (isNaN(n) || n < 0 || n > 100) return toast('진행률은 0~100 사이 숫자로 입력하거나 비워두세요.', 'err'); d.pctManual = Math.round(n); } }
+    try {
+      if (ex) await updateDoc(ref(ex.id), d); else await setDoc(doc(collection(db, 'okrs')), { ...d, milestones: [] });
+      closeModal(); toast('저장했습니다', 'ok');
+    } catch (e) { toast('저장 실패: ' + e.message, 'err'); }
+  });
+  const sc = $('#fScope'), sync = () => { $('#rDept').hidden = sc.value !== 'dept'; $('#rOwner').hidden = sc.value !== 'personal'; };
+  sc.onchange = sync; sync();
+}
+// 마일스톤 추가/수정 (원본 openOkrMilestoneModal 6562). 담당자 = users 목록 + 직접 입력(who 이름)
+function openMsModal(o, mi) {
+  const ms = msArr(o), m = mi != null ? ms[mi] : null;
+  const who = m ? (m.who ?? '') : (o.scope === 'personal' ? uName(o.ownerId) : '');
+  openModal(m ? '마일스톤 수정' : '마일스톤 추가', `
+    <div class="fh" style="margin-bottom:10px">목표: <b>${esc(o.title)}</b></div>
+    <div class="fg"><label class="fl">마일스톤 내용</label><input class="fi" id="fMs" placeholder="예: 예비 감사 통과" value="${esc(m && m.title)}"></div>
+    <div class="fg row">
+      <div><label class="fl">마감일</label><input class="fi" type="date" id="fMsDue" value="${esc(m && m.due)}"></div>
+      <div><label class="fl">진행률 %</label><input class="fi" type="number" min="0" max="100" id="fMsPct" value="${m ? msPct(m) : 0}"></div>
+    </div>
+    <div class="fg"><label class="fl">담당자 (선택)</label><input class="fi" id="fMsWho" list="userList" placeholder="이름 입력 또는 선택" value="${esc(who)}">
+      <datalist id="userList">${S.users.map((u) => `<option value="${esc(u.name)}">`).join('')}</datalist>
+      <div class="fh">지정하면 그 사람의 업무 칸반과 일정에 이 마일스톤이 나타납니다.</div></div>
+  `, async () => {
+    const t = v('#fMs'); if (!t) return toast('마일스톤 내용을 입력하세요.', 'err');
+    const n = Number(v('#fMsPct') || 0); if (isNaN(n) || n < 0 || n > 100) return toast('진행률은 0~100 사이 숫자로 입력하세요.', 'err');
+    const pct = Math.round(n);
+    const row = { id: (m && m.id) || 'm_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), title: t, due: v('#fMsDue'), pct, who: v('#fMsWho'), at: pct >= 100 ? ((m && m.at) || today()) : null };
+    await setMs(o, m ? ms.map((x, i) => i === mi ? { ...x, ...row } : x) : [...ms, row]);
+    closeModal();
+  });
+}
+// 부서장에 변경 요청 (원본 submitOkrChangeRequest 6645) → approvals 문서 type 'okr-change'. 결재자 = depts.lead
+function openChangeModal(o) {
+  const d = deptOf(o), lead = d && d.lead ? user(d.lead) : null;
+  openModal('부서장에 변경 요청', `
+    <div class="fh" style="margin-bottom:10px">대상 목표: <b>${esc(o.title)}</b>${lead ? ` · 결재자: ${esc(lead.name)} ${esc(lead.title || '')}` : ' · 부서장(lead)이 지정되지 않아 결재선 없이 올립니다'}</div>
+    <div class="fg"><label class="fl">변경 요청 내용</label><textarea class="ft" id="fChange" placeholder="예: 마감일을 2026-12-31 → 2027-01-31 로 연장 요청 (감사 일정 지연)"></textarea></div>
+  `, async () => {
+    const text = v('#fChange'); if (!text) return toast('요청 내용을 입력하세요.', 'err');
+    try {
+      await addDoc(collection(db, 'approvals'), { title: `[부서 목표] ${o.title} 변경 요청`, type: 'okr-change', drafterId: (me && me.uid) || 'owner', body: text, amount: 0, due: '', projectId: '', attachments: [],
+        approvalLine: lead ? [{ userId: lead.id, name: lead.name, role: '승인', status: 'pending', note: '', at: '' }] : [], status: 'pending', decisionNote: '', decidedAt: '', payload: { okrId: o.id, change: text } });
+      closeModal(); toast('변경 요청을 결재로 올렸습니다', 'ok');
+    } catch (e) { toast('전송 실패: ' + e.message, 'err'); }
+  });
+  $('#fChange').focus();
+}
+
+async function boot() {
+  const docs = (s) => s.docs.map((d) => ({ id: d.id, ...d.data() }));
+  onSnapshot(collection(db, 'okrs'), (s) => { S.okrs = docs(s); S.ready = true; render(); }, (e) => toast('목표 읽기 실패: ' + e.message, 'err'));
+  onSnapshot(collection(db, 'depts'), (s) => { S.depts = docs(s).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)); render(); });
+  onSnapshot(collection(db, 'users'), (s) => { S.users = docs(s); render(); });
+}
+</script></body></html>

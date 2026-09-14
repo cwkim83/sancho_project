@@ -1,0 +1,273 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>산초 · 일정</title>
+<link rel="stylesheet" href="/m/platform.css">
+<script src="/m/sdb.js"></script>
+<style>
+/* 캘린더 모듈 전용 — 세종 플랫폼 v2 calendar() 화면을 옮기고 색은 전부 변수로 */
+.cal-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+.cal-legend { display: flex; gap: 6px; font-size: 12px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border: 1px solid var(--border); border-radius: 20px; background: var(--white); cursor: pointer; user-select: none; color: var(--text-light); }
+.chip.on { color: var(--text); border-color: var(--primary); background: var(--primary-lighter); }
+.chip .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; opacity: .35; }
+.chip.on .dot { opacity: 1; }
+.dot.blue { background: var(--primary); } .dot.green { background: var(--success); } .dot.orange { background: var(--warning); } .dot.red { background: var(--danger); } .dot.purple { background: var(--purple); } .dot.gray { background: var(--text-lighter); }
+.cal-event { cursor: pointer; }
+.cal-event.gray { background: var(--text-lighter); }
+.cal-more { font-size: 10px; color: var(--text-light); }
+.cal-day.sel { outline: 2px solid var(--primary); outline-offset: -2px; }
+/* 주간 보기 */
+.wk-grid { display: grid; grid-template-columns: repeat(7, 1fr); background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.wk-col { border-right: 1px solid var(--border-light); min-height: 320px; cursor: pointer; }
+.wk-col:last-child { border-right: 0; }
+.wk-col:hover { background: var(--primary-lighter); }
+.wk-col.today { background: var(--primary-light); }
+.wk-head { padding: 8px; text-align: center; font-size: 12px; font-weight: 600; color: var(--text-light); background: var(--bg2); border-bottom: 1px solid var(--border); }
+.wk-head b { display: block; font-size: 16px; color: var(--text); }
+.wk-col.today .wk-head b { color: var(--primary); }
+.wk-col:first-child .wk-head { color: var(--danger); } .wk-col:last-child .wk-head { color: var(--primary); }
+.wk-body { padding: 6px; }
+.wk-body .cal-event { white-space: normal; }
+/* 다가오는 일정 · 날짜 모달 */
+.up-row { padding: 9px 0; border-bottom: 1px solid var(--border-light); display: flex; justify-content: space-between; align-items: center; gap: 8px; cursor: pointer; }
+.up-row:last-child { border-bottom: 0; }
+.up-row:hover { background: var(--primary-lighter); }
+.up-title { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.up-date { font-size: 12px; font-weight: 600; color: var(--text-light); text-align: right; flex-shrink: 0; }
+.up-date.red { color: var(--danger); } .up-date.orange { color: var(--warning); }
+.up-time { font-size: 10px; color: var(--text-light); }
+.dl-item { padding: 10px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.dl-item.done .dl-title { text-decoration: line-through; color: var(--text-light); }
+.dl-title { font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+.dl-sub { font-size: 12px; color: var(--text-light); margin-top: 4px; }
+.dl-acts { display: flex; gap: 4px; flex-shrink: 0; }
+.dl-acts .btn-sm { padding: 3px 8px; }
+.att-list { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.att-chip { padding: 2px 9px; border: 1px solid var(--border); border-radius: 12px; font-size: 12px; cursor: pointer; background: var(--white); color: var(--text-light); }
+.att-chip.on { background: var(--primary-light); color: var(--primary); border-color: var(--primary); }
+.fg.row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.chk { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; margin-top: 26px; }
+.src-tag { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; background: var(--bg2); color: var(--text-light); }
+@media (max-width: 900px) { .cal-wrap { grid-template-columns: 1fr; } .wk-grid { grid-template-columns: 1fr; } .wk-col { min-height: 0; border-right: 0; border-bottom: 1px solid var(--border-light); } .fg.row3 { grid-template-columns: 1fr; } }
+</style>
+</head><body><div class="content-pad" id="root"></div>
+<div class="toast" id="toast"></div>
+<div class="overlay" id="modal"><div class="modal"><div class="modal-head"><div class="modal-title" id="mTitle"></div><button class="icon-btn" id="mClose" title="닫기">✕</button></div><div class="modal-body" id="mBody"></div><div class="modal-foot" id="mFoot"></div></div></div>
+<script>
+const { db, doc, collection, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, query, where, orderBy, limit, writeBatch } = window.fb;
+const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const toast = (t, kind = '') => { const el = document.getElementById('toast'); el.textContent = t; el.className = 'toast on ' + kind; clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove('on'), 2200); };
+window.addEventListener('message', (e) => { if (e.data?.sancho && e.data.act === 'theme') document.documentElement.dataset.theme = e.data.theme || ''; });
+let me = null;                                  // 주인(단일 사용자): {uid:'owner', name, title, dept, email}
+window.fb.me().then((u) => { me = u; boot(); });
+
+// ---------- 상태 ----------
+const S = { events: [], tasks: [], okrs: [], meetings: [], projects: [], users: [], rooms: [], wbsEnd: {}, schedules: [] };
+const CATS = { '회의': 'blue', '검사': 'orange', '마감': 'red', '교육': 'green', '출장': 'purple', '개인': 'gray', '기타': 'blue' };
+const COLORS = ['blue', 'green', 'orange', 'red', 'purple', 'gray'], col = (c) => COLORS.includes(c) ? c : 'blue';   // 두뇌가 쓴 낯선 색은 blue 로
+const SRC = [   // 범례 · 소스별 표시 토글 (UI 취향이라 localStorage 허용)
+  { id: 'event', label: '일정', color: 'blue' }, { id: 'task', label: '업무 마감', color: 'orange' }, { id: 'okr', label: '목표 마일스톤', color: 'purple' },
+  { id: 'meeting', label: '회의', color: 'blue' }, { id: 'project', label: '프로젝트 마감', color: 'red' }, { id: 'schedule', label: '산초 예약 표시', color: 'gray', off: true },
+];
+let srcOn = {}; try { srcOn = JSON.parse(localStorage.cal_src || '{}'); } catch {}
+const isOn = (id) => srcOn[id] ?? !SRC.find((s) => s.id === id).off;
+let view = localStorage.cal_view === 'week' ? 'week' : 'month';
+let cur = new Date();                            // 보고 있는 달(월간) 또는 그 주의 아무 날(주간)
+const ymd = (d) => d.toLocaleDateString('sv-SE');   // 로컬 날짜 — toISOString 은 UTC 라 새벽에 하루 밀린다
+const today = () => ymd(new Date());
+const addDays = (ds, n) => { const d = new Date(ds + 'T00:00:00'); d.setDate(d.getDate() + n); return ymd(d); };
+const uname = (id) => (S.users.find((u) => u.id === id) || {}).name || id || '';
+const pname = (id) => { const p = S.projects.find((x) => x.id === id); return p ? (p.name || p.code || id) : ''; };
+
+// ---------- 소스 합산 — 원본 allEvents() 자리. 표준 형태 {id, title, date, time, color, source, done, extraClass, ref} ----------
+function allEvents(days) {   // days: 표시 중인 날짜 목록(매일 반복하는 산초 예약을 그 날들에 펼친다). 없으면 반복 예약 제외
+  const out = [];
+  if (isOn('event')) for (const e of S.events) {
+    if (!e.date) continue;
+    const base = { id: 'ev_' + e.id, title: e.title || '(제목 없음)', time: e.allDay ? '' : (e.time || ''), color: col(e.color || CATS[e.category]), source: 'event', ref: e };
+    out.push({ ...base, date: e.date });
+    if (e.endDate && e.endDate > e.date) for (let d = addDays(e.date, 1), n = 0; d <= e.endDate && n < 60; d = addDays(d, 1), n++) out.push({ ...base, date: d, time: '' });
+  }
+  if (isOn('task')) for (const t of S.tasks) {
+    if (!t.due) continue; const done = t.status === 'done';
+    out.push({ id: 'tsk_' + t.id, title: t.title || '(업무)', date: t.due, time: '', color: done ? 'green' : t.priority === 'high' ? 'red' : t.priority === 'low' ? 'green' : 'orange', source: 'task', done, extraClass: 'task-ev' + (done ? ' done' : ''), ref: t });
+  }
+  if (isOn('okr')) for (const o of S.okrs) (Array.isArray(o.milestones) ? o.milestones : []).forEach((m, i) => {
+    if (!m.due) return; const done = Number(m.pct) >= 100 || !!m.done;
+    out.push({ id: 'okr_' + o.id + '_' + (m.id ?? i), title: m.title || '(마일스톤)', date: m.due, time: '', color: done ? 'green' : 'purple', source: 'okr', done, extraClass: 'task-ev' + (done ? ' done' : ''), sub: '🎯 ' + (o.title || '목표'), ref: o });
+  });
+  if (isOn('meeting')) for (const m of S.meetings) {
+    if (!m.date || m.status === '취소') continue;
+    const room = (S.rooms.find((r) => r.id === m.roomId) || {}).name || '';
+    out.push({ id: 'mt_' + m.id, title: `🎙 ${m.title || '(회의)'}${room ? ' ' + room : ''}${m.start ? ' ' + m.start : ''}`, date: m.date, time: m.start || '', color: 'blue', source: 'meeting', ref: m });
+  }
+  if (isOn('project')) {
+    const seen = new Set();
+    for (const p of S.projects) { if (p.hidden) continue; const end = p.end || S.wbsEnd[p.wbs]; if (!end) continue; seen.add(p.wbs); out.push({ id: 'pj_' + p.id, title: `${p.name || p.code || '프로젝트'} 마감`, date: end, time: '', color: 'red', source: 'project', done: p.status === 'done', ref: p }); }
+    for (const [name, end] of Object.entries(S.wbsEnd)) if (end && !seen.has(name)) out.push({ id: 'wbs_' + name, title: `${name} 마감`, date: end, time: '', color: 'red', source: 'project', ref: { wbs: name } });
+  }
+  if (isOn('schedule')) for (const j of S.schedules) {
+    const title = `⏰ ${String(j.prompt || j.id).replace(/^\[[^\]]*\]\s*/, '').slice(0, 24)}`;
+    if (j.repeat === 'once') { if (j.date) out.push({ id: 'sch_' + j.id, title, date: j.date, time: j.time || '', color: 'gray', source: 'schedule', ref: j }); }
+    else if (days) for (const d of days) out.push({ id: 'sch_' + j.id + '_' + d, title, date: d, time: /^\d\d:\d\d$/.test(j.time || '') ? j.time : '', color: 'gray', source: 'schedule', ref: j });
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || ''));
+}
+const eventsOn = (ds) => allEvents([ds]).filter((e) => e.date === ds);
+
+// ---------- 화면 ----------
+const mn = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
+const chip = (e) => `<div class="cal-event ${esc(e.color)}${e.extraClass ? ' ' + e.extraClass : ''}" data-ds="${esc(e.date)}" title="${esc(e.title)}${e.done ? ' (완료)' : ''}">${e.done ? '✓ ' : ''}${e.time && e.source === 'event' ? esc(e.time) + ' ' : ''}${esc(e.title)}</div>`;
+
+function monthGrid() {
+  const Y = cur.getFullYear(), M = cur.getMonth();
+  const sw = new Date(Y, M, 1).getDay(), dim = new Date(Y, M + 1, 0).getDate(), prevDim = new Date(Y, M, 0).getDate(), t = today();
+  const days = []; for (let d = 1; d <= dim; d++) days.push(`${Y}-${String(M + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`);
+  const all = allEvents(days), by = {}; for (const e of all) (by[e.date] ||= []).push(e);
+  let h = `<div class="cal-grid"><div class="cal-weekdays">${['일', '월', '화', '수', '목', '금', '토'].map((d) => `<div class="cal-weekday">${d}</div>`).join('')}</div><div class="cal-days">`;
+  for (let i = sw - 1; i >= 0; i--) h += `<div class="cal-day other"><div class="cal-date">${prevDim - i}</div></div>`;
+  days.forEach((ds, i) => {
+    const ev = by[ds] || [];
+    h += `<div class="cal-day${ds === t ? ' today' : ''}" data-ds="${ds}"><div class="cal-date">${i + 1}</div>${ev.slice(0, 3).map(chip).join('')}${ev.length > 3 ? `<div class="cal-more">+${ev.length - 3}</div>` : ''}</div>`;
+  });
+  const tail = (7 - ((sw + dim) % 7)) % 7;
+  for (let d = 1; d <= tail; d++) h += `<div class="cal-day other"><div class="cal-date">${d}</div></div>`;
+  return h + `</div></div>`;
+}
+function weekStart() { const d = new Date(cur); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - d.getDay()); return ymd(d); }
+function weekGrid() {
+  const s = weekStart(), days = Array.from({ length: 7 }, (_, i) => addDays(s, i)), t = today();
+  const all = allEvents(days), by = {}; for (const e of all) (by[e.date] ||= []).push(e);
+  return `<div class="wk-grid">${days.map((ds, i) => `<div class="wk-col${ds === t ? ' today' : ''}" data-ds="${ds}"><div class="wk-head">${['일', '월', '화', '수', '목', '금', '토'][i]}<b>${Number(ds.slice(8))}</b></div><div class="wk-body">${(by[ds] || []).map(chip).join('') || '<div class="cal-more">—</div>'}</div></div>`).join('')}</div>`;
+}
+function upcomingCard() {
+  const t = today(), total = allEvents().length;
+  if (!total) return `<div class="empty"><h3>아직 일정이 없습니다</h3>직접 추가하거나 산초에게 말로 시키세요.<br>예) "내일 오후 3시 품질 회의 잡아줘"<div style="margin-top:14px;display:flex;gap:6px;justify-content:center;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" data-act="add">+ 일정 추가</button><button class="btn btn-ai btn-sm" data-act="ask-add">✳ 산초에게 시키기</button></div></div>`;
+  const up = allEvents().filter((e) => e.date >= t).slice(0, 8);
+  return `<div class="card"><h3>📅 다가오는 일정 (${up.length})</h3>${up.length ? up.map((e) => `<div class="up-row" data-ds="${esc(e.date)}"><div style="flex:1;min-width:0;"><div class="up-title">${e.done ? '✓ ' : ''}${esc(e.title)}</div>${e.sub ? `<div class="up-time">${esc(e.sub)}</div>` : ''}</div><div class="up-date ${e.color === 'red' ? 'red' : e.color === 'orange' ? 'orange' : ''}">${esc(e.date)}${e.time ? `<div class="up-time">${esc(e.time)}</div>` : ''}</div></div>`).join('')
+    : `<p style="font-size:12px;color:var(--text-light);">다가오는 일정이 없습니다</p>`}
+    <div style="margin-top:12px;"><button class="btn btn-ai btn-sm" data-act="ask-add">✳ 산초에게 시키기</button></div></div>`;
+}
+function render() {
+  const Y = cur.getFullYear(), M = cur.getMonth(), t = today(), n = eventsOn(t).filter((e) => e.source !== 'schedule').length;
+  const title = view === 'month' ? `${Y}년 ${mn[M]}` : (() => { const s = weekStart(), e = addDays(s, 6); return `${s.slice(0, 4)}년 ${Number(s.slice(5, 7))}/${Number(s.slice(8))} – ${Number(e.slice(5, 7))}/${Number(e.slice(8))}`; })();
+  document.getElementById('root').innerHTML = `
+    <div class="mod-head"><div><div class="mod-title">일정</div><div class="mod-sub">일정 · 업무 마감 · 목표 마일스톤 · 회의 · 프로젝트 마감을 한 달력에 — 오늘 ${n}건</div></div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+        <div class="seg"><button class="${view === 'month' ? 'on' : ''}" data-view="month">월</button><button class="${view === 'week' ? 'on' : ''}" data-view="week">주</button></div>
+        <button class="btn btn-ai" data-act="ask-google" title="구글 캘린더에서 이번 달 일정 가져오기">✳ 산초에게</button>
+        <button class="btn btn-primary" data-act="add">+ 일정 추가</button>
+      </div></div>
+    <div class="cal-wrap"><div>
+      <div class="cal-head"><div class="cal-nav"><button class="btn btn-sm" data-nav="-1">◀</button><div class="cal-month">${title}</div><button class="btn btn-sm" data-nav="1">▶</button><button class="btn btn-sm" data-act="today">오늘</button></div>
+        <div class="cal-legend">${SRC.map((s) => `<span class="chip${isOn(s.id) ? ' on' : ''}" data-src="${s.id}"><span class="dot ${s.color}"></span>${s.label}</span>`).join('')}</div></div>
+      ${view === 'month' ? monthGrid() : weekGrid()}
+    </div><div>${upcomingCard()}</div></div>`;
+}
+let raf = 0; const paint = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(render); };
+
+// ---------- 클릭 ----------
+document.getElementById('root').addEventListener('click', (e) => {
+  const el = (sel) => e.target.closest(sel);
+  let x;
+  if ((x = el('[data-view]'))) { view = x.dataset.view; localStorage.cal_view = view; return render(); }
+  if ((x = el('[data-nav]'))) { const d = Number(x.dataset.nav); if (view === 'month') cur = new Date(cur.getFullYear(), cur.getMonth() + d, 1); else cur.setDate(cur.getDate() + 7 * d); return render(); }
+  if ((x = el('[data-src]'))) { const id = x.dataset.src; srcOn[id] = !isOn(id); localStorage.cal_src = JSON.stringify(srcOn); if (id === 'schedule' && srcOn[id]) loadSchedules(); return render(); }
+  if ((x = el('[data-act]'))) {
+    const a = x.dataset.act;
+    if (a === 'today') { cur = new Date(); return render(); }
+    if (a === 'add') return openEvent(today());
+    if (a === 'ask-google') return askGoogle();
+    if (a === 'ask-add') return SANCHO.ask(`내일 오후 3시 품질 회의 일정을 잡아줘. db/events.json 에 events 컬렉션 문서(title, date YYYY-MM-DD, time HH:MM, endTime, allDay false, category '회의', color 'blue', location, attendees[], memo, source 'sancho')로 저장하면 일정 화면에 바로 보여.`);
+  }
+  if ((x = el('.up-row')) || (x = el('.cal-day[data-ds]')) || (x = el('.wk-col[data-ds]'))) return showDate(x.dataset.ds);
+});
+function askGoogle() {
+  const Y = cur.getFullYear(), M = cur.getMonth(), from = `${Y}-${String(M + 1).padStart(2, '0')}-01`, to = `${Y}-${String(M + 1).padStart(2, '0')}-${String(new Date(Y, M + 1, 0).getDate()).padStart(2, '0')}`;
+  SANCHO.ask(`구글 캘린더에서 ${Y}년 ${M + 1}월 일정을 가져와 db/events.json 에 넣어줘. 방법: 연결된 Google Calendar 앱 도구(list_events)로 ${from} ~ ${to} 기간의 내 기본 캘린더 일정을 읽고, 각 일정을 events 컬렉션 문서 { title, date(YYYY-MM-DD), time(HH:MM, 종일이면 ''), endTime(HH:MM), endDate(여러 날이면 마지막 날), allDay(bool), category(제목으로 짐작 — 회의/검사/마감/교육/출장/개인/기타), color(회의 blue·검사 orange·마감 red·교육 green·출장 purple·개인 gray·기타 blue), location, attendees[](참석자 이름 또는 이메일), memo(설명), source:'google', gcalEventId(구글 이벤트 id) } 로 저장해줘. 이미 db/events.json 에 같은 gcalEventId 가 있는 문서는 건너뛰고(중복 금지), 취소된(status cancelled) 일정은 빼. 끝나면 새로 넣은 건수와 건너뛴 건수를 한 줄로 알려줘.`);
+}
+
+// ---------- 모달 ----------
+let mOk = null;
+function openModal(title, bodyHtml, footHtml, onOk) {
+  document.getElementById('mTitle').textContent = title; document.getElementById('mBody').innerHTML = bodyHtml; document.getElementById('mFoot').innerHTML = footHtml || '';
+  document.getElementById('mBody').onclick = null; mOk = onOk || null; document.getElementById('modal').classList.add('active');
+  const f = document.querySelector('#mBody input, #mBody select'); if (f) f.focus();
+}
+function closeModal() { document.getElementById('modal').classList.remove('active'); mOk = null; }
+document.getElementById('mClose').onclick = closeModal;
+document.getElementById('modal').addEventListener('click', (e) => { if (e.target.id === 'modal') closeModal(); });
+document.addEventListener('keydown', (e) => {
+  if (!document.getElementById('modal').classList.contains('active')) return;
+  if (e.key === 'Escape') return closeModal();
+  if (e.key === 'Enter' && !e.isComposing && mOk && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON') { e.preventDefault(); mOk(); }
+});
+document.getElementById('mFoot').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.m === 'ok' && mOk) mOk(); else if (b.dataset.m === 'cancel') closeModal(); else if (b.dataset.m === 'add') { const ds = b.dataset.ds; closeModal(); openEvent(ds); } });
+
+const SRC_TAG = { event: '', task: '업무', okr: '목표', meeting: '회의실', project: '프로젝트', schedule: '산초 예약' };
+const SRC_VIEW = { task: 'projects', okr: 'okr', meeting: 'meeting', project: 'projects', schedule: 'dashboard' };
+function showDate(ds) {   // 원본 showDate — 일정 없으면 바로 추가 모달, 있으면 목록(✎ 수정 · ✕ 삭제 · + 추가)
+  const ev = eventsOn(ds);
+  if (!ev.length) return openEvent(ds);
+  openModal(`${ds} 일정 (${ev.length})`, ev.map((e) => `<div class="dl-item${e.done ? ' done' : ''}">
+      <div style="min-width:0;"><div class="dl-title"><span class="dot ${esc(e.color)}" style="width:8px;height:8px;border-radius:50%;flex:none;display:inline-block;"></span>${esc(e.title)}${SRC_TAG[e.source] ? ` <span class="src-tag">${SRC_TAG[e.source]}</span>` : ''}${e.ref?.source === 'google' ? ' <span class="src-tag">🔗 구글</span>' : e.ref?.source === 'sancho' ? ' <span class="src-tag">✳ 산초</span>' : ''}</div>
+        <div class="dl-sub">${esc(e.time || '종일')}${e.source === 'event' && e.ref.endTime ? ' – ' + esc(e.ref.endTime) : ''}${e.source === 'event' && e.ref.category ? ' · ' + esc(e.ref.category) : ''}${e.source === 'event' && e.ref.projectId && pname(e.ref.projectId) ? ' · ' + esc(pname(e.ref.projectId)) : ''}${e.source === 'event' && e.ref.location ? ' · ' + esc(e.ref.location) : ''}${e.sub ? ' · ' + esc(e.sub) : ''}${e.source === 'event' && Array.isArray(e.ref.attendees) && e.ref.attendees.length ? '<br>참석 ' + esc(e.ref.attendees.join(', ')) : ''}${e.source === 'event' && e.ref.memo ? '<br>' + esc(e.ref.memo) : ''}</div></div>
+      <div class="dl-acts">${e.source === 'event' ? `<button class="btn btn-sm" data-edit="${esc(e.ref.id)}" title="수정">✎</button><button class="btn btn-sm btn-danger" data-del="${esc(e.ref.id)}" title="삭제">✕</button>` : `<button class="btn btn-sm" data-open="${SRC_VIEW[e.source]}" title="해당 화면으로">↗</button>`}</div>
+    </div>`).join(''), `<button class="btn" data-m="cancel">닫기</button><button class="btn btn-primary" data-m="add" data-ds="${esc(ds)}">+ 추가</button>`);
+  document.getElementById('mBody').onclick = (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.edit) { closeModal(); openEvent(ds, b.dataset.edit); }
+    else if (b.dataset.del) deleteEvent(b.dataset.del);
+    else if (b.dataset.open) SANCHO.open(b.dataset.open);
+  };
+}
+async function deleteEvent(id) {
+  if (!confirm('이 일정을 삭제하시겠습니까?')) return;
+  try { await deleteDoc(doc(db, 'events', id)); toast('삭제했습니다', 'ok'); closeModal(); } catch (e) { toast('삭제 실패: ' + e.message, 'err'); }
+}
+function openEvent(ds, id) {   // 원본 openEvent + 수정(id) · 확장 필드(SPEC §5 events)
+  const ev = id ? S.events.find((e) => e.id === id) || {} : {};
+  const att = Array.isArray(ev.attendees) ? ev.attendees : [];
+  const names = new Set(S.users.map((u) => u.name).filter(Boolean));
+  const free = att.filter((a) => !names.has(a));
+  const opt = (v, cur, label) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(label ?? v)}</option>`;
+  openModal(id ? '일정 수정' : '일정 추가', `
+    <div class="fg"><label class="fl">제목</label><input class="fi" id="evT" placeholder="예: PV-101 RT 검사 입회" value="${esc(ev.title)}"></div>
+    <div class="fg row"><div><label class="fl">날짜</label><input class="fi" type="date" id="evD" value="${esc(ev.date || ds || today())}"></div><div><label class="fl">종료 날짜 (선택)</label><input class="fi" type="date" id="evDE" value="${esc(ev.endDate || '')}"></div></div>
+    <div class="fg row3"><div><label class="fl">시작 시각</label><input class="fi" type="time" id="evTm" value="${esc(ev.time || '')}"${ev.allDay ? ' disabled' : ''}></div><div><label class="fl">종료 시각</label><input class="fi" type="time" id="evTE" value="${esc(ev.endTime || '')}"${ev.allDay ? ' disabled' : ''}></div><label class="chk"><input type="checkbox" id="evAll"${ev.allDay ? ' checked' : ''}> 종일</label></div>
+    <div class="fg row"><div><label class="fl">분류</label><select class="fs" id="evC">${Object.keys(CATS).map((c) => opt(c, ev.category || '회의')).join('')}</select></div>
+      <div><label class="fl">프로젝트</label><select class="fs" id="evP">${opt('', ev.projectId || '', '— 없음 —')}${S.projects.filter((p) => !p.hidden || p.id === ev.projectId).map((p) => opt(p.id, ev.projectId || '', `${p.code ? p.code + ' ' : ''}${p.name || ''}`)).join('')}</select></div></div>
+    <div class="fg"><label class="fl">장소</label><input class="fi" id="evL" placeholder="예: 2층 회의실 / 현장" value="${esc(ev.location || '')}"></div>
+    <div class="fg"><label class="fl">참석자</label><div class="att-list" id="evAtt">${S.users.filter((u) => u.active !== false && u.name).map((u) => `<span class="att-chip${att.includes(u.name) ? ' on' : ''}" data-n="${esc(u.name)}">${esc(u.name)}</span>`).join('')}</div><input class="fi" id="evAttF" placeholder="직접 입력 — 쉼표로 구분" value="${esc(free.join(', '))}"></div>
+    <div class="fg"><label class="fl">메모</label><textarea class="ft" id="evM">${esc(ev.memo || '')}</textarea></div>`,
+    `<button class="btn" data-m="cancel">취소</button><button class="btn btn-primary" data-m="ok">${id ? '저장' : '추가'}</button>`, async () => {
+      const g = (i) => document.getElementById(i);
+      const title = g('evT').value.trim(); if (!title) { toast('제목을 입력하세요', 'err'); return g('evT').focus(); }
+      const date = g('evD').value; if (!date) { toast('날짜를 선택하세요', 'err'); return g('evD').focus(); }
+      const allDay = g('evAll').checked, category = g('evC').value;
+      const attendees = [...document.querySelectorAll('#evAtt .att-chip.on')].map((c) => c.dataset.n).concat(g('evAttF').value.split(',').map((s) => s.trim()).filter(Boolean));
+      const data = { title, date, endDate: g('evDE').value && g('evDE').value > date ? g('evDE').value : '', time: allDay ? '' : g('evTm').value, endTime: allDay ? '' : g('evTE').value, allDay, category, color: CATS[category] || 'blue',
+        projectId: g('evP').value, location: g('evL').value.trim(), attendees, memo: g('evM').value.trim() };
+      if (!id) data.source = 'user';
+      try { await setDoc(doc(db, 'events', id || doc(collection(db, 'events')).id), data, { merge: true }); toast(id ? '저장했습니다' : '일정을 추가했습니다', 'ok'); closeModal(); }
+      catch (e) { toast('저장 실패: ' + e.message, 'err'); }
+    });
+  document.getElementById('evAll').onchange = (e) => { document.getElementById('evTm').disabled = document.getElementById('evTE').disabled = e.target.checked; };
+  document.getElementById('evAtt').onclick = (e) => { const c = e.target.closest('.att-chip'); if (c) c.classList.toggle('on'); };
+}
+
+// ---------- 시작: 컬렉션 구독 + 서버 API(공정표 끝날 · 산초 예약) ----------
+async function loadSchedules() { try { const st = await SANCHO.api('/api/state'); S.schedules = Array.isArray(st.schedules) ? st.schedules : []; } catch { S.schedules = []; } paint(); }
+async function loadWbsEnd() {
+  try {
+    const list = await SANCHO.api('/api/wbs'); const out = {};
+    await Promise.all((Array.isArray(list) ? list : []).map(async (w) => { try { const c = await SANCHO.api('/api/wbs?name=' + encodeURIComponent(w.name)); if (c.eMax) out[w.name] = c.eMax; } catch {} }));
+    S.wbsEnd = out;
+  } catch { S.wbsEnd = {}; }
+  paint();
+}
+async function boot() {
+  const sub = (col, key) => onSnapshot(collection(db, col), (qs) => { S[key] = qs.docs.map((d) => ({ id: d.id, ...d.data() })); paint(); }, (e) => toast(`${col} 읽기 실패: ${e.message}`, 'err'));
+  sub('events', 'events'); sub('tasks', 'tasks'); sub('okrs', 'okrs'); sub('meetings', 'meetings'); sub('projects', 'projects'); sub('users', 'users'); sub('rooms', 'rooms');
+  render(); loadWbsEnd(); if (isOn('schedule')) loadSchedules();
+}
+</script></body></html>

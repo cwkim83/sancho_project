@@ -4,7 +4,7 @@
 // 의존 패키지 0. Node 18 이상.
 import { createServer } from 'node:http';
 import { spawn, execFile, execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync, appendFileSync, mkdirSync, readdirSync, existsSync, statSync, cpSync, createReadStream, unlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, appendFileSync, mkdirSync, readdirSync, existsSync, statSync, cpSync, createReadStream, unlinkSync, watch } from 'node:fs';
 import { join, dirname, resolve, sep, basename, extname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -12,7 +12,8 @@ import { fileURLToPath } from 'node:url';
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const DATA = process.env.SANCHO_DATA || join(ROOT, 'data');   // 산초의 모든 상태는 이 폴더 안 텍스트 파일이다. 지우면 초기화. (SANCHO_DATA 로 위치 변경)
 const JOURNAL = join(DATA, 'journal');
-for (const d of [JOURNAL, join(DATA, 'uploads'), join(DATA, 'wiki'), join(DATA, '.claude', 'skills')]) mkdirSync(d, { recursive: true });   // 첨부 · 위키 · 스킬(Claude Code 가 cwd/.claude/skills 를 읽는다)
+const DB = join(DATA, 'db');   // 플랫폼 저장소: 컬렉션 하나 = db/<이름>.json 한 파일 (세종 플랫폼의 Firestore 컬렉션에 해당). 산초(두뇌)도 이 파일을 직접 고친다.
+for (const d of [JOURNAL, DB, join(DATA, 'uploads'), join(DATA, 'wiki'), join(DATA, 'wbs'), join(DATA, '.claude', 'skills')]) mkdirSync(d, { recursive: true });   // 첨부 · 위키 · 스킬(Claude Code 가 cwd/.claude/skills 를 읽는다)
 const PORT = Number(process.env.SANCHO_PORT || 8790);
 
 // ---------- 파일 도우미 ----------
@@ -24,7 +25,8 @@ const ymd = (d) => d.toLocaleDateString('sv-SE');      // YYYY-MM-DD (현지 날
 const hhmm = (d) => d.toTimeString().slice(0, 5);      // HH:MM
 
 const 기본설정 = { name: '산초', model: 'sonnet', effort: 'high', allowShell: false, allowHome: false, allowSelfEdit: false, allowApps: false,
-  vaultPath: '', telegramToken: '', telegramChat: '', geminiKey: '', geminiModel: 'gemini-2.5-flash', token: '' };   // 연결(선택): 옵시디언 볼트 · 텔레그램 배달 · 비상두뇌(Gemini) · 외부 접속 토큰
+  vaultPath: '', telegramToken: '', telegramChat: '', geminiKey: '', geminiModel: 'gemini-2.5-flash', token: '',   // 연결(선택): 옵시디언 볼트 · 텔레그램 배달 · 비상두뇌(Gemini) · 외부 접속 토큰
+  owner: { name: '', title: '', dept: '', company: '', email: '' } };   // 주인(플랫폼 화면의 인사말·사용자 칩·결재선에 쓴다)
 const 모델ID = { sonnet: 'sonnet', opus: 'opus', haiku: 'haiku', fable: 'claude-fable-5-1' };   // 화면 이름 → claude --model 값
 const 노력 = ['low', 'medium', 'high', 'xhigh', 'max'];                                            // claude --effort 값(2.1.269 실측)
 const 연결앱 = ['mcp__claude_ai_Gmail', 'mcp__claude_ai_Google_Calendar', 'mcp__claude_ai_Google_Drive', 'mcp__claude_ai_Microsoft_365'];   // claude.ai 커넥터 서버 이름(공백·점 → _)
@@ -69,7 +71,8 @@ function 시스템프롬프트() {
 6) history.jsonl — 지난 대화 기록. "전에 말한 …" 을 찾을 땐 Grep 한다.
 7) uploads/ — 주인이 채팅에 올린 파일. 말 끝에 [첨부 파일] 목록이 붙으면 Read 로 읽고 답한다(이미지·PDF 도 Read 로 볼 수 있다).
 8) 파일함/ — 네가 만든 파일(엑셀·PPT·워드·PDF·이미지 등)은 여기 저장한다. 만든 파일은 대시보드에 카드로 떠서 주인이 바로 열 수 있다. 만드는 법은 office-docs 스킬을 따른다.
-9) wbs/<프로젝트>.json — 공정표(WBS, 세종 플랫폼의 WBS 를 옮긴 것). 주인이 "WBS 만들어", "공정표에 … 추가", "… 진도율 60%로" 하면 이 파일을 만들고 고친다. 형식과 규칙은 wbs 스킬을 따른다(대단락 lv 0 · 작업 lv 1 · 세부 lv 2, 필드 code·name·lv·mgr·s·e·weight·pct·memo). 진도율은 말단 작업의 pct 만 적고 상위·전체는 대시보드가 가중 합산하며, 계획 대비(PV·EV·SPI)와 간트도 대시보드 WBS 화면이 그린다. 고친 뒤 "왼쪽 WBS 에서 보세요" 라고 알린다.
+9) wbs/<프로젝트>.json — 공정표(WBS, 세종 플랫폼의 WBS 를 옮긴 것). 주인이 "WBS 만들어", "공정표에 … 추가", "… 진도율 60%로" 하면 이 파일을 만들고 고친다. 형식과 규칙은 wbs 스킬을 따른다(대단락 lv 0 · 작업 lv 1 · 세부 lv 2, 필드 code·name·lv·mgr·s·e·weight·pct·memo). 진도율은 말단 작업의 pct 만 적고 상위·전체는 대시보드가 가중 합산하며, 계획 대비(PV·EV·SPI)와 간트도 대시보드 WBS 화면이 그린다. 고친 뒤 "왼쪽 프로젝트 메뉴에서 보세요" 라고 알린다.
+10) db/<컬렉션>.json — 플랫폼 화면(일정·프로젝트·메일정리·메신저·회의·목표·공수·조직·결재·로드맵)의 데이터. 형식은 { "<id>": { …필드 } } 이고, 어느 컬렉션에 어떤 필드가 있는지는 platform 스킬(.claude/skills/platform/SKILL.md)에 있다. 주인이 "일정 잡아줘", "기안서 써줘", "메일 정리해줘", "OKR 갱신" 처럼 말하면 그 스킬을 읽고 해당 파일을 Edit 한다. 화면은 파일이 바뀌면 곧바로 따라 바뀐다(id 는 짧은 영문·숫자, 날짜는 YYYY-MM-DD, 시각은 HH:MM, 시각 도장은 ISO 문자열).
 자동 기억: 대화 중 주인에 관해 새로 알게 된 사실(선호·일정·사람·습관·목표)은 묻지 않아도 memory.md 에 한 줄 덧붙인다. 이미 있는 내용·사소한 것은 빼고, 적었으면 답 끝에 "(기억함)" 이라고 짧게 표시한다. 잊으라 하면 그 줄을 지운다.
 프로젝트: 주인이 어떤 프로젝트(공사·과제·행사)를 이어서 말하면 wiki/프로젝트-<이름>.md 에 목표·단계·진행·다음 할 일을 유지하고, 관련 질문엔 먼저 그 파일을 본다.
 큰 일은 나눠서: 조사·정리·검토처럼 갈래가 여럿인 일은 Task(하위 에이전트)로 나눠 병렬로 맡기고 결과를 합친다(파이스의 delegate 에 해당).
@@ -313,7 +316,7 @@ function 대화기록(sid, firstText) {   // 대화 목록 맨 위로(제목은 
 }
 
 // ---------- 파일: 두뇌가 만든 파일 알아내기 · 열기 · 내려받기 ----------
-const 제외 = new Set(['history.jsonl', 'state.json', 'settings.json', 'memory.md', 'schedule.json', 'uploads', 'journal', 'wiki', 'backups', 'wbs']);
+const 제외 = new Set(['history.jsonl', 'state.json', 'settings.json', 'memory.md', 'schedule.json', 'uploads', 'journal', 'wiki', 'backups', 'wbs', 'db']);
 
 // ---------- WBS(공정표) — 세종 플랫폼 wbs.html 의 계산부를 옮김: 가중 합산 진도율 · 계획 대비(EVMS: PV/EV/SV/SPI) · S-곡선 · 지연 판정 ----------
 // 파일: data/wbs/<프로젝트>.json = { name, no?, items:[{code,name,lv,mgr,s,e,weight,pct,memo}] } — 순서대로 나열, 계층은 lv 로(자식은 부모 바로 뒤에 lv+1)
@@ -362,6 +365,49 @@ function 허용경로(q) {   // 데이터 폴더 안, (허용했을 때) 홈 폴
 const 첨부이름 = (f) => basename(f).replace(/^[a-z0-9]{6,9}-/, '');   // uploads/mtytchox-회의메모.txt → 회의메모.txt
 const 일지 = (n = 2) => readdirSync(JOURNAL).filter((f) => f.endsWith('.md')).sort().slice(-n)
   .map((f) => ({ date: f.slice(0, -3), text: readText(join(JOURNAL, f)) }));
+
+// ---------- 플랫폼 저장소(/api/db) — Firestore 흉내. 컬렉션 = db/<이름>.json 한 파일 = { id: 문서 } ----------
+// 화면(public/m/*.html)은 sdb.js 로 Firestore 함수 이름 그대로 쓰고, 두뇌(Claude)는 파일을 Edit 한다. 둘 다 같은 파일이라 서로 곧바로 보인다.
+const 컬렉션이름 = (n) => /^[A-Za-z0-9_\-]{1,80}$/.test(String(n || '')) ? String(n) : null;
+const 컬렉션 = (n) => { const v = readJson(join(DB, `${n}.json`), {}); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; };
+const 컬렉션저장 = (n, map) => writeJson(join(DB, `${n}.json`), map);
+const 컬렉션목록 = () => ls(DB, (f) => f.endsWith('.json')).map((f) => f.slice(0, -5));
+function 깊은병합(base, patch) {   // updateDoc: 'a.b' 점 경로 · increment · arrayUnion/Remove 지원
+  const out = { ...(base || {}) };
+  for (const [k, v] of Object.entries(patch || {})) {
+    const path = k.split('.'); let o = out;
+    for (let i = 0; i < path.length - 1; i++) { o[path[i]] = { ...(o[path[i]] && typeof o[path[i]] === 'object' ? o[path[i]] : {}) }; o = o[path[i]]; }
+    const last = path[path.length - 1], cur = o[last];
+    if (v && typeof v === 'object' && '__inc' in v) o[last] = (Number(cur) || 0) + Number(v.__inc);
+    else if (v && typeof v === 'object' && '__union' in v) o[last] = [...new Set([...(Array.isArray(cur) ? cur : []), ...v.__union])];
+    else if (v && typeof v === 'object' && '__remove' in v) o[last] = (Array.isArray(cur) ? cur : []).filter((x) => !v.__remove.includes(x));
+    else if (v && typeof v === 'object' && !Array.isArray(v) && cur && typeof cur === 'object' && !Array.isArray(cur)) o[last] = 깊은병합(cur, v);
+    else o[last] = v;
+  }
+  return out;
+}
+const 구독자 = new Set();   // SSE 로 "컬렉션이 바뀌었다" 만 알린다(내용은 화면이 다시 읽는다)
+const 알림 = (m) => { const line = `data: ${JSON.stringify(m)}\n\n`; for (const r of 구독자) { try { r.write(line); } catch {} } };
+function db쓰기(col, id, data, merge) {
+  const map = 컬렉션(col), now = new Date().toISOString(), old = map[id];
+  map[id] = merge === 'deep' ? 깊은병합(old, data) : merge ? { ...(old || {}), ...data } : { ...data };
+  if (map[id] && typeof map[id] === 'object') { map[id].updatedAt = now; if (!old) map[id].createdAt = map[id].createdAt || now; }
+  컬렉션저장(col, map); 알림({ col, id, op: old ? 'update' : 'add' }); return map[id];
+}
+function db지우기(col, id) { const map = 컬렉션(col); if (!(id in map)) return false; delete map[id]; 컬렉션저장(col, map); 알림({ col, id, op: 'delete' }); return true; }
+// 두뇌(Claude)가 db/*.json 을 Edit 하면 열려 있는 화면도 따라 바뀌게 — 폴더 감시(0.3초 모아서)
+{ let timer = null, 바뀐 = new Set(); try { watch(DB, (_e, f) => { if (!f || !String(f).endsWith('.json')) return; 바뀐.add(String(f).slice(0, -5)); clearTimeout(timer); timer = setTimeout(() => { for (const c of 바뀐) 알림({ col: c, op: 'external' }); 바뀐.clear(); }, 300); }); } catch {} }
+const 문서제목 = (d, id) => String(d.title || d.name || d.subject || d.objective || d.text || d.code || id).slice(0, 60);
+function 검색(q) {   // 헤더 검색: 플랫폼 데이터 · 공정표 · 위키 · 예약 · 지난 대화
+  const needle = q.toLowerCase(), out = [], hit = (s) => String(s || '').toLowerCase().includes(needle);
+  for (const col of 컬렉션목록()) for (const [id, d] of Object.entries(컬렉션(col))) { if (!d || typeof d !== 'object') continue; const text = JSON.stringify(d); if (hit(text)) { const i = text.toLowerCase().indexOf(needle); out.push({ type: col, id, title: 문서제목(d, id), sub: text.slice(Math.max(0, i - 30), i + 50).replace(/[{}"\\]/g, ' ') }); } if (out.length > 60) break; }
+  for (const f of ls(join(DATA, 'wbs'), (x) => x.endsWith('.json'))) { const d = readJson(join(DATA, 'wbs', f), {}); if (hit(f) || hit(JSON.stringify(d))) out.push({ type: 'wbs', id: f.slice(0, -5), title: d.name || f.slice(0, -5), sub: '공정표' }); }
+  for (const f of ls(join(DATA, 'wiki'), (x) => x.endsWith('.md'))) { const t = readText(join(DATA, 'wiki', f)); if (hit(f) || hit(t)) { const i = t.toLowerCase().indexOf(needle); out.push({ type: 'wiki', id: f, title: f.replace(/\.md$/, ''), sub: i >= 0 ? t.slice(Math.max(0, i - 30), i + 60).replace(/\s+/g, ' ') : '위키' }); } }
+  for (const j of 예약목록()) if (hit(j.prompt) || hit(j.id)) out.push({ type: 'schedule', id: j.id, title: j.prompt.slice(0, 60), sub: `예약 ${j.time}` });
+  const hist = readText(p('history.jsonl')).trim().split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter((h) => h && hit(h.text)).slice(-15);
+  for (const h of hist) out.push({ type: 'chat', id: h.sid || '', title: String(h.text).replace(/\s+/g, ' ').slice(0, 70), sub: `${h.role === 'user' ? '나' : 설정().name} · ${String(h.ts).slice(0, 10)}` });
+  return out.slice(0, 80);
+}
 
 // ---------- HTTP ----------
 const send = (res, code, body, type = 'application/json; charset=utf-8') => { res.writeHead(code, { 'content-type': type }); res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body)); };
@@ -422,10 +468,43 @@ createServer(async (req, res) => {
   const route = `${req.method} ${url.pathname}`;
   try {
     if (route === 'GET /') return send(res, 200, readFileSync(join(ROOT, 'public', 'index.html')), 'text/html; charset=utf-8');
+    if ((req.method === 'GET' || req.method === 'HEAD') && url.pathname.startsWith('/m/')) {   // 플랫폼 모듈 화면(public/m/**) — iframe 으로 껍데기 안에 뜬다. HEAD 는 "있나" 확인용(부서 도구함 배지)
+      const abs = resolve(join(ROOT, 'public', 'm', decodeURIComponent(url.pathname.slice(3))));
+      if (!안에(abs, join(ROOT, 'public', 'm')) || !existsSync(abs) || !statSync(abs).isFile()) return send(res, 404, '없는 화면이에요', 'text/plain; charset=utf-8');
+      res.writeHead(200, { 'content-type': { ...MIME, '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.mjs': 'application/javascript; charset=utf-8', '.woff2': 'font/woff2', '.ico': 'image/x-icon' }[extname(abs).toLowerCase()] || 'application/octet-stream', 'cache-control': 'no-cache' });
+      return createReadStream(abs).pipe(res);
+    }
     if (route === 'GET /health') return send(res, 200, { ok: true, busy: 현재 ? 현재.kind : null, version: CLAUDE_VERSION });
+    if (route === 'GET /favicon.ico') return send(res, 200, Buffer.from('PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iOCIgZmlsbD0iIzFFNkZEOSIvPjx0ZXh0IHg9IjE2IiB5PSIyMiIgZm9udC1zaXplPSIxOCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0id2hpdGUiPuKcszwvdGV4dD48L3N2Zz4=', 'base64'), 'image/svg+xml');
     // 외부 접속(선택): 설정에 접속 토큰이 있으면 API 는 토큰이 있어야 한다(터널로 밖에 열 때). 화면(/)은 토큰을 묻는다.
     const 토큰 = 설정().token;
     if (토큰 && url.pathname.startsWith('/api/') && req.headers['x-token'] !== 토큰 && url.searchParams.get('token') !== 토큰) return send(res, 401, { error: '접속 토큰이 필요해요' });
+    if (url.pathname.startsWith('/api/db')) {   // 플랫폼 저장소 — sdb.js(Firestore 흉내)가 쓴다
+      const seg = url.pathname.split('/').slice(3).map((s) => decodeURIComponent(s)).filter(Boolean), [c, id] = seg;
+      if (!seg.length) return send(res, 200, 컬렉션목록().map((n) => ({ name: n, count: Object.keys(컬렉션(n)).length })));
+      if (c === '_events') {   // SSE: 어느 컬렉션이 바뀌었는지
+        res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache', connection: 'keep-alive' });
+        res.write('data: {"hello":true}\n\n'); 구독자.add(res); req.on('close', () => 구독자.delete(res)); return;
+      }
+      if (c === '_batch' && req.method === 'POST') {
+        const { ops } = await readBody(req); let n = 0;
+        for (const o of Array.isArray(ops) ? ops : []) { const col = 컬렉션이름(o.col); if (!col || !o.id) continue; n++; if (o.op === 'delete') db지우기(col, String(o.id)); else db쓰기(col, String(o.id), o.data || {}, o.op === 'update' ? 'deep' : !!o.merge); }
+        return send(res, 200, { ok: true, n });
+      }
+      const col = 컬렉션이름(c); if (!col) return send(res, 400, { error: '컬렉션 이름은 영문·숫자·_·- 만' });
+      if (!id) {
+        if (req.method === 'GET') return send(res, 200, Object.entries(컬렉션(col)).map(([k, v]) => ({ id: k, data: v })));
+        if (req.method === 'POST') { const nid = Date.now().toString(36) + Math.random().toString(36).slice(2, 8); db쓰기(col, nid, (await readBody(req)).data || {}, false); return send(res, 200, { id: nid }); }
+      } else {
+        if (req.method === 'GET') { const d = 컬렉션(col)[id]; return send(res, 200, d === undefined ? { id, exists: false } : { id, data: d }); }
+        if (req.method === 'PUT') { const b = await readBody(req); return send(res, 200, { id, data: db쓰기(col, id, b.data || {}, b.merge) }); }
+        if (req.method === 'DELETE') return send(res, 200, { ok: db지우기(col, id) });
+      }
+      return send(res, 405, { error: 'method' });
+    }
+    if (route === 'GET /api/me') { const s = 설정(); return send(res, 200, { uid: 'owner', name: s.owner?.name || '주인', title: s.owner?.title || '', dept: s.owner?.dept || '', company: s.owner?.company || '', email: s.owner?.email || '', sancho: s.name }); }
+    if (route === 'GET /api/journal') return send(res, 200, 일지(Math.min(60, Number(url.searchParams.get('days')) || 7)));
+    if (route === 'GET /api/search') { const q = String(url.searchParams.get('q') || '').trim(); return send(res, 200, q.length < 1 ? [] : 검색(q)); }
     if (route === 'GET /api/state') {
       const st = 상태();
       return send(res, 200, {
@@ -434,6 +513,9 @@ createServer(async (req, res) => {
         skills: ls(join(DATA, '.claude', 'skills')), wiki: ls(join(DATA, 'wiki'), (f) => f.endsWith('.md')),
         wbs: (() => { try { return JSON.parse(readText(p('wbs.json')) || 'null'); } catch { return null; } })(),
         canAutostart: !!시작바로가기, autostart: !!(시작바로가기 && existsSync(시작바로가기)),
+        // 만들어져 있는 플랫폼 화면 — 껍데기가 이걸 보고 메뉴를 켜고, 없는 것은 "준비 중" 으로 그린다
+        modules: ls(join(ROOT, 'public', 'm'), (f) => f.endsWith('.html')).map((f) => f.slice(0, -5)),
+        tools: ls(join(ROOT, 'public', 'm', 'tools'), (f) => f.endsWith('.html')).map((f) => f.slice(0, -5)),
         wbs: ls(join(DATA, 'wbs'), (f) => f.endsWith('.json')).map((f) => { const d = readJson(join(DATA, 'wbs', f), {}); const c = wbs계산(d); return { name: f.slice(0, -5), title: d.name || f.slice(0, -5), pct: c.ev, spi: c.spi, late: c.late }; }),
       });
     }
@@ -460,6 +542,11 @@ createServer(async (req, res) => {
       const file = wbs파일(name); if (!file || !existsSync(file)) return send(res, 404, { error: '없는 공정표예요' });
       const raw = readJson(file, null); if (!raw) return send(res, 409, { error: `${name}.json 이 JSON 형식이 아니에요 — 산초에게 고쳐 달라고 하세요` });
       return send(res, 200, { ...wbs계산(raw), name: raw.name || name, file: name, history: ls(join(DATA, 'wbs', '_history'), (f) => f.startsWith(name + '_')).sort().reverse().slice(0, 20) });
+    }
+    if (route === 'POST /api/wbs/save') {   // 프로젝트 화면에서 공정표 뼈대 만들기/덮어쓰기(있던 판은 이력에 남긴다)
+      const { name, doc } = await readBody(req); const file = wbs파일(String(name || '')); if (!file || !doc || typeof doc !== 'object') return send(res, 400, { error: '이름과 doc 이 필요해요' });
+      if (existsSync(file)) { mkdirSync(join(DATA, 'wbs', '_history'), { recursive: true }); cpSync(file, join(DATA, 'wbs', '_history', `${name}_${ymd(new Date())}-${hhmm(new Date()).replace(':', '')}.json`)); }
+      writeJson(file, { name: doc.name || name, no: doc.no || '', items: Array.isArray(doc.items) ? doc.items : [] }); return send(res, 200, { ok: true, name });
     }
     if (route === 'POST /api/wbs/snapshot') {   // 지금 판을 이력에 남긴다(플랫폼의 Rev 이력)
       const { name } = await readBody(req); const file = wbs파일(name); if (!file || !existsSync(file)) return send(res, 404, { error: '없는 공정표예요' });
