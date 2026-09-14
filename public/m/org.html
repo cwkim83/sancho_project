@@ -1,0 +1,366 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>산초 · 조직/권한</title>
+<link rel="stylesheet" href="/m/platform.css">
+<script src="/m/sdb.js"></script>
+<style>
+/* 조직/권한 — 세종 플랫폼 v2 index.html 7031-7143(org) · 7291-7319(openEditUserProfile) · 4614-4675(CSV) 이식.
+   .org-grid .dept-tree-box .dept-item .org-table .org-dept-row .org-ico-btn .perm-chip 는 platform.css 것을 그대로 쓴다. */
+.dt-row { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 6px; font-size: 13px; }
+.dt-row:hover { background: var(--bg2); }
+.dt-row .ico { width: 18px; text-align: center; flex-shrink: 0; }
+.dt-row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dt-row .cnt { font-size: 11px; color: var(--text-lighter); flex-shrink: 0; }
+.dt-row .btn { padding: 1px 5px; font-size: 10px; border-radius: 5px; }
+.dt-acts { display: flex; gap: 2px; opacity: 0; flex-shrink: 0; }
+.dt-row:hover .dt-acts { opacity: 1; }
+.dt-head { font-size: 12px; font-weight: 700; color: var(--text-light); display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; padding: 0 4px; }
+.av { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 10px; font-weight: 700; flex-shrink: 0; background: var(--primary); }
+.u-off td { opacity: .5; }
+.u-name { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+.u-name b { font-size: 12px; font-weight: 600; }
+.u-name .ti { font-size: 11px; color: var(--text-light); }
+.cell-sm { font-size: 11px; color: var(--text-lighter); }
+.org-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 14px; }
+.org-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
+.org-card .hd { display: flex; align-items: center; gap: 9px; margin-bottom: 6px; }
+.org-card .hd .ico { font-size: 22px; line-height: 1; }
+.org-card .hd .nm { font-size: 15px; font-weight: 700; flex: 1; min-width: 0; }
+.org-card .memo { font-size: 11px; color: var(--text-lighter); margin: 6px 0 0; line-height: 1.5; }
+.org-ava { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.org-ava .m { display: flex; align-items: center; gap: 5px; background: var(--bg2); border-radius: 14px; padding: 2px 9px 2px 2px; font-size: 11px; white-space: nowrap; }
+.org-ava .m.off { opacity: .5; }
+.org-ava .av { width: 20px; height: 20px; font-size: 9px; }
+.tool-chk { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 10px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; max-height: 200px; overflow-y: auto; }
+.tool-chk label { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 0; cursor: pointer; }
+.csv-prev { max-height: 320px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; margin-top: 10px; }
+.csv-prev table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.csv-prev th { position: sticky; top: 0; background: var(--bg2); padding: 6px 8px; text-align: left; font-size: 11px; color: var(--text-light); }
+.csv-prev td { padding: 5px 8px; border-top: 1px solid var(--border-light); }
+@media (max-width: 900px) { .org-grid { grid-template-columns: 1fr; } }
+</style>
+</head><body><div class="content-pad" id="root"></div>
+<div class="toast" id="toast"></div>
+<div class="overlay" id="modal"><div class="modal" id="modalBox">
+  <div class="modal-head"><div class="modal-title" id="mTitle"></div><button class="btn btn-sm btn-ghost" data-close>✕</button></div>
+  <div class="modal-body" id="mBody"></div>
+  <div class="modal-foot"><button class="btn" data-close>취소</button><button class="btn btn-primary" id="mOk">저장</button></div>
+</div></div>
+<script>
+const { db, doc, collection, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, query, where, orderBy, limit, writeBatch } = window.fb;
+const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const toast = (t, kind = '') => { const el = document.getElementById('toast'); el.textContent = t; el.className = 'toast on ' + kind; clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove('on'), 2200); };
+window.addEventListener('message', (e) => { if (e.data?.sancho && e.data.act === 'theme') document.documentElement.dataset.theme = e.data.theme || ''; });
+let me = null;                                  // 주인(단일 사용자): {uid:'owner', name, title, dept, email}
+window.fb.me().then((u) => { me = u; boot(); });
+
+const $ = (s) => document.querySelector(s);
+const v = (s) => ($(s) ? $(s).value : '').trim();
+const S = { users: [], depts: [], ready: false };      // onSnapshot 이 채운다 — 별도 캐시 없음
+const V = { tab: 'list' };                             // UI 취향(메모리)
+
+// ── 직급·등급 (원본 TITLES 1252 / GRADES 1254 / gradeByTitle 1263) ──
+const TITLES = ['대표이사', '부사장', '상무이사', '전무이사', '이사', '부장', '차장', '과장', '대리', '주임', '사원'];
+const ROLES = {
+  super: { label: '슈퍼관리자', color: 'red', desc: '시스템 전체 관리' },
+  exec: { label: '임원', color: 'purple', desc: '전사 목표 · 전 부서 조회' },
+  manager: { label: '부서장', color: 'blue', desc: '자기 부서 목표 · 부서원 업무' },
+  member: { label: '일반', color: 'gray', desc: '개인 목표 · 본인 업무' },
+};
+const roleByTitle = (t) => ['대표이사', '부사장', '상무이사', '전무이사', '이사'].includes(t) ? 'exec' : (t === '부장' ? 'manager' : 'member');
+// 부서 도구함에 넣을 수 있는 도구 (껍데기 index.html 의 TOOLS 520-535 와 같은 id)
+const TOOLS = { deptsch: '📅 부서 스케줄', itp: '📋 ITP Builder', itpview: '📚 ITP 조회', qa: '📄 QA Doc Generator', qaview: '📚 QA Doc 조회',
+  ncr: '⚠️ NCR 관리', car: '🔧 CAR 관리', qadash: '📊 품질종합분석표', mobile: '📱 Mobile Inspection', mtools: '🔬 측정기구 반입출',
+  asset: '🖥️ 자산 관리 대장', agitator: '🌀 교반기 선정·설계', pvcalc: '⚙️ 압력용기 계산', purchase: '🛒 구매부 업무일지' };
+
+// ── 조회 ──
+const uColor = (u) => u.color || 'var(--primary)';
+const role = (u) => ROLES[u.role] || ROLES.member;
+const user = (id) => S.users.find((u) => u.id === id);
+const inDept = (d) => S.users.filter((u) => u.dept === d.id || u.dept === d.name);
+const known = () => new Set(S.depts.flatMap((d) => inDept(d).map((u) => u.id)));
+const avatar = (u) => `<div class="av" style="background:${esc(uColor(u))}">${esc((u.name || '?').charAt(0))}</div>`;
+const sortedDepts = () => [...S.depts].sort((a, b) => (Number(a.order) || 99) - (Number(b.order) || 99));
+const toolsOf = (d) => Array.isArray(d.tools) ? d.tools : [];
+
+// ── 쓰기 (updateDoc = 깊은 병합이라 모르는 필드는 보존된다) ──
+const uRef = (id) => doc(db, 'users', id), dRef = (id) => doc(db, 'depts', id);
+async function save(ref, data) { try { await updateDoc(ref, data); toast('저장했습니다', 'ok'); } catch (e) { toast('저장 실패: ' + e.message, 'err'); } }
+
+// ── 산초에게 ──
+function askOrg() {
+  const names = S.depts.map((d) => d.name).join('·') || '(아직 없음)';
+  SANCHO.ask(`우리 조직도를 이렇게 만들어줘: data/db/depts.json 과 data/db/users.json 을 platform 스킬 형식으로 갱신해줘.\n`
+    + `· depts 문서: {name, icon(이모지), li(lucide 아이콘 이름), order(숫자), lead(부서장 userId), memo, tools[]} — tools 는 부서 도구함에 보일 도구 id 목록이며 고를 수 있는 값은 ${Object.keys(TOOLS).join(', ')} 이다. 지금 부서는 ${names}.\n`
+    + `· users 문서: {name, title(직급: ${TITLES.join('/')}), dept(부서 이름), email, phone, role(super|exec|manager|member), active(true/false), color(#RRGGBB)}. 주인 문서 id 는 owner 이고 지우면 안 된다.\n`
+    + `기존 문서는 지우지 말고 필요한 필드만 고치거나 새 id 로 추가해줘. 직급이 이사 이상이면 role 은 exec, 부장이면 manager, 그 아래는 member 로 맞춰줘. 끝나면 부서 몇 개·사람 몇 명을 바꿨는지 한 줄로 보고해줘.`);
+}
+
+// ── 화면 ──
+function render() {
+  if (!S.ready) return;
+  const root = $('#root');
+  if (!S.users.length && !S.depts.length) {
+    root.innerHTML = head() + `<div class="empty"><h3>등록된 조직 정보가 없습니다</h3>부서를 만들고 사람을 등록하면 이 화면과 왼쪽 사이드바의 부서 도구함이 함께 채워집니다.
+      <div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><button class="btn btn-primary" data-act="dept-new">+ 부서 추가</button><button class="btn" data-act="user-new">+ 사용자 추가</button><button class="btn btn-ai" data-act="ai">✳ 산초에게: 조직도 만들어줘</button></div></div>`;
+    return;
+  }
+  root.innerHTML = head() + `
+    <div class="tabs"><div class="tab ${V.tab === 'list' ? 'on' : ''}" data-act="tab" data-tab="list">명부 · 부서 관리</div><div class="tab ${V.tab === 'chart' ? 'on' : ''}" data-act="tab" data-tab="chart">조직도 보기</div></div>
+    ${V.tab === 'list' ? listView() : chartView()}`;
+}
+function head() {
+  const act = S.users.filter((u) => u.active !== false).length;
+  return `<div class="mod-head"><div><div class="mod-title">👥 조직 / 권한</div>
+      <div class="mod-sub">부서 ${S.depts.length}개 · 구성원 ${S.users.length}명(활성 ${act}명) — 부서 도구함 설정이 왼쪽 사이드바를 그대로 바꿉니다</div></div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-ai" data-act="ai">✳ 산초에게 · 조직도 만들기</button>
+      <button class="btn" data-act="csv">📋 CSV 붙여넣기</button>
+      <button class="btn btn-primary" data-act="user-new">+ 사용자 추가</button>
+    </div></div>`;
+}
+
+// 명부: 왼쪽 부서 관리 패널 + 오른쪽 부서별로 묶은 한 장의 테이블 (원본 org() 7031-7143)
+function listView() {
+  const ds = sortedDepts(), k = known();
+  const rest = S.users.filter((u) => !k.has(u.id));
+  const groups = ds.map((d) => ({ id: d.id, icon: d.icon || '🏛', name: d.name || d.id, lead: d.lead, users: inDept(d) }));
+  if (rest.length) groups.push({ id: '', icon: '❓', name: '부서 미지정', lead: '', users: rest });
+  return `<div class="org-grid">
+    <div class="dept-tree-box">
+      <div class="dt-head"><span>부서 ${ds.length}개</span><button class="btn btn-sm" data-act="dept-new">+ 추가</button></div>
+      ${ds.length ? ds.map((d, i) => `<div class="dt-row" data-did="${esc(d.id)}">
+        <span class="ico">${esc(d.icon || '🏛')}</span><span class="nm">${esc(d.name || d.id)}</span><span class="cnt">${inDept(d).length}명</span>
+        <span class="dt-acts">
+          <button class="btn btn-sm" data-act="dept-up" title="위로" ${i === 0 ? 'disabled' : ''}>↑</button>
+          <button class="btn btn-sm" data-act="dept-down" title="아래로" ${i === ds.length - 1 ? 'disabled' : ''}>↓</button>
+          <button class="btn btn-sm" data-act="dept-edit" title="부서 수정 · 도구함 설정">✏️</button>
+          <button class="btn btn-sm" data-act="dept-del" title="부서 삭제">🗑️</button>
+        </span></div>`).join('') : '<div class="fh" style="padding:8px 4px">부서가 없습니다. [+ 추가] 로 만드세요.</div>'}
+      <div class="fh" style="margin-top:10px;border-top:1px solid var(--border-light);padding-top:8px">✏️ 안에서 <b>부서 도구함에 보일 도구</b>를 고르면 왼쪽 사이드바가 바로 바뀝니다.</div>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <table class="org-table">
+        <thead><tr><th>이름 / 직급</th><th>이메일</th><th>전화</th><th>등급</th><th>상태</th><th style="text-align:right">관리</th></tr></thead>
+        ${groups.filter((g) => g.users.length).map((g) => `<tbody>
+          <tr class="org-dept-row"><td colspan="6">${esc(g.icon)} ${esc(g.name)} <span style="color:var(--text-lighter);font-weight:400">(${g.users.length}명${g.lead && user(g.lead) ? ' · 부서장 ' + esc(user(g.lead).name) : ''})</span></td></tr>
+          ${g.users.map(userRow).join('')}</tbody>`).join('')}
+      </table>
+      ${S.users.length ? '' : '<div class="fh" style="padding:18px;text-align:center">등록된 사람이 없습니다. [+ 사용자 추가] 또는 [📋 CSV 붙여넣기] 를 쓰세요.</div>'}
+    </div></div>`;
+}
+function userRow(u) {
+  const r = role(u), off = u.active === false, isMe = u.id === 'owner';
+  return `<tr class="${off ? 'u-off' : ''}" data-uid="${esc(u.id)}">
+    <td><div class="u-name">${avatar(u)}<div><b>${esc(u.name || '(이름 없음)')}</b> <span class="ti">${esc(u.title || '')}</span>${isMe ? ' <span class="b-pill blue">나</span>' : ''}</div></div></td>
+    <td class="cell-sm">${esc(u.email || '—')}</td>
+    <td class="cell-sm">${esc(u.phone || '—')}</td>
+    <td><span class="b-pill ${r.color}">${esc(r.label)}</span></td>
+    <td>${off ? '<span class="b-pill gray">비활성</span>' : '<span class="b-pill green">활성</span>'}</td>
+    <td style="text-align:right;white-space:nowrap">
+      <button class="org-ico-btn" data-act="user-edit" title="사용자 수정">✏️</button>
+      <button class="org-ico-btn" data-act="user-off" title="${off ? '다시 활성화' : '비활성으로 (기록은 그대로 둡니다)'}">${off ? '🔓' : '🔒'}</button>
+      ${isMe ? '' : '<button class="org-ico-btn" data-act="user-del" title="완전 삭제" style="color:var(--danger)">🗑️</button>'}
+    </td></tr>`;
+}
+
+// 조직도 보기: 부서 카드 (CSS 만, 라이브러리 없음)
+function chartView() {
+  const ds = sortedDepts(), k = known(), rest = S.users.filter((u) => !k.has(u.id));
+  const card = (icon, name, lead, memo, us) => {
+    const l = lead ? user(lead) : null;
+    return `<div class="org-card">
+      <div class="hd"><span class="ico">${esc(icon)}</span><span class="nm">${esc(name)}</span><span class="b-pill blue">${us.length}명</span></div>
+      <div class="fh" style="margin:0">부서장: ${l ? esc(l.name) + ' ' + esc(l.title || '') : '<span style="color:var(--text-lighter)">미지정</span>'}</div>
+      ${memo ? `<div class="memo">${esc(memo)}</div>` : ''}
+      <div class="org-ava">${us.length ? us.map((u) => `<span class="m ${u.active === false ? 'off' : ''}" title="${esc((u.title || '') + ' · ' + (u.email || ''))}">${avatar(u)}${esc(u.name || '?')}</span>`).join('') : '<span class="fh" style="margin:0">구성원 없음</span>'}</div>
+    </div>`;
+  };
+  return `<div class="org-cards">
+    ${ds.map((d) => card(d.icon || '🏛', d.name || d.id, d.lead, d.memo, inDept(d))).join('')}
+    ${rest.length ? card('❓', '부서 미지정', '', '부서를 지정하면 이 카드에서 사라집니다.', rest) : ''}
+  </div>`;
+}
+
+// ── 동작 (data-act 위임) ──
+const ACT = {
+  'tab': (_u, _d, el) => { V.tab = el.dataset.tab; render(); },
+  'ai': askOrg,
+  'csv': openCsvModal,
+  'user-new': () => openUserModal(null),
+  'user-edit': (u) => openUserModal(u),
+  'user-off': (u) => { if (!u) return; save(uRef(u.id), { active: u.active === false }); },
+  'user-del': async (u) => {
+    if (!u || u.id === 'owner') return;
+    if (!confirm(`${u.name} ${u.title || ''} 님을 완전히 삭제하시겠습니까?\n일정·업무·결재 등에 남은 기록의 이름은 조회되지 않습니다.\n접근만 막으려면 [취소] 후 🔒 를 쓰세요.`)) return;
+    try { await deleteDoc(uRef(u.id)); toast('삭제했습니다'); } catch (e) { toast('삭제 실패: ' + e.message, 'err'); }
+  },
+  'dept-new': () => openDeptModal(null),
+  'dept-edit': (_u, d) => openDeptModal(d),
+  'dept-up': (_u, d) => moveDept(d, -1),
+  'dept-down': (_u, d) => moveDept(d, 1),
+  'dept-del': async (_u, d) => {
+    if (!d) return;
+    const n = inDept(d).length;
+    if (!confirm(`"${d.name}" 부서를 삭제하시겠습니까?${n ? `\n소속 ${n}명은 "부서 미지정" 으로 남습니다.` : ''}\n왼쪽 사이드바의 부서 도구함에서도 사라집니다.`)) return;
+    try { await deleteDoc(dRef(d.id)); toast('삭제했습니다'); } catch (e) { toast('삭제 실패: ' + e.message, 'err'); }
+  },
+};
+$('#root').addEventListener('click', (e) => {
+  const el = e.target.closest('[data-act]'); if (!el || el.disabled) return;
+  const tr = el.closest('[data-uid]'), u = tr ? user(tr.dataset.uid) : null;
+  const dr = el.closest('[data-did]'), d = dr ? S.depts.find((x) => x.id === dr.dataset.did) : null;
+  ACT[el.dataset.act] && ACT[el.dataset.act](u, d, el);
+});
+
+// 부서 순서 바꾸기: 새 차례대로 order 를 1..n 으로 다시 매긴다(값이 비었거나 겹쳐도 안전하다)
+async function moveDept(d, dir) {
+  if (!d) return;
+  const ds = sortedDepts(), i = ds.findIndex((x) => x.id === d.id), j = i + dir;
+  if (i < 0 || j < 0 || j >= ds.length) return;
+  [ds[i], ds[j]] = [ds[j], ds[i]];
+  try {
+    const b = writeBatch();
+    ds.forEach((x, n) => { if ((Number(x.order) || 0) !== n + 1) b.update(dRef(x.id), { order: n + 1 }); });
+    await b.commit();
+  } catch (e) { toast('순서 저장 실패: ' + e.message, 'err'); }
+}
+
+// ── 모달 셸 (원본 openModal/closeModal 5119-5138) ──
+let mOnOk = null;
+function openModal(title, html, onOk, wide) {
+  $('#mTitle').textContent = title; $('#mBody').innerHTML = html; mOnOk = onOk;
+  $('#modalBox').classList.toggle('wide', !!wide);
+  $('#mOk').style.display = onOk ? '' : 'none';
+  $('#modal').classList.add('active');
+  const first = $('#mBody').querySelector('input,select,textarea'); if (first) first.focus();
+}
+function closeModal() { $('#modal').classList.remove('active'); mOnOk = null; }
+$('#mOk').onclick = () => mOnOk && mOnOk();
+$('#modal').addEventListener('click', (e) => { if (e.target === $('#modal') || e.target.closest('[data-close]')) closeModal(); });
+$('#mBody').addEventListener('keydown', (e) => { if (e.isComposing) return; if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); mOnOk && mOnOk(); } });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+const opt = (val, label, sel) => `<option value="${esc(val)}" ${sel ? 'selected' : ''}>${esc(label)}</option>`;
+
+// 사용자 추가/수정 (원본 openEditUserProfile 7291 + 신규 등록). 권한 분기 없음 — 주인이 다 한다
+function openUserModal(ex) {
+  const deptOpts = opt('', '— 미지정 —', !ex || !ex.dept) + sortedDepts().map((d) => opt(d.name, `${d.icon || ''} ${d.name}`.trim(), ex && (ex.dept === d.name || ex.dept === d.id))).join('');
+  const titleOpts = opt('', '— 없음 —', !ex || !ex.title) + TITLES.map((t) => opt(t, t, ex && ex.title === t)).join('');
+  const roleOpts = Object.entries(ROLES).map(([k, r]) => opt(k, `${r.label} — ${r.desc}`, ex ? ex.role === k : k === 'member')).join('');
+  openModal(ex ? `✏️ ${ex.name || ''} 정보 수정` : '+ 사용자 추가', `
+    <div class="fg row">
+      <div><label class="fl">이름</label><input class="fi" id="fName" placeholder="예: 김철우" value="${esc(ex && ex.name)}"></div>
+      <div><label class="fl">직급</label><select class="fs" id="fTitle">${titleOpts}</select></div>
+    </div>
+    <div class="fg row">
+      <div><label class="fl">부서</label><select class="fs" id="fDept">${deptOpts}</select></div>
+      <div><label class="fl">권한 등급</label><select class="fs" id="fRole">${roleOpts}</select>
+        <div class="fh">직급을 고르면 등급을 추천해 드립니다(참고용 — 그대로 두거나 바꾸셔도 됩니다).</div></div>
+    </div>
+    <div class="fg row">
+      <div><label class="fl">이메일</label><input class="fi" id="fEmail" placeholder="예: name@example.com" value="${esc(ex && ex.email)}"></div>
+      <div><label class="fl">전화</label><input class="fi" id="fPhone" placeholder="예: 010-1234-5678" value="${esc(ex && ex.phone)}"></div>
+    </div>
+    <div class="fg row">
+      <div><label class="fl">색 (아바타·일정 표시색)</label><input class="fi" type="color" id="fColor" value="${esc((ex && ex.color) || '#1E6FD9')}" style="height:38px;padding:3px"></div>
+      <div><label class="fl">상태</label><select class="fs" id="fActive">${opt('1', '활성', !ex || ex.active !== false)}${opt('', '비활성', ex && ex.active === false)}</select></div>
+    </div>
+    ${ex && ex.id === 'owner' ? '<div class="fh">이 문서는 주인(owner) 계정입니다. 여기서 고친 이름·부서는 헤더와 인사말에도 쓰입니다.</div>' : ''}
+  `, async () => {
+    const name = v('#fName'); if (!name) return toast('이름을 입력하세요.', 'err');
+    const d = { name, title: v('#fTitle'), dept: v('#fDept'), email: v('#fEmail'), phone: v('#fPhone'), role: v('#fRole') || 'member', active: !!v('#fActive'), color: v('#fColor') };
+    try {
+      if (ex) await updateDoc(uRef(ex.id), d); else await addDoc(collection(db, 'users'), d);
+      closeModal(); toast('저장했습니다', 'ok');
+    } catch (e) { toast('저장 실패: ' + e.message, 'err'); }
+  });
+  // 직급 → 등급 자동 추천 (원본 gradeByTitle · 참고만 — 사용자가 바꿀 수 있다)
+  $('#fTitle').onchange = (e) => { if (e.target.value) $('#fRole').value = ex && ex.role === 'super' ? 'super' : roleByTitle(e.target.value); };
+}
+
+// 부서 추가/수정 — 이름·이모지·부서장·메모 + 부서 도구함에 보일 도구 체크박스(껍데기가 depts 를 구독해 사이드바를 다시 그린다)
+function openDeptModal(ex) {
+  const cur = new Set(toolsOf(ex || {}));
+  const leadOpts = opt('', '— 미지정 —', !ex || !ex.lead) + S.users.map((u) => opt(u.id, `${u.name} ${u.title || ''}`.trim(), ex && ex.lead === u.id)).join('');
+  openModal(ex ? `✏️ ${ex.name || ''} 부서 수정` : '+ 부서 추가', `
+    <div class="fg row">
+      <div><label class="fl">부서 이름</label><input class="fi" id="dName" placeholder="예: 품질관리부" value="${esc(ex && ex.name)}"></div>
+      <div><label class="fl">이모지 아이콘</label><input class="fi" id="dIcon" maxlength="4" placeholder="예: 📦" value="${esc((ex && ex.icon) || '🏛')}"></div>
+    </div>
+    <div class="fg"><label class="fl">부서장</label><select class="fs" id="dLead">${leadOpts}</select></div>
+    <div class="fg"><label class="fl">메모 (선택)</label><input class="fi" id="dMemo" placeholder="예: 검사·인증·부적합 관리" value="${esc(ex && ex.memo)}"></div>
+    <div class="fg"><label class="fl">부서 도구함에 보일 도구</label>
+      <div class="tool-chk">${Object.entries(TOOLS).map(([id, label]) => `<label><input type="checkbox" class="dTool" value="${esc(id)}" ${cur.has(id) ? 'checked' : ''}> ${esc(label)}</label>`).join('')}</div>
+      <div class="fh">고른 도구가 왼쪽 사이드바 "부서 도구함" 에 나타납니다. 아직 만들어지지 않은 도구는 "준비 중" 으로 표시됩니다.</div></div>
+  `, async () => {
+    const name = v('#dName'); if (!name) return toast('부서 이름을 입력하세요.', 'err');
+    const tools = [...document.querySelectorAll('.dTool:checked')].map((c) => c.value);
+    const d = { name, icon: v('#dIcon') || '🏛', lead: v('#dLead'), memo: v('#dMemo'), tools };
+    try {
+      if (ex) await updateDoc(dRef(ex.id), d);
+      else await addDoc(collection(db, 'depts'), { ...d, li: 'building-2', order: S.depts.length + 1 });
+      closeModal(); toast('저장했습니다', 'ok');
+    } catch (e) { toast('저장 실패: ' + e.message, 'err'); }
+  });
+}
+
+// CSV 붙여넣기로 여러 명 한 번에 등록 (원본 openCSVImport 4614 / parseCSVForImport 4646 의 대체)
+function parseCSV(text) {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) return [];
+  const first = lines[0].toLowerCase();
+  const hasHeader = /이름|name|이메일|email/.test(first);
+  const cols = hasHeader ? lines[0].split(',').map((c) => c.trim().toLowerCase()) : null;
+  const ci = (def, ...keys) => { if (!cols) return def; const i = cols.findIndex((c) => keys.some((k) => c.includes(k))); return i >= 0 ? i : def; };
+  const iN = ci(0, '이름', 'name'), iT = ci(1, '직급', 'title'), iD = ci(2, '부서', 'dept'), iE = ci(3, '이메일', 'email');
+  return (hasHeader ? lines.slice(1) : lines).map((l) => {
+    const p = l.split(',').map((x) => x.trim().replace(/^"|"$/g, ''));
+    const g = (i) => (i >= 0 ? (p[i] || '') : '');
+    const name = g(iN); if (!name) return null;
+    return { name, title: g(iT), dept: g(iD), email: g(iE) };
+  }).filter(Boolean);
+}
+function openCsvModal() {
+  const deptNames = sortedDepts().map((d) => d.name).join(', ') || '(등록된 부서 없음)';
+  openModal('📋 CSV 붙여넣기로 여러 명 등록', `
+    <div class="fh" style="margin-bottom:8px;line-height:1.7">한 줄에 한 명씩 <code>이름,직급,부서,이메일</code> 순서로 붙여넣으세요. 첫 줄이 머리글이면 자동으로 알아봅니다.<br>
+      등록된 부서: ${esc(deptNames)} — 이름이 같으면 그 부서로 묶이고, 다르면 "부서 미지정" 으로 들어갑니다.</div>
+    <textarea class="ft" id="csvArea" rows="9" style="font-family:monospace;font-size:12px;min-height:150px" placeholder="김철우,부장,품질관리부,cwkim@example.com&#10;이정희,대리,품질관리부,lee@example.com"></textarea>
+    <div id="csvOut"></div>
+  `, () => {
+    const rows = parseCSV($('#csvArea').value);
+    if (!rows.length) return toast('읽을 수 있는 줄이 없습니다. 형식을 확인하세요.', 'err');
+    showCsvPreview(rows);
+  }, true);
+  $('#mOk').textContent = '미리보기';
+}
+function showCsvPreview(rows) {
+  const mails = new Set(S.users.map((u) => (u.email || '').toLowerCase()).filter(Boolean));
+  const marked = rows.map((r) => ({ ...r, dup: !!(r.email && mails.has(r.email.toLowerCase())), role: roleByTitle(r.title) }));
+  const newN = marked.filter((r) => !r.dup).length;
+  $('#csvOut').innerHTML = `<div class="fh" style="margin-top:12px">읽은 줄 <b>${rows.length}</b>개 · 새로 등록할 사람 <b>${newN}</b>명 (이메일이 같은 사람은 미리 체크를 해제했습니다)</div>
+    <div class="csv-prev"><table><thead><tr><th style="width:34px"><input type="checkbox" id="csvAll" checked></th><th>이름</th><th>직급</th><th>부서</th><th>이메일</th><th>등급(추천)</th></tr></thead>
+    <tbody>${marked.map((r, i) => `<tr><td><input type="checkbox" class="csvPick" data-i="${i}" ${r.dup ? '' : 'checked'}></td>
+      <td>${esc(r.name)}</td><td>${esc(r.title || '—')}</td><td>${esc(r.dept || '미지정')}</td>
+      <td class="cell-sm">${esc(r.email || '—')}${r.dup ? ' <span class="b-pill orange">중복</span>' : ''}</td>
+      <td><span class="b-pill ${ROLES[r.role].color}">${esc(ROLES[r.role].label)}</span></td></tr>`).join('')}</tbody></table></div>`;
+  $('#csvAll').onchange = (e) => document.querySelectorAll('.csvPick').forEach((c) => { c.checked = e.target.checked; });
+  $('#mOk').textContent = '선택한 사람 등록';
+  mOnOk = async () => {
+    const pick = [...document.querySelectorAll('.csvPick:checked')].map((c) => marked[Number(c.dataset.i)]);
+    if (!pick.length) return toast('등록할 사람을 고르세요.', 'err');
+    try {
+      const b = writeBatch();
+      pick.forEach((r, i) => b.set(doc(db, 'users', `u_${Date.now().toString(36)}_${i}`),
+        { name: r.name, title: r.title, dept: r.dept, email: r.email, phone: '', role: r.role, active: true, color: '#1E6FD9' }));
+      await b.commit();
+      closeModal(); toast(`${pick.length}명을 등록했습니다`, 'ok');
+    } catch (e) { toast('등록 실패: ' + e.message, 'err'); }
+  };
+}
+
+async function boot() {
+  const docs = (s) => s.docs.map((d) => ({ id: d.id, ...d.data() }));
+  onSnapshot(collection(db, 'users'), (s) => { S.users = docs(s); S.ready = true; render(); }, (e) => toast('사용자 읽기 실패: ' + e.message, 'err'));
+  onSnapshot(collection(db, 'depts'), (s) => { S.depts = docs(s); S.ready = true; render(); }, (e) => toast('부서 읽기 실패: ' + e.message, 'err'));
+}
+</script></body></html>
