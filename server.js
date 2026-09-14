@@ -759,7 +759,7 @@ createServer(async (req, res) => {
 
       if (route === 'GET /login.html') return send(res, 200, readFileSync(join(ROOT, 'public', 'login.html')), 'text/html; charset=utf-8');
       if (route === 'GET /') return send(res, 200, readFileSync(join(ROOT, 'public', 'index.html')), 'text/html; charset=utf-8');
-    if ((req.method === 'GET' || req.method === 'HEAD') && url.pathname.startsWith('/m/')) {   // 플랫폼 모듈 화면(public/m/**) — iframe 으로 껍데기 안에 뜬다
+    if ((req.method === 'GET' || req.method === 'HEAD') && url.pathname.startsWith('/m/')) {   // 플랫폼 모듈 화면(public/m/**) — iframe 으로 껍데기 안에 뜬다. HEAD 는 "있나" 확인용(부서 도구함 배지)
       const abs = resolve(join(ROOT, 'public', 'm', decodeURIComponent(url.pathname.slice(3))));
       if (!안에(abs, join(ROOT, 'public', 'm')) || !existsSync(abs) || !statSync(abs).isFile()) return send(res, 404, '없는 화면이에요', 'text/plain; charset=utf-8');
       res.writeHead(200, { 'content-type': { ...MIME, '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.mjs': 'application/javascript; charset=utf-8', '.woff2': 'font/woff2', '.ico': 'image/x-icon' }[extname(abs).toLowerCase()] || 'application/octet-stream', 'cache-control': 'no-cache' });
