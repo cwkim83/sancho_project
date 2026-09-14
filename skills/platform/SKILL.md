@@ -20,7 +20,7 @@ description: 산초 플랫폼 화면(일정·프로젝트·메일정리·메신�
 | 파일 | 화면 | 필드 |
 |---|---|---|
 | `db/users.json` | 조직/권한 | `name, title(직급), dept, email, phone, role(super·exec·manager·member), active(true/false), color` |
-| `db/depts.json` | 조직/권한 · 부서 도구함 | `name, icon(이모지), li(lucide 아이콘 이름), order, lead(userId), memo, tools[]`(부서 도구함에 보일 도구 id) |
+| `db/depts.json` | 조직/권한 | `name, icon(이모지), li(lucide 아이콘 이름), order, lead(userId), memo` |
 | `db/projects.json` | 프로젝트 | `code, name, client, pm(userId), members[], start, end, status(plan·active·hold·done), color, hidden, wbs(공정표 파일명), memo, progress` |
 | `db/events.json` | 일정 | `title, date, time, endTime, endDate, allDay, category(회의·검사·마감·교육·출장·개인·기타), color(blue·green·orange·red·purple·gray), dept, projectId, location, attendees[], memo, source(user·sancho·google)` |
 | `db/tasks.json` | 프로젝트 › 업무 보드 | `title, projectId, assignee(userId), due, priority(high·mid·low), status(todo·doing·review·done), memo, source` |

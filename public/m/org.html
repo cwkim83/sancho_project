@@ -69,11 +69,6 @@ const ROLES = {
   member: { label: '일반', color: 'gray', desc: '개인 목표 · 본인 업무' },
 };
 const roleByTitle = (t) => ['대표이사', '부사장', '상무이사', '전무이사', '이사'].includes(t) ? 'exec' : (t === '부장' ? 'manager' : 'member');
-// 부서 도구함에 넣을 수 있는 도구 (껍데기 index.html 의 TOOLS 520-535 와 같은 id)
-const TOOLS = { deptsch: '📅 부서 스케줄', itp: '📋 ITP Builder', itpview: '📚 ITP 조회', qa: '📄 QA Doc Generator', qaview: '📚 QA Doc 조회',
-  ncr: '⚠️ NCR 관리', car: '🔧 CAR 관리', qadash: '📊 품질종합분석표', mobile: '📱 Mobile Inspection', mtools: '🔬 측정기구 반입출',
-  asset: '🖥️ 자산 관리 대장', agitator: '🌀 교반기 선정·설계', pvcalc: '⚙️ 압력용기 계산', purchase: '🛒 구매부 업무일지' };
-
 // ── 조회 ──
 const uColor = (u) => u.color || 'var(--primary)';
 const role = (u) => ROLES[u.role] || ROLES.member;
@@ -82,7 +77,6 @@ const inDept = (d) => S.users.filter((u) => u.dept === d.id || u.dept === d.name
 const known = () => new Set(S.depts.flatMap((d) => inDept(d).map((u) => u.id)));
 const avatar = (u) => `<div class="av" style="background:${esc(uColor(u))}">${esc((u.name || '?').charAt(0))}</div>`;
 const sortedDepts = () => [...S.depts].sort((a, b) => (Number(a.order) || 99) - (Number(b.order) || 99));
-const toolsOf = (d) => Array.isArray(d.tools) ? d.tools : [];
 
 // ── 쓰기 (updateDoc = 깊은 병합이라 모르는 필드는 보존된다) ──
 const uRef = (id) => doc(db, 'users', id), dRef = (id) => doc(db, 'depts', id);
@@ -92,7 +86,7 @@ async function save(ref, data) { try { await updateDoc(ref, data); toast('저장
 function askOrg() {
   const names = S.depts.map((d) => d.name).join('·') || '(아직 없음)';
   SANCHO.ask(`우리 조직도를 이렇게 만들어줘: data/db/depts.json 과 data/db/users.json 을 platform 스킬 형식으로 갱신해줘.\n`
-    + `· depts 문서: {name, icon(이모지), li(lucide 아이콘 이름), order(숫자), lead(부서장 userId), memo, tools[]} — tools 는 부서 도구함에 보일 도구 id 목록이며 고를 수 있는 값은 ${Object.keys(TOOLS).join(', ')} 이다. 지금 부서는 ${names}.\n`
+    + `· depts 문서: {name, icon(이모지), li(lucide 아이콘 이름), order(숫자), lead(부서장 userId), memo}. 지금 부서는 ${names}.\n`
     + `· users 문서: {name, title(직급: ${TITLES.join('/')}), dept(부서 이름), email, phone, role(super|exec|manager|member), active(true/false), color(#RRGGBB)}. 주인 문서 id 는 owner 이고 지우면 안 된다.\n`
     + `기존 문서는 지우지 말고 필요한 필드만 고치거나 새 id 로 추가해줘. 직급이 이사 이상이면 role 은 exec, 부장이면 manager, 그 아래는 member 로 맞춰줘. 끝나면 부서 몇 개·사람 몇 명을 바꿨는지 한 줄로 보고해줘.`);
 }
@@ -102,7 +96,7 @@ function render() {
   if (!S.ready) return;
   const root = $('#root');
   if (!S.users.length && !S.depts.length) {
-    root.innerHTML = head() + `<div class="empty"><h3>등록된 조직 정보가 없습니다</h3>부서를 만들고 사람을 등록하면 이 화면과 왼쪽 사이드바의 부서 도구함이 함께 채워집니다.
+    root.innerHTML = head() + `<div class="empty"><h3>등록된 조직 정보가 없습니다</h3>부서를 만들고 사람을 등록하면 이 화면과 조직도가 함께 채워집니다.
       <div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><button class="btn btn-primary" data-act="dept-new">+ 부서 추가</button><button class="btn" data-act="user-new">+ 사용자 추가</button><button class="btn btn-ai" data-act="ai">✳ 산초에게: 조직도 만들어줘</button></div></div>`;
     return;
   }
@@ -113,7 +107,7 @@ function render() {
 function head() {
   const act = S.users.filter((u) => u.active !== false).length;
   return `<div class="mod-head"><div><div class="mod-title">👥 조직 / 권한</div>
-      <div class="mod-sub">부서 ${S.depts.length}개 · 구성원 ${S.users.length}명(활성 ${act}명) — 부서 도구함 설정이 왼쪽 사이드바를 그대로 바꿉니다</div></div>
+      <div class="mod-sub">부서 ${S.depts.length}개 · 구성원 ${S.users.length}명(활성 ${act}명)</div></div>
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
       <button class="btn btn-ai" data-act="ai">✳ 산초에게 · 조직도 만들기</button>
       <button class="btn" data-act="csv">📋 CSV 붙여넣기</button>
@@ -135,10 +129,9 @@ function listView() {
         <span class="dt-acts">
           <button class="btn btn-sm" data-act="dept-up" title="위로" ${i === 0 ? 'disabled' : ''}>↑</button>
           <button class="btn btn-sm" data-act="dept-down" title="아래로" ${i === ds.length - 1 ? 'disabled' : ''}>↓</button>
-          <button class="btn btn-sm" data-act="dept-edit" title="부서 수정 · 도구함 설정">✏️</button>
+          <button class="btn btn-sm" data-act="dept-edit" title="부서 수정">✏️</button>
           <button class="btn btn-sm" data-act="dept-del" title="부서 삭제">🗑️</button>
         </span></div>`).join('') : '<div class="fh" style="padding:8px 4px">부서가 없습니다. [+ 추가] 로 만드세요.</div>'}
-      <div class="fh" style="margin-top:10px;border-top:1px solid var(--border-light);padding-top:8px">✏️ 안에서 <b>부서 도구함에 보일 도구</b>를 고르면 왼쪽 사이드바가 바로 바뀝니다.</div>
     </div>
     <div class="card" style="padding:0;overflow:hidden">
       <table class="org-table">
@@ -279,24 +272,19 @@ function openUserModal(ex) {
   $('#fTitle').onchange = (e) => { if (e.target.value) $('#fRole').value = ex && ex.role === 'super' ? 'super' : roleByTitle(e.target.value); };
 }
 
-// 부서 추가/수정 — 이름·이모지·부서장·메모 + 부서 도구함에 보일 도구 체크박스(껍데기가 depts 를 구독해 사이드바를 다시 그린다)
+// 부서 추가/수정 — 이름·이모지·부서장·메모
 function openDeptModal(ex) {
-  const cur = new Set(toolsOf(ex || {}));
   const leadOpts = opt('', '— 미지정 —', !ex || !ex.lead) + S.users.map((u) => opt(u.id, `${u.name} ${u.title || ''}`.trim(), ex && ex.lead === u.id)).join('');
   openModal(ex ? `✏️ ${ex.name || ''} 부서 수정` : '+ 부서 추가', `
     <div class="fg row">
-      <div><label class="fl">부서 이름</label><input class="fi" id="dName" placeholder="예: 품질관리부" value="${esc(ex && ex.name)}"></div>
-      <div><label class="fl">이모지 아이콘</label><input class="fi" id="dIcon" maxlength="4" placeholder="예: 📦" value="${esc((ex && ex.icon) || '🏛')}"></div>
+      <div><label class="fl">부서 이름</label><input class="fi" id="dName" placeholder="예: 개발팀" value="${esc(ex && ex.name)}"></div>
+      <div><label class="fl">이모지 아이콘</label><input class="fi" id="dIcon" maxlength="4" placeholder="예: 🏢" value="${esc((ex && ex.icon) || '🏛')}"></div>
     </div>
     <div class="fg"><label class="fl">부서장</label><select class="fs" id="dLead">${leadOpts}</select></div>
-    <div class="fg"><label class="fl">메모 (선택)</label><input class="fi" id="dMemo" placeholder="예: 검사·인증·부적합 관리" value="${esc(ex && ex.memo)}"></div>
-    <div class="fg"><label class="fl">부서 도구함에 보일 도구</label>
-      <div class="tool-chk">${Object.entries(TOOLS).map(([id, label]) => `<label><input type="checkbox" class="dTool" value="${esc(id)}" ${cur.has(id) ? 'checked' : ''}> ${esc(label)}</label>`).join('')}</div>
-      <div class="fh">고른 도구가 왼쪽 사이드바 "부서 도구함" 에 나타납니다. 아직 만들어지지 않은 도구는 "준비 중" 으로 표시됩니다.</div></div>
+    <div class="fg"><label class="fl">메모 (선택)</label><input class="fi" id="dMemo" placeholder="예: 주요 업무 및 담당 영역" value="${esc(ex && ex.memo)}"></div>
   `, async () => {
     const name = v('#dName'); if (!name) return toast('부서 이름을 입력하세요.', 'err');
-    const tools = [...document.querySelectorAll('.dTool:checked')].map((c) => c.value);
-    const d = { name, icon: v('#dIcon') || '🏛', lead: v('#dLead'), memo: v('#dMemo'), tools };
+    const d = { name, icon: v('#dIcon') || '🏛', lead: v('#dLead'), memo: v('#dMemo') };
     try {
       if (ex) await updateDoc(dRef(ex.id), d);
       else await addDoc(collection(db, 'depts'), { ...d, li: 'building-2', order: S.depts.length + 1 });

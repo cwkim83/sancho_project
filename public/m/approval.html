@@ -111,7 +111,8 @@ const lineArr = (a) => Array.isArray(a && a.approvalLine) ? a.approvalLine : [];
 const cur = (a) => lineArr(a).find((s) => s.status === 'pending') || null;
 const stepName = (s) => s.name || uName(s.userId);
 const won = (n) => Number(n) ? '₩' + Number(n).toLocaleString('ko-KR') : '-';
-const day = (a) => String(a.createdAt || '').slice(0, 10);
+const ts = (a) => String(a.createdAt || a.updatedAt || '');   // 산초가 파일을 직접 고치면 createdAt 이 없을 수 있다
+const day = (a) => ts(a).slice(0, 10);
 const dt = (iso) => String(iso || '').replace('T', ' ').slice(0, 16);
 const today = () => new Date().toLocaleDateString('sv-SE');
 const ym = () => today().slice(0, 7);
@@ -137,7 +138,7 @@ function filtered() {
   return S.approvals.filter((a) => (!F.status || a.status === F.status) && (!F.type || a.type === F.type)
     && (!F.range || (F.range === 'month' ? day(a).startsWith(m) : F.range === 'q3' ? day(a) >= q3 : day(a).startsWith(y)))
     && (!q || [a.title, a.body, uName(a.drafterId), TY(a.type).label].some((x) => String(x || '').toLowerCase().includes(q))))
-    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    .sort((a, b) => ts(b).localeCompare(ts(a)));
 }
 
 // ── 화면 ──
@@ -152,10 +153,6 @@ function render() {
         <button class="btn btn-ai" data-act="ai-draft">✳ 산초에게 · 기안서 써줘</button></div></div>`;
     return;
   }
-  const f = filtered();
-  const todo = f.filter((a) => a.status === 'pending' && cur(a));
-  const mine = f.filter((a) => a.drafterId === uid() && a.status === 'pending');
-  const done = f.filter((a) => a.status === 'approved' || a.status === 'rejected' || a.status === 'withdrawn');
   const all = S.approvals;
   const kWait = all.filter((a) => a.status === 'pending').length;
   const kTurn = all.filter((a) => a.status === 'pending' && (cur(a) || {}).userId === uid()).length;
@@ -173,12 +170,18 @@ function render() {
       <select class="fs" data-f="type"><option value="">유형 전체</option>${Object.entries(TYPES).map(([k, t]) => `<option value="${k}"${F.type === k ? ' selected' : ''}>${t.icon} ${esc(t.label)}</option>`).join('')}</select>
       <select class="fs" data-f="range"><option value="">기간 전체</option><option value="month"${F.range === 'month' ? ' selected' : ''}>이번 달</option><option value="q3"${F.range === 'q3' ? ' selected' : ''}>최근 3개월</option><option value="year"${F.range === 'year' ? ' selected' : ''}>올해</option></select>
       <input class="fi" data-f="q" placeholder="제목 · 본문 · 기안자 검색" value="${esc(F.q)}">
-      <span class="sp"></span><span class="fh" style="margin:0">보이는 문서 ${f.length} / 전체 ${all.length}</span>
+      <span class="sp"></span><span class="fh" id="fcount" style="margin:0">${countText()}</span>
     </div>
-    ${section('🔴 내가 결재할 것', 'var(--danger)', todo, '')}
-    ${section('📤 내가 올린 것', 'var(--primary)', mine, 'mine')}
-    ${section('📚 완료된 결재', 'var(--text-light)', done.slice(0, 30), 'done', done.length)}`;
+    <div id="secs">${secs()}</div>`;
   if (openId) renderDetail();
+}
+const countText = () => `보이는 문서 ${filtered().length} / 전체 ${S.approvals.length}`;
+// 검색은 표만 다시 그린다 — 화면 전체를 다시 그리면 입력 칸이 새로 만들어져 글자가 끊긴다
+function secs() {
+  const f = filtered(), done = f.filter((a) => a.status !== 'pending');
+  return section('🔴 내가 결재할 것', 'var(--danger)', f.filter((a) => a.status === 'pending' && cur(a)), '')
+    + section('📤 내가 올린 것', 'var(--primary)', f.filter((a) => a.drafterId === uid() && a.status === 'pending'), 'mine')
+    + section('📚 완료된 결재', 'var(--text-light)', done.slice(0, 30), 'done', done.length);
 }
 function head() {
   return `<div class="mod-head"><div><div class="mod-title">결재</div>
@@ -254,7 +257,7 @@ function renderDetail() {
     <div class="dhead"><div>
       <div>${tyPill(a.type)} ${pill(stMeta(a).label, stMeta(a).pill)}</div>
       <div class="tt">${esc(a.title || '(제목 없음)')}</div>
-      <div class="fh">${esc(uName(a.drafterId))} 기안 · ${esc(dt(a.createdAt) || day(a))}</div>
+      <div class="fh">${esc(uName(a.drafterId))} 기안 · ${esc(dt(ts(a)))}</div>
     </div>${stampBox(line)}</div>
     <div class="kv">
       <div><b>유형</b> ${esc(TY(a.type).label)}</div><div><b>기안일</b> ${esc(day(a) || '-')}</div>
@@ -444,7 +447,7 @@ document.addEventListener('change', (e) => {
   if (lr && Dr.line[lr.dataset.i]) { const s = Dr.line[Number(lr.dataset.i)]; if (t.dataset.act === 'role') s.role = t.value; if (t.dataset.act === 'who') s.userId = t.value; }
 });
 document.addEventListener('input', (e) => {
-  if (e.target.dataset.f === 'q') { F.q = e.target.value; render(); }
+  if (e.target.dataset.f === 'q') { F.q = e.target.value; const b = $('#secs'); if (b) { b.innerHTML = secs(); $('#fcount').textContent = countText(); } }
   if (e.target.id === 'apNote') noteDraft = e.target.value;
 });
 
