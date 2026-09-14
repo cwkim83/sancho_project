@@ -5,14 +5,16 @@
 <style>
 /* 조직/권한 — 세종 플랫폼 v2 index.html 7031-7143(org) · 7291-7319(openEditUserProfile) · 4614-4675(CSV) 이식.
    .org-grid .dept-tree-box .dept-item .org-table .org-dept-row .org-ico-btn .perm-chip 는 platform.css 것을 그대로 쓴다. */
-.dt-row { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 6px; font-size: 13px; }
+.org-grid { grid-template-columns: 300px 1fr; }  /* 부서 이름이 잘리지 않게 왼쪽 패널을 넓힘 */
+.dt-row { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 6px; font-size: 13px; position: relative; }
 .dt-row:hover { background: var(--bg2); }
 .dt-row .ico { width: 18px; text-align: center; flex-shrink: 0; }
 .dt-row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dt-row .cnt { font-size: 11px; color: var(--text-lighter); flex-shrink: 0; }
 .dt-row .btn { padding: 1px 5px; font-size: 10px; border-radius: 5px; }
-.dt-acts { display: flex; gap: 2px; opacity: 0; flex-shrink: 0; }
-.dt-row:hover .dt-acts { opacity: 1; }
+/* 숨어 있을 때 자리를 차지하지 않도록 띄워 놓는다 — 평소엔 이름이 그만큼 길게 보인다 */
+.dt-acts { display: none; gap: 2px; flex-shrink: 0; position: absolute; right: 6px; top: 50%; transform: translateY(-50%); background: var(--bg2); padding-left: 6px; border-radius: 6px; }
+.dt-row:hover .dt-acts { display: flex; }
 .dt-head { font-size: 12px; font-weight: 700; color: var(--text-light); display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; padding: 0 4px; }
 .av { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 10px; font-weight: 700; flex-shrink: 0; background: var(--primary); }
 .u-off td { opacity: .5; }
