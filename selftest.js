@@ -165,6 +165,30 @@ async function 시험() {
       assert.equal((await A('/login', { loginId: 'boss', password: 'longenough1' })).status, 200, '맞는 비밀번호');
     }
 
+    // 1d4) 워크플로: 노드를 이어 붙인 흐름이 순서대로 돌고, 조건 분기·템플릿·실행 기록이 맞는지
+    {
+      const wf = { name: '시험 흐름', trigger: { type: 'manual' },
+        nodes: [
+          { id: 'n1', type: 'start', name: '시작', config: {} },
+          { id: 'n2', type: 'set', name: '값', config: { value: '오늘 {{today}} / {{trigger.input}}' } },
+          { id: 'n3', type: 'ai', name: '분석', config: { prompt: '정리해라: {{steps.값}}' } },
+          { id: 'n4', type: 'dbWrite', name: '저장', config: { collection: 'tasks', docId: 'wf1', data: '{"title":"{{steps.분석}}"}' } },
+          { id: 'n5', type: 'if', name: '판정', config: { left: '{{steps.분석}}', op: '포함', right: '가짜' } },
+          { id: 'n6', type: 'journal', name: '참쪽', config: { text: '참' } },
+          { id: 'n7', type: 'journal', name: '거짓쪽', config: { text: '거짓' } }],
+        edges: [{ from: 'n1', to: 'n2' }, { from: 'n2', to: 'n3' }, { from: 'n3', to: 'n4' }, { from: 'n4', to: 'n5' }, { from: 'n5', to: 'n6', port: 'true' }, { from: 'n5', to: 'n7', port: 'false' }] };
+      await db('/workflows/w1', { method: 'PUT', headers: J, body: JSON.stringify({ data: wf }) });
+      const r = await (await fetch(`${BASE}/api/workflow/run`, { method: 'POST', headers: J, body: JSON.stringify({ id: 'w1', input: '입력값' }) })).json();
+      assert.equal(r.status, '완료', `워크플로 실행 (${JSON.stringify(r)})`);
+      const run = (await (await db('/workflowruns')).json()).map((x) => x.data).sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)))[0];
+      assert.equal(run.steps.filter((s2) => s2.status === '완료').length, 6, '여섯 단계 완료(거짓쪽은 안 간다)');
+      assert.ok(!run.steps.some((s2) => s2.name === '거짓쪽'), '조건이 참이면 거짓 가지는 실행하지 않는다');
+      assert.ok(run.steps[1].out.includes(today()) && run.steps[1].out.includes('입력값'), '템플릿 {{today}}·{{trigger.input}} 치환');
+      const saved = (await (await db('/tasks/wf1')).json()).data;
+      assert.ok(String(saved.title).includes('가짜 답'), '워크플로가 만든 문서');
+      assert.equal((await (await fetch(`${BASE}/api/workflow/run`, { method: 'POST', headers: J, body: JSON.stringify({ id: '없음' }) })).json()).error != null, true, '없는 워크플로는 오류');
+    }
+
     // 1e) 접속 토큰: 설정에 있으면 API 는 토큰 없이 401, 토큰 있으면 200 (화면과 /health 는 그대로)
     writeFileSync(join(data, 'users', 'owner', 'settings.json'), JSON.stringify({ token: 't1' }));
     assert.equal((await fetch(`${BASE}/api/state`)).status, 401, '토큰 없으면 401');
@@ -175,7 +199,7 @@ async function 시험() {
 
     // 2) 예약: 첫 tick 에 돌아 journal 에 쌓이고 오늘 실행으로 기록된다
     const 일지 = join(data, 'users', 'owner', 'journal', `${today()}.md`);   // 예약·일지는 사용자별 폴더
-    await 기다림(() => existsSync(일지), 12_000, '예약 실행');
+    await 기다림(() => existsSync(일지) && readFileSync(일지, 'utf8').includes('· test'), 12_000, '예약 실행');   // 워크플로가 먼저 남긴 줄과 섞이지 않게 내용으로 기다린다
     assert.ok(readFileSync(일지, 'utf8').includes('· test') && readFileSync(일지, 'utf8').includes('가짜 답'), '일지 내용');
     assert.equal(JSON.parse(readFileSync(join(data, 'users', 'owner', 'state.json'), 'utf8')).runs.test, today(), '오늘 실행 기록');
     await 기다림(async () => (await (await fetch(`${BASE}/api/state`)).json()).busy === null, 3000, '예약 뒤 한가함');
@@ -196,7 +220,7 @@ async function 시험() {
     assert.ok(Date.now() - tStop < 3000, `3초 안에 끊긴다 (${Date.now() - tStop}ms)`);
     assert.equal(await exited, 75, '일이 끝나면 코드 75 로 종료(재시작 요청)');
 
-    console.log(`산초 자가시험 통과: 화면 문법(${화면들.length}장) · 글자 스트림 · 대화 id · 기록 · 첨부 · 만든 파일·내려받기·열기 경계 · 대화 고정/삭제 · WBS(합산·EVMS·지연·이력) · 플랫폼 저장소(쓰기·병합·일괄·SSE 알림·경계) · 검색 · 위키/스킬 파일 · 뇌 그래프 · 접속 토큰 · 예약 tick · 일지 · 재시작 관문·예약 · ■ 중지 · 종료 75`);
+    console.log(`산초 자가시험 통과: 화면 문법(${화면들.length}장) · 글자 스트림 · 대화 id · 기록 · 첨부 · 만든 파일·내려받기·열기 경계 · 대화 고정/삭제 · WBS(합산·EVMS·지연·이력) · 플랫폼 저장소(쓰기·병합·일괄·SSE 알림·경계) · 로그인(기본 비번 거부·setup) · 워크플로(분기·템플릿·기록) · 검색 · 위키/스킬 파일 · 뇌 그래프 · 접속 토큰 · 예약 tick · 일지 · 재시작 관문·예약 · ■ 중지 · 종료 75`);
   } finally {
     server.kill();
     rmSync(data, { recursive: true, force: true });

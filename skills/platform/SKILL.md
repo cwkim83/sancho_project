@@ -32,6 +32,8 @@ description: 산초 플랫폼 화면(일정·프로젝트·메일정리·메신�
 | `db/okrs.json` | 목표관리 | `scope(company·dept·personal), dept, ownerId, title, why, period, start, end, pctManual, milestones[{id, title, due, pct, who}], status(active·done·hold), parentId` — 진행률은 마일스톤 pct 평균 |
 | `db/manday.json` | Manday Tracker | `date, userId, userName, projectId, projectCode, task, regular(정규 시간), overtime(야근 시간), md((정규+야근)/8), memo, raw` |
 | `db/approvals.json` | 결재 | `title, type(general·purchase·quality·project·schedule-change·okr-change·leave·expense), drafterId, body(마크다운 본문), amount, due, projectId, attachments[{name,path}], approvalLine[{userId, name, role(검토·승인), status(waiting·pending·approved·rejected·skipped), note, at}], status(pending·approved·rejected·withdrawn), decisionNote` |
+| `db/workflows.json` | 워크플로 | `name, desc, enabled, trigger{type(manual·schedule·watch), time, minutes}, nodes[{id, type, name, x, y, config}], edges[{from, to, port(out·true·false)}]` — 노드 종류: `start`(수동) `schedule`(매일 HH:MM) `watch`(N분마다) `ai`(config.prompt·model·format) `dbRead`(collection·field·op·value·limit) `dbWrite`(collection·docId·data=JSON 문자열) `if`(left·op·right → 참은 port `true`, 거짓은 `false`) `http`(method·url·headers·body) `telegram`(text) `message`(channelId·text) `journal`(text) `wait`(seconds) `set`(value). 앞 단계 값은 `{{steps.노드이름}}`, 오늘은 `{{today}}`, 실행 입력은 `{{trigger.input}}`. 노드는 x 를 240 씩 벌려 놓는다 |
+| `db/workflowruns.json` | 워크플로 실행 기록 | 서버가 쓴다(고치지 말 것) |
 | `db/roadmap.json` | 로드맵·진척 | 문서 하나 `main`: `title, phases[{id, title, period, items[{id, text, status(todo·wip·done·hold·cancel), owner, due, at}]}]` |
 
 ## 자주 받는 지시 → 할 일
@@ -43,4 +45,5 @@ description: 산초 플랫폼 화면(일정·프로젝트·메일정리·메신�
 - "회의록 정리해줘"(녹취 첨부) → `db/meetings.json` 의 해당 회의(없으면 새로) `minutes` 를 채우고 `status:"완료"`, 워드 파일을 파일함에 만들었으면 `docPath` 에 경로.
 - "로드맵에 … 추가 / 완료 처리" → `db/roadmap.json` 의 `main.phases[].items[]` 를 고친다.
 - "프로젝트 만들어" → `db/projects.json` 추가 + wbs 스킬로 `wbs/<이름>.json` 도 만들고 `wbs` 필드에 이름을 넣는다.
+- "…하는 워크플로 만들어줘" → `db/workflows.json` 에 위 형식으로 넣는다. 트리거 노드 1개로 시작해 노드를 `edges` 로 잇고, 시각 트리거면 `trigger` 와 첫 노드 `config` 의 시각을 같게 맞춘다. 만든 뒤 "왼쪽 워크플로 에서 ▶ 실행으로 시험해 보세요" 라고 알린다.
 - "메신저에 알려줘 / 공지 올려줘" → `db/messages.json` 에 `userId:"sancho"` 로 글 추가(채널은 `db/channels.json` 에서 고르고, 없으면 `notice` 타입 `공지사항` 채널을 만든다).

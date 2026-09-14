@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>산초 · 워크플로</title>
+<link rel="stylesheet" href="/m/platform.css">
+<script src="/m/sdb.js"></script>
+<style>
+  /* n8n·Copilot 흐름 편집기 느낌 — 캔버스에 노드를 놓고 선으로 잇는다. 색은 플랫폼 화이트 톤 변수 그대로. */
+  html,body{height:100%;overflow:hidden}
+  .wrap{display:flex;height:100vh;min-height:0}
+  .list{width:230px;flex:none;border-right:1px solid var(--border);background:var(--white);display:flex;flex-direction:column;min-height:0}
+  .list .lh{padding:12px 14px 8px;font-size:11px;font-weight:700;color:var(--text-lighter);letter-spacing:.08em;display:flex;justify-content:space-between;align-items:center}
+  .list .ls{flex:1;overflow:auto;padding:0 8px 8px}
+  .wf{padding:9px 10px;border-radius:9px;cursor:pointer;font-size:13px;display:flex;flex-direction:column;gap:3px;border:1px solid transparent}
+  .wf:hover{background:var(--bg2)} .wf.on{background:var(--primary-light);border-color:var(--primary);color:var(--primary);font-weight:600}
+  .wf .m{font-size:11px;color:var(--text-lighter);display:flex;gap:6px;align-items:center}
+  .wf .dot{width:6px;height:6px;border-radius:50%;background:var(--text-lighter);flex:none}
+  .wf .dot.on{background:var(--success)} .wf .dot.err{background:var(--danger)}
+  .main{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
+  .bar{height:52px;flex:none;display:flex;align-items:center;gap:8px;padding:0 14px;border-bottom:1px solid var(--border);background:var(--white)}
+  .bar .nm{font-weight:700;font-size:15px;border:1px solid transparent;border-radius:7px;padding:4px 8px;min-width:120px;background:transparent;color:var(--text)}
+  .bar .nm:focus{border-color:var(--border);background:var(--bg2);outline:0}
+  .bar .sp{flex:1}
+  .stage{flex:1;position:relative;overflow:hidden;background:var(--bg2);min-height:0}
+  #canvas{position:absolute;inset:0;transform-origin:0 0}
+  .grid{position:absolute;inset:-4000px;background-image:radial-gradient(var(--border) 1px,transparent 1px);background-size:22px 22px;opacity:.8;pointer-events:none}
+  svg.wires{position:absolute;inset:-4000px;width:9000px;height:9000px;overflow:visible;pointer-events:none}
+  svg.wires path{fill:none;stroke:var(--text-lighter);stroke-width:2}
+  svg.wires path.true{stroke:#1F9D63} svg.wires path.false{stroke:#E5484D} svg.wires path.hot{stroke:var(--primary);stroke-width:3}
+  .node{position:absolute;width:190px;background:var(--card);border:1.5px solid var(--border);border-radius:12px;box-shadow:var(--shadow);cursor:grab;user-select:none;font-size:12.5px}
+  .node:active{cursor:grabbing} .node.sel{border-color:var(--primary);box-shadow:0 0 0 3px rgba(30,111,217,.16)}
+  .node.run{border-color:var(--primary);animation:pulse 1s infinite} @keyframes pulse{50%{box-shadow:0 0 0 6px rgba(30,111,217,.10)}}
+  .node.ok{border-color:#1F9D63} .node.bad{border-color:#E5484D}
+  .node .h{display:flex;align-items:center;gap:7px;padding:9px 10px;border-bottom:1px solid var(--border-light);font-weight:600}
+  .node .h .ic{width:24px;height:24px;border-radius:7px;display:grid;place-items:center;font-size:13px;flex:none;background:var(--primary-light);color:var(--primary)}
+  .node .h .tx{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .node .b{padding:7px 10px;color:var(--text-light);font-size:11.5px;line-height:1.5;max-height:44px;overflow:hidden}
+  .port{position:absolute;width:13px;height:13px;border-radius:50%;background:var(--white);border:2px solid var(--text-lighter);cursor:crosshair}
+  .port:hover{border-color:var(--primary);background:var(--primary-light)}
+  .port.in{left:-8px;top:calc(50% - 6px)} .port.out{right:-8px;top:calc(50% - 6px)}
+  .port.t{right:-8px;top:26%;border-color:#1F9D63} .port.f{right:-8px;top:70%;border-color:#E5484D}
+  .plabel{position:absolute;right:-30px;font-size:9px;font-weight:700} .plabel.t{top:20%;color:#1F9D63} .plabel.f{top:64%;color:#E5484D}
+  .side{width:310px;flex:none;border-left:1px solid var(--border);background:var(--white);display:flex;flex-direction:column;min-height:0}
+  .side .sh{padding:12px 14px;border-bottom:1px solid var(--border);font-weight:700;font-size:13.5px;display:flex;justify-content:space-between;align-items:center}
+  .side .sb{flex:1;overflow:auto;padding:12px 14px}
+  .side .fg{margin-bottom:11px} .side .fl{font-size:11.5px}
+  .side textarea.fi{min-height:88px;font:12px/1.55 ui-monospace,Consolas,monospace;resize:vertical}
+  .palette{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .pal{border:1px solid var(--border);background:var(--white);border-radius:9px;padding:8px 6px;font-size:11.5px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--text)}
+  .pal:hover{border-color:var(--primary);background:var(--primary-lighter);color:var(--primary)}
+  .pal .i{font-size:16px}
+  .runs{height:190px;flex:none;border-top:1px solid var(--border);background:var(--white);display:flex;flex-direction:column}
+  .runs .rh{padding:8px 14px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border-light)}
+  .runs .rb{flex:1;overflow:auto;padding:6px 14px 10px;font-size:12px}
+  .step{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px dashed var(--border-light)}
+  .step .st{width:16px;text-align:center} .step .nm2{font-weight:600;min-width:110px} .step .o{color:var(--text-light);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,Consolas,monospace;font-size:11.5px}
+  .step .ms{color:var(--text-lighter);font-size:11px}
+  .hintbox{padding:10px 12px;background:var(--primary-lighter);border:1px dashed var(--primary);border-radius:9px;font-size:12px;color:var(--text-light);line-height:1.7;margin-bottom:12px}
+  .hintbox code{background:var(--white);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-size:11px}
+  .zoom{position:absolute;right:14px;bottom:14px;display:flex;gap:4px;z-index:5}
+  .zoom button{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--white);cursor:pointer;font-size:14px;color:var(--text)}
+  @media (max-width:1100px){.list{display:none}.side{width:270px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <aside class="list">
+    <div class="lh"><span>워크플로</span><button class="btn btn-sm" id="newWf">＋ 새로</button></div>
+    <div class="ls" id="wfList"></div>
+    <div style="padding:8px 10px;border-top:1px solid var(--border)"><button class="btn btn-ai btn-sm" style="width:100%" id="askMake">✳ 산초에게 만들어 달라기</button></div>
+  </aside>
+  <div class="main">
+    <div class="bar">
+      <input class="nm" id="wfName" placeholder="워크플로 이름">
+      <span class="b-pill gray" id="trigPill">트리거: 수동</span>
+      <span class="sp"></span>
+      <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" id="wfEnabled"> 자동 실행 켬</label>
+      <button class="btn btn-sm" id="addNode">＋ 노드</button>
+      <button class="btn btn-sm" id="delWf">🗑 삭제</button>
+      <button class="btn btn-primary btn-sm" id="runWf">▶ 실행</button>
+    </div>
+    <div class="stage" id="stage">
+      <div id="canvas">
+        <div class="grid"></div>
+        <svg class="wires" id="wires"></svg>
+        <div id="nodes"></div>
+      </div>
+      <div class="zoom"><button id="zIn">＋</button><button id="zOut">－</button><button id="zFit">⤢</button></div>
+    </div>
+    <div class="runs">
+      <div class="rh"><span>실행 기록</span><span id="runMeta" class="hint"></span><span class="sp" style="flex:1"></span><select class="fs" id="runPick" style="width:210px;padding:3px 6px;font-size:11.5px"></select></div>
+      <div class="rb" id="runBody"><div class="hint">아직 실행한 적이 없습니다. ▶ 실행을 눌러 보세요.</div></div>
+    </div>
+  </div>
+  <aside class="side">
+    <div class="sh"><span id="sideTitle">노드 설정</span><button class="btn btn-sm" id="delNode" hidden>삭제</button></div>
+    <div class="sb" id="sideBody"></div>
+  </aside>
+</div>
+<div class="overlay" id="modal"><div class="modal"><div class="modal-head"><div class="modal-title" id="mTitle"></div><button class="icon-btn" onclick="closeModal()">✕</button></div><div class="modal-body" id="mBody"></div><div class="modal-foot"><button class="btn" onclick="closeModal()">닫기</button></div></div></div>
+<div class="toast" id="toast"></div>
+<script>
+const { db, doc, collection, setDoc, updateDoc, deleteDoc, onSnapshot } = window.fb;
+const $ = (s) => document.querySelector(s);
+const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const toast = (t, kind = '') => { const el = $('#toast'); el.textContent = t; el.className = 'toast on ' + kind; clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove('on'), 2400); };
+window.addEventListener('message', (e) => { if (e.data?.sancho && e.data.act === 'theme') document.documentElement.dataset.theme = e.data.theme || ''; });
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+function openModal(title, html) { $('#mTitle').textContent = title; $('#mBody').innerHTML = html; $('#modal').classList.add('active'); }
+function closeModal() { $('#modal').classList.remove('active'); }
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+// ── 노드 종류 — 무엇을 할 수 있는지가 여기 다 있다 ──
+const 종류 = {
+  start:    { nm: '수동 시작', ic: '▶', desc: '사람이 ▶ 실행을 누르면 시작', trigger: true, fields: [] },
+  schedule: { nm: '시간마다', ic: '⏰', desc: '매일 정한 시각에 시작', trigger: true, fields: [['time', '시각 (예: 07:30)', 'text']] },
+  watch:    { nm: 'N분마다', ic: '🔁', desc: '몇 분마다 되풀이해서 시작', trigger: true, fields: [['minutes', '간격(분, 최소 5)', 'number']] },
+  ai:       { nm: '산초에게 시키기', ic: '✳', desc: '두뇌에게 일을 시키고 답을 받는다', fields: [['prompt', '지시문 (앞 단계 값은 {{steps.이름}})', 'textarea'], ['model', '모델 (비우면 기본)', 'select', ['', 'fable', 'opus', 'sonnet', 'haiku']], ['format', '답 형식 (선택: JSON·표·한 줄)', 'text']] },
+  dbRead:   { nm: '데이터 읽기', ic: '📂', desc: '컬렉션에서 조건에 맞는 문서를 가져온다', fields: [['collection', '컬렉션 (예: mail·tasks·events)', 'text'], ['field', '조건 필드 (비우면 전부)', 'text'], ['op', '비교', 'select', ['같음', '다름', '포함', '미포함', '큼', '작음', '있음', '비었음']], ['value', '값', 'text'], ['limit', '최대 건수', 'number']] },
+  dbWrite:  { nm: '데이터 쓰기', ic: '💾', desc: '컬렉션에 문서를 만들거나 고친다', fields: [['collection', '컬렉션', 'text'], ['docId', '문서 id (비우면 새로)', 'text'], ['data', '내용 (JSON)', 'textarea']] },
+  if:       { nm: '조건 나누기', ic: '⑂', desc: '값을 보고 참/거짓으로 길을 나눈다', ports: ['true', 'false'], fields: [['left', '값 (예: {{steps.분류}})', 'text'], ['op', '비교', 'select', ['포함', '미포함', '같음', '다름', '큼', '작음', '있음', '비었음']], ['right', '비교값', 'text']] },
+  http:     { nm: '웹 호출', ic: '🌐', desc: '다른 서비스의 주소를 부른다', fields: [['method', '방식', 'select', ['GET', 'POST', 'PUT', 'DELETE']], ['url', '주소', 'text'], ['contentType', '본문 형식', 'select', ['', 'application/json', 'application/x-www-form-urlencoded']], ['headers', '헤더 (JSON)', 'textarea'], ['body', '본문', 'textarea']] },
+  telegram: { nm: '텔레그램 보내기', ic: '📨', desc: '휴대폰으로 보낸다 (⚙ 설정 필요)', fields: [['text', '보낼 내용', 'textarea']] },
+  message:  { nm: '메신저에 남기기', ic: '💬', desc: '산초 이름으로 채널에 글을 남긴다', fields: [['channelId', '채널 id (기본 c1 공지)', 'text'], ['text', '내용', 'textarea']] },
+  journal:  { nm: '알림에 남기기', ic: '🔔', desc: '대시보드 알림·일지에 기록', fields: [['text', '내용', 'textarea']] },
+  wait:     { nm: '기다리기', ic: '⏳', desc: '잠깐 멈춘다', fields: [['seconds', '초 (최대 300)', 'number']] },
+  set:      { nm: '값 만들기', ic: '🔤', desc: '다음 단계에서 쓸 값을 만든다', fields: [['value', '값 (템플릿 가능)', 'textarea']] },
+};
+const 본문요약 = (n) => {
+  const c = n.config || {};
+  if (n.type === 'ai') return c.prompt || '(지시문 없음)';
+  if (n.type === 'dbRead') return `${c.collection || '?'} ${c.field ? `· ${c.field} ${c.op || ''} ${c.value || ''}` : '전부'}`;
+  if (n.type === 'dbWrite') return `${c.collection || '?'} ${c.docId ? '· ' + c.docId : '· 새 문서'}`;
+  if (n.type === 'if') return `${c.left || ''} ${c.op || ''} ${c.right || ''}`;
+  if (n.type === 'http') return `${c.method || 'GET'} ${c.url || ''}`;
+  if (n.type === 'schedule') return `매일 ${c.time || '07:00'}`;
+  if (n.type === 'watch') return `${c.minutes || 10}분마다`;
+  if (n.type === 'wait') return `${c.seconds || 5}초`;
+  return c.text || c.value || 종류[n.type]?.desc || '';
+};
+
+// ── 상태 ──
+let S = { list: {}, runs: {}, cur: null, wf: null, sel: null, view: { x: 40, y: 30, z: 1 }, run: null, runId: '' };
+const 새워크플로 = () => ({ name: '새 워크플로', desc: '', enabled: false, trigger: { type: 'manual' },
+  nodes: [{ id: uid(), type: 'start', name: '시작', x: 60, y: 120, config: {} }], edges: [] });
+
+function drawList() {
+  const ids = Object.keys(S.list).sort((a, b) => String(S.list[b]?.updatedAt || '').localeCompare(String(S.list[a]?.updatedAt || '')));
+  $('#wfList').innerHTML = ids.map((id) => { const w = S.list[id]; const on = w.enabled && w.trigger?.type !== 'manual';
+    return `<div class="wf ${id === S.cur ? 'on' : ''}" data-id="${esc(id)}"><span>${esc(w.name || id)}</span><span class="m"><i class="dot ${w.lastStatus === '완료' ? 'on' : w.lastStatus === '실패' ? 'err' : ''}"></i>${on ? (w.trigger.type === 'schedule' ? `매일 ${esc(w.trigger.time || '')}` : `${esc(String(w.trigger.minutes || 10))}분마다`) : '수동'}${w.lastRun ? ' · ' + esc(String(w.lastRun).slice(5, 16).replace('T', ' ')) : ''}</span></div>`; }).join('')
+    || '<div class="hint" style="padding:10px 8px">아직 없습니다. ＋ 새로 를 눌러 만드세요.</div>';
+}
+function draw() {
+  const wf = S.wf; if (!wf) { $('#nodes').innerHTML = ''; $('#wires').innerHTML = ''; return; }
+  $('#wfName').value = wf.name || '';
+  $('#wfEnabled').checked = !!wf.enabled;
+  const t = wf.trigger || { type: 'manual' };
+  $('#trigPill').textContent = '트리거: ' + (t.type === 'schedule' ? `매일 ${t.time || '07:00'}` : t.type === 'watch' ? `${t.minutes || 10}분마다` : '수동');
+  $('#nodes').innerHTML = (wf.nodes || []).map((n) => {
+    const k = 종류[n.type] || { nm: n.type, ic: '?', fields: [] };
+    const 상태 = S.run?.steps?.find((s) => s.nodeId === n.id);
+    const cls = 상태?.status === '완료' ? ' ok' : 상태?.status === '실패' ? ' bad' : 상태?.status === '실행중' ? ' run' : '';
+    return `<div class="node${n.id === S.sel ? ' sel' : ''}${cls}" data-id="${esc(n.id)}" style="left:${n.x || 0}px;top:${n.y || 0}px">
+      <div class="h"><span class="ic">${k.ic}</span><span class="tx">${esc(n.name || k.nm)}</span></div>
+      <div class="b">${esc(본문요약(n)).slice(0, 90)}</div>
+      ${k.trigger ? '' : '<div class="port in" data-port="in"></div>'}
+      ${k.ports ? `<div class="port t" data-port="true"></div><span class="plabel t">참</span><div class="port f" data-port="false"></div><span class="plabel f">거짓</span>` : '<div class="port out" data-port="out"></div>'}
+    </div>`;
+  }).join('');
+  wires();
+  const c = $('#canvas'); c.style.transform = `translate(${S.view.x}px,${S.view.y}px) scale(${S.view.z})`;
+}
+function 포트위치(nid, port) {
+  const el = $(`.node[data-id="${CSS.escape(nid)}"]`); if (!el) return null;
+  const n = S.wf.nodes.find((x) => x.id === nid) || { x: 0, y: 0 };
+  const w = el.offsetWidth || 190, h = el.offsetHeight || 70;
+  if (port === 'in') return { x: n.x, y: n.y + h / 2 };
+  if (port === 'true') return { x: n.x + w, y: n.y + h * 0.26 + 6 };
+  if (port === 'false') return { x: n.x + w, y: n.y + h * 0.70 + 6 };
+  return { x: n.x + w, y: n.y + h / 2 };
+}
+function wires(temp) {
+  const wf = S.wf; if (!wf) return;
+  const seg = (a, b, cls) => { const dx = Math.max(40, Math.abs(b.x - a.x) / 2); return `<path class="${cls}" d="M${a.x + 4000} ${a.y + 4000} C${a.x + dx + 4000} ${a.y + 4000}, ${b.x - dx + 4000} ${b.y + 4000}, ${b.x + 4000} ${b.y + 4000}"></path>`; };
+  const hot = new Set((S.run?.steps || []).filter((s) => s.status === '완료').map((s) => s.nodeId));
+  $('#wires').innerHTML = (wf.edges || []).map((e) => {
+    const a = 포트위치(e.from, e.port || 'out'), b = 포트위치(e.to, 'in'); if (!a || !b) return '';
+    return seg(a, b, (e.port === 'true' ? 'true' : e.port === 'false' ? 'false' : '') + (hot.has(e.from) && hot.has(e.to) ? ' hot' : ''));
+  }).join('') + (temp ? seg(temp.a, temp.b, 'hot') : '');
+}
+
+// ── 저장 ──
+let 저장타이머 = 0;
+function 저장(즉시) {
+  if (!S.cur || !S.wf) return;
+  clearTimeout(저장타이머);
+  const go = () => setDoc(doc(db, 'workflows', S.cur), { ...S.wf }, { merge: true }).catch((e) => toast('저장 실패: ' + e.message, 'err'));
+  즉시 ? go() : (저장타이머 = setTimeout(go, 600));
+}
+function 고르기(id) { S.cur = id; S.wf = JSON.parse(JSON.stringify(S.list[id] || 새워크플로())); S.sel = null; S.run = null; drawList(); draw(); 옆판(); 실행목록(); }
+
+// ── 옆 패널(노드 설정 / 워크플로 설정) ──
+function 옆판() {
+  const wf = S.wf, node = wf?.nodes?.find((n) => n.id === S.sel);
+  $('#delNode').hidden = !node || node.type === 'start';
+  if (!wf) { $('#sideTitle').textContent = '워크플로'; $('#sideBody').innerHTML = '<div class="hint">왼쪽에서 고르거나 ＋ 새로 를 눌러 만드세요.</div>'; return; }
+  if (!node) {
+    $('#sideTitle').textContent = '워크플로 설정';
+    const t = wf.trigger || { type: 'manual' };
+    $('#sideBody').innerHTML = `
+      <div class="hintbox">노드를 이어 붙여 일을 자동으로 시킵니다. 앞 단계의 결과는 <code>{{steps.노드이름}}</code> 으로 쓰고, 오늘 날짜는 <code>{{today}}</code> 입니다.</div>
+      <div class="fg"><label class="fl">설명</label><textarea class="fi" id="wfDesc" style="min-height:60px">${esc(wf.desc || '')}</textarea></div>
+      <div class="fg"><label class="fl">언제 시작할까요</label>
+        <select class="fs" id="trigType"><option value="manual">수동 — ▶ 실행을 누를 때</option><option value="schedule">매일 정한 시각</option><option value="watch">N분마다</option></select></div>
+      <div class="fg" id="trigTime" ${t.type === 'schedule' ? '' : 'hidden'}><label class="fl">시각</label><input class="fi" id="tTime" value="${esc(t.time || '07:30')}" placeholder="07:30"></div>
+      <div class="fg" id="trigMin" ${t.type === 'watch' ? '' : 'hidden'}><label class="fl">간격(분, 최소 5)</label><input class="fi" type="number" id="tMin" value="${esc(String(t.minutes || 10))}"></div>
+      <div class="fg"><label class="fl">실행할 때 줄 입력값 (선택)</label><input class="fi" id="wfInput" placeholder="{{trigger.input}} 으로 쓸 수 있어요"></div>
+      <button class="btn btn-ai" style="width:100%" id="askImprove">✳ 산초에게 이 흐름 검토·보완 시키기</button>`;
+    $('#trigType').value = t.type || 'manual';
+    $('#wfDesc').onchange = (e) => { S.wf.desc = e.target.value; 저장(); };
+    $('#trigType').onchange = (e) => {
+      const v = e.target.value; S.wf.trigger = { type: v, time: $('#tTime')?.value || '07:30', minutes: Number($('#tMin')?.value) || 10 };
+      $('#trigTime').hidden = v !== 'schedule'; $('#trigMin').hidden = v !== 'watch'; 저장(true); draw();
+    };
+    const 갱신 = () => { S.wf.trigger = { type: $('#trigType').value, time: $('#tTime').value, minutes: Number($('#tMin').value) || 10 }; 저장(true); draw(); };
+    $('#tTime').onchange = 갱신; $('#tMin').onchange = 갱신;
+    $('#askImprove').onclick = () => SANCHO.ask(`db/workflows.json 의 "${S.wf.name}" 워크플로를 읽고, 흐름이 제대로 도는지 검토해줘. 빠진 단계나 틀린 조건이 있으면 고쳐서 같은 형식으로 저장하고, 무엇을 바꿨는지 알려줘. (노드 종류: ${Object.keys(종류).join('·')})`);
+    return;
+  }
+  const k = 종류[node.type] || { nm: node.type, fields: [] };
+  $('#sideTitle').textContent = k.nm;
+  $('#sideBody').innerHTML = `<div class="hintbox">${esc(k.desc)}</div>
+    <div class="fg"><label class="fl">이 단계 이름 <span class="hint">(다음 단계에서 {{steps.이름}} 으로 씁니다)</span></label><input class="fi" data-f="__name" value="${esc(node.name || k.nm)}"></div>
+    ${(k.fields || []).map(([f, label, kind, opts]) => {
+      const v = (node.config || {})[f] ?? '';
+      if (kind === 'textarea') return `<div class="fg"><label class="fl">${esc(label)}</label><textarea class="fi" data-f="${f}">${esc(v)}</textarea></div>`;
+      if (kind === 'select') return `<div class="fg"><label class="fl">${esc(label)}</label><select class="fs" data-f="${f}">${(opts || []).map((o) => `<option value="${esc(o)}" ${String(v) === o ? 'selected' : ''}>${esc(o || '(기본)')}</option>`).join('')}</select></div>`;
+      return `<div class="fg"><label class="fl">${esc(label)}</label><input class="fi" type="${kind}" data-f="${f}" value="${esc(v)}"></div>`;
+    }).join('')}
+    <label style="font-size:12px;display:flex;gap:6px;align-items:center;margin-top:4px"><input type="checkbox" data-f="continueOnFail" ${node.config?.continueOnFail ? 'checked' : ''}> 실패해도 다음 단계로</label>
+    ${node.type === 'ai' ? '<div class="hint" style="margin-top:10px">예) <b>메일 정리</b>: "db/mail.json 을 읽고 오늘 온 메일 중 답해야 할 것만 골라 한 줄씩 요약해라."</div>' : ''}`;
+  for (const el of $('#sideBody').querySelectorAll('[data-f]')) {
+    const f = el.dataset.f;
+    const 적용 = () => {
+      const n = S.wf.nodes.find((x) => x.id === S.sel); if (!n) return;
+      if (f === '__name') n.name = el.value.trim() || k.nm;
+      else n.config = { ...(n.config || {}), [f]: el.type === 'checkbox' ? el.checked : el.value };
+      저장(); draw();
+    };
+    el.oninput = () => { if (el.tagName !== 'SELECT' && el.type !== 'checkbox') 적용(); };
+    el.onchange = 적용;
+  }
+}
+
+// ── 캔버스 조작: 노드 끌기 · 포트 잇기 · 배경 끌기 · 확대 ──
+const stage = $('#stage');
+let drag = null, link = null, pan = null;
+stage.addEventListener('pointerdown', (e) => {
+  const port = e.target.closest('.port'), nodeEl = e.target.closest('.node');
+  const pt = () => { const r = stage.getBoundingClientRect(); return { x: (e.clientX - r.left - S.view.x) / S.view.z, y: (e.clientY - r.top - S.view.y) / S.view.z }; };
+  if (port && nodeEl) {
+    const p = port.dataset.port;
+    if (p === 'in') return;
+    link = { from: nodeEl.dataset.id, port: p, b: pt() };
+    try { stage.setPointerCapture(e.pointerId); } catch {} return;
+  }
+  if (nodeEl) {
+    S.sel = nodeEl.dataset.id; draw(); 옆판();
+    const n = S.wf.nodes.find((x) => x.id === S.sel); const s = pt();
+    drag = { id: S.sel, dx: s.x - (n.x || 0), dy: s.y - (n.y || 0) };
+    try { stage.setPointerCapture(e.pointerId); } catch {} return;
+  }
+  S.sel = null; draw(); 옆판();
+  pan = { x: e.clientX - S.view.x, y: e.clientY - S.view.y };
+  try { stage.setPointerCapture(e.pointerId); } catch {}
+});
+stage.addEventListener('pointermove', (e) => {
+  const r = stage.getBoundingClientRect(), pt = { x: (e.clientX - r.left - S.view.x) / S.view.z, y: (e.clientY - r.top - S.view.y) / S.view.z };
+  if (drag) { const n = S.wf.nodes.find((x) => x.id === drag.id); if (!n) return; n.x = Math.round(pt.x - drag.dx); n.y = Math.round(pt.y - drag.dy); draw(); }
+  else if (link) { link.b = pt; wires({ a: 포트위치(link.from, link.port), b: pt }); }
+  else if (pan) { S.view.x = e.clientX - pan.x; S.view.y = e.clientY - pan.y; $('#canvas').style.transform = `translate(${S.view.x}px,${S.view.y}px) scale(${S.view.z})`; }
+});
+stage.addEventListener('pointerup', (e) => {
+  if (link) {
+    const target = document.elementFromPoint(e.clientX, e.clientY)?.closest('.node');
+    if (target && target.dataset.id !== link.from) {
+      S.wf.edges = (S.wf.edges || []).filter((x) => !(x.from === link.from && (x.port || 'out') === link.port));
+      S.wf.edges.push({ from: link.from, to: target.dataset.id, port: link.port });
+      저장(true);
+    }
+    link = null; draw();
+  }
+  if (drag) { drag = null; 저장(); }
+  pan = null;
+});
+stage.addEventListener('dblclick', (e) => {   // 선 지우기: 노드 사이 빈 곳 두 번 누르면 그 노드에서 나가는 선 삭제
+  const nodeEl = e.target.closest('.node'); if (!nodeEl) return;
+  const id = nodeEl.dataset.id, n = (S.wf.edges || []).filter((x) => x.from === id);
+  if (!n.length) return;
+  S.wf.edges = S.wf.edges.filter((x) => x.from !== id); 저장(true); draw(); toast('이 노드에서 나가는 선을 지웠어요');
+});
+$('#zIn').onclick = () => { S.view.z = Math.min(1.6, S.view.z + 0.1); draw(); };
+$('#zOut').onclick = () => { S.view.z = Math.max(0.4, S.view.z - 0.1); draw(); };
+$('#zFit').onclick = () => { S.view = { x: 40, y: 30, z: 1 }; draw(); };
+document.addEventListener('keydown', (e) => {
+  if ((e.key === 'Delete' || e.key === 'Backspace') && S.sel && document.activeElement === document.body) { 노드삭제(); }
+});
+
+// ── 노드 추가·삭제 ──
+$('#addNode').onclick = () => {
+  openModal('노드 추가', `<div class="palette">${Object.entries(종류).filter(([, k]) => !k.trigger).map(([t, k]) => `<button class="pal" data-add="${t}"><span class="i">${k.ic}</span>${esc(k.nm)}</button>`).join('')}</div>
+    <div class="hint" style="margin-top:12px">트리거(시작 방법)는 오른쪽 <b>워크플로 설정</b>에서 바꿉니다.</div>`);
+  $('#mBody').onclick = (e) => {
+    const t = e.target.closest('[data-add]')?.dataset.add; if (!t) return;
+    const last = S.wf.nodes[S.wf.nodes.length - 1] || { x: 60, y: 120 };
+    const n = { id: uid(), type: t, name: 종류[t].nm, x: (last.x || 0) + 240, y: last.y || 120, config: {} };
+    S.wf.nodes.push(n);
+    if (S.sel || S.wf.nodes.length === 2) S.wf.edges.push({ from: S.sel || S.wf.nodes[0].id, to: n.id, port: 'out' });
+    S.sel = n.id; closeModal(); 저장(true); draw(); 옆판();
+  };
+};
+function 노드삭제() {
+  const n = S.wf?.nodes?.find((x) => x.id === S.sel); if (!n || n.type === 'start') return;
+  S.wf.nodes = S.wf.nodes.filter((x) => x.id !== S.sel);
+  S.wf.edges = (S.wf.edges || []).filter((e) => e.from !== S.sel && e.to !== S.sel);
+  S.sel = null; 저장(true); draw(); 옆판();
+}
+$('#delNode').onclick = 노드삭제;
+$('#wfName').onchange = () => { if (!S.wf) return; S.wf.name = $('#wfName').value.trim() || '워크플로'; 저장(true); drawList(); };
+$('#wfEnabled').onchange = () => { if (!S.wf) return; S.wf.enabled = $('#wfEnabled').checked; 저장(true); drawList(); };
+$('#newWf').onclick = async () => { const id = uid(); const w = 새워크플로(); await setDoc(doc(db, 'workflows', id), w); S.list[id] = w; 고르기(id); toast('새 워크플로를 만들었어요'); };
+$('#delWf').onclick = async () => { if (!S.cur || !confirm('이 워크플로를 지울까요?')) return; await deleteDoc(doc(db, 'workflows', S.cur)); S.cur = null; S.wf = null; drawList(); draw(); 옆판(); };
+$('#wfList').onclick = (e) => { const id = e.target.closest('[data-id]')?.dataset.id; if (id) 고르기(id); };
+$('#askMake').onclick = () => SANCHO.ask(`워크플로를 하나 만들어줘. db/workflows.json 에 아래 형식으로 넣으면 화면에 뜬다.
+형식: { "<id>": { "name": "이름", "enabled": true, "trigger": {"type":"schedule","time":"07:30"}, "nodes": [{"id":"n1","type":"schedule","name":"시작","x":60,"y":120,"config":{"time":"07:30"}}, …], "edges": [{"from":"n1","to":"n2","port":"out"}] } }
+노드 종류: ${Object.entries(종류).map(([t, k]) => `${t}(${k.nm})`).join(', ')}. 앞 단계 값은 {{steps.노드이름}}, 오늘은 {{today}}.
+내가 원하는 자동화는 이렇다: `);
+
+// ── 실행 ──
+$('#runWf').onclick = async () => {
+  if (!S.cur) return;
+  await 저장(true);
+  $('#runWf').disabled = true; $('#runWf').textContent = '실행 중…';
+  try {
+    const r = await SANCHO.api('/api/workflow/run', { method: 'POST', body: JSON.stringify({ id: S.cur, input: $('#wfInput')?.value || '' }) });
+    if (r.error) toast(r.error, 'err'); else { S.runId = r.runId; toast(`실행 ${r.status}`, r.status === '완료' ? 'ok' : 'err'); }
+  } catch (e) { toast('실행 실패: ' + e.message, 'err'); }
+  $('#runWf').disabled = false; $('#runWf').textContent = '▶ 실행';
+};
+function 실행목록() {
+  const mine = Object.entries(S.runs).filter(([, r]) => r?.workflowId === S.cur).sort((a, b) => String(b[1].startedAt).localeCompare(String(a[1].startedAt))).slice(0, 20);
+  $('#runPick').innerHTML = mine.map(([id, r]) => `<option value="${esc(id)}">${esc(String(r.startedAt).slice(5, 16).replace('T', ' '))} · ${esc(r.status)} (${esc(r.trigger || '')})</option>`).join('') || '<option value="">기록 없음</option>';
+  if (!S.runId || !mine.some(([id]) => id === S.runId)) S.runId = mine[0]?.[0] || '';
+  $('#runPick').value = S.runId;
+  실행그리기();
+}
+function 실행그리기() {
+  const r = S.runs[S.runId]; S.run = r || null;
+  $('#runMeta').textContent = r ? `${r.status} · ${r.steps?.length || 0}단계${r.ms ? ` · ${(r.ms / 1000).toFixed(1)}초` : ''}` : '';
+  $('#runBody').innerHTML = r ? ((r.steps || []).map((s) => `<div class="step"><span class="st">${s.status === '완료' ? '✅' : s.status === '실패' ? '❌' : '⏳'}</span><span class="nm2">${esc(s.name)}</span><span class="o" title="${esc(s.err || s.out || '')}">${esc(s.err || s.out || '')}</span><span class="ms">${s.ms != null ? (s.ms / 1000).toFixed(1) + 's' : ''}</span></div>`).join('')
+    + (r.error ? `<div class="step"><span class="st">⚠️</span><span class="o">${esc(r.error)}</span></div>` : '')) : '<div class="hint">아직 실행한 적이 없습니다. ▶ 실행을 눌러 보세요.</div>';
+  draw();
+}
+$('#runPick').onchange = () => { S.runId = $('#runPick').value; 실행그리기(); };
+
+// ── 구독 ──
+const docs = (s) => Object.fromEntries(s.docs.map((d) => [d.id, d.data()]));
+onSnapshot(collection(db, 'workflows'), (s) => {
+  S.list = docs(s);
+  if (S.cur && S.list[S.cur] && !drag && !link) { const 새것 = JSON.stringify(S.list[S.cur]); if (새것 !== JSON.stringify(S.wf)) { /* 다른 곳(산초)에서 고친 것 반영 */ if (document.activeElement === document.body) { S.wf = JSON.parse(새것); draw(); 옆판(); } } }
+  if (!S.cur) { const first = Object.keys(S.list)[0]; if (first) 고르기(first); }
+  drawList();
+});
+onSnapshot(collection(db, 'workflowruns'), (s) => { S.runs = docs(s); 실행목록(); });
+</script>
+</body>
+</html>

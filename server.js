@@ -260,8 +260,8 @@ function tick() {
 function tick모두() {
   if (현재) return;
   const uids = ls(join(DATA, 'users'), (n) => { try { return statSync(join(DATA, 'users', n)).isDirectory(); } catch { return false; } });
-  if (!uids.length) return tick();                                  // 아직 로그인 계정이 없으면 옛 방식(공용 파일)
-  for (const uid of uids) { if (현재) return; sessionContext.run(uid, tick); }
+  if (!uids.length) { tick(); 워크플로시계(); return; }               // 아직 로그인 계정이 없으면 옛 방식(공용 파일)
+  for (const uid of uids) { if (현재) return; sessionContext.run(uid, () => { tick(); 워크플로시계(); }); }
 }
 setInterval(tick모두, 30_000);
 setTimeout(tick모두, 5_000);
@@ -464,6 +464,166 @@ const verifyPassword = (password, salt, hash) => {
   return scryptSync(password, salt, 64).toString('hex') === hash;
 };
 
+// ---------- 워크플로(자동화 흐름) — n8n 처럼 노드를 이어 붙여 만든 일을 산초가 순서대로 실행한다 ----------
+// 데이터: db/workflows.json = { id: { name, desc, enabled, trigger, nodes:[{id,type,name,x,y,config}], edges:[{from,to,port}] } }
+//        db/workflowruns.json = 실행 기록(최근 100개) — 화면은 이걸 구독해 진행 상황을 실시간으로 본다.
+const 워크플로 = () => 컬렉션('workflows');
+const 흐름값 = (ctx, path) => String(path || '').trim().split('.').reduce((o, k) => (o == null ? o : o[k]), ctx);
+function 채우기(text, ctx) {   // "{{steps.조사.text}} 를 정리해라" → 값으로 바꾼다
+  return String(text ?? '').replace(/\{\{([^}]+)\}\}/g, (_, expr) => {
+    const key = expr.trim();
+    if (key === 'now') return new Date().toLocaleString('ko-KR');
+    if (key === 'today') return ymd(new Date());
+    const v = 흐름값(ctx, key);
+    return v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v);
+  });
+}
+const 참인가 = (a, op, b) => {
+  const n = (x) => (x === '' || x == null || isNaN(Number(x)) ? null : Number(x));
+  switch (op) {
+    case '포함': return String(a).includes(String(b));
+    case '미포함': return !String(a).includes(String(b));
+    case '같음': return String(a).trim() === String(b).trim();
+    case '다름': return String(a).trim() !== String(b).trim();
+    case '큼': return (n(a) ?? 0) > (n(b) ?? 0);
+    case '작음': return (n(a) ?? 0) < (n(b) ?? 0);
+    case '비었음': return !String(a ?? '').trim();
+    case '있음': return !!String(a ?? '').trim();
+    default: return false;
+  }
+};
+// 두뇌에게 한 단계를 시키고 답 전체를 돌려준다(워크플로 안에서만 쓴다 — 채팅과 달리 이어가기 없이 매번 새로)
+function 두뇌한번({ prompt, model, onDelta }) {
+  return new Promise((ok) => {
+    let out = '', done = false;
+    const proc = claude실행({ prompt, model, onEvent: (e) => {
+      if (e.t === 'delta') { out += e.text; onDelta && onDelta(e.text); }
+      else if (e.t === 'text') out += (out ? '\n\n' : '') + e.text;
+      else if (e.t === 'done') { if (done) return; done = true; ok({ ok: e.ok, text: e.ok ? (e.final || out) : e.text }); }
+    } });
+    if (현재) 현재.proc = proc;   // ■ 중지로 끊을 수 있게
+  });
+}
+const 기록쓰기 = (runId, run) => db쓰기('workflowruns', runId, run, false);
+function 기록정리() {   // 최근 100개만 남긴다
+  const all = Object.entries(컬렉션('workflowruns')).sort((a, b) => String(b[1]?.startedAt || '').localeCompare(String(a[1]?.startedAt || '')));
+  if (all.length <= 100) return;
+  const map = Object.fromEntries(all.slice(0, 100)); 컬렉션저장('workflowruns', map); 알림({ col: 'workflowruns', op: 'trim' });
+}
+
+async function 워크플로실행(id, 트리거 = { type: 'manual' }, 입력 = '') {
+  const wf = 워크플로()[id];
+  if (!wf) return { error: '없는 워크플로예요' };
+  if (현재) return { error: `지금 다른 일(${현재.kind})을 하고 있어요` };
+  const nodes = Object.fromEntries((wf.nodes || []).map((n) => [n.id, n]));
+  const edges = (wf.edges || []).map((e) => ({ ...e, port: e.port || 'out' }));
+  const 다음 = (nid, port = 'out') => edges.filter((e) => e.from === nid && (e.port || 'out') === port).map((e) => nodes[e.to]).filter(Boolean);
+  const 시작 = (wf.nodes || []).filter((n) => n.type === 'start' || !edges.some((e) => e.to === n.id));
+  const runId = `${id}-${Date.now().toString(36)}`;
+  const run = { workflowId: id, name: wf.name || id, trigger: 트리거.type, startedAt: new Date().toISOString(), status: '실행중', steps: [] };
+  기록쓰기(runId, run);
+  현재 = { proc: null, kind: `워크플로 ${wf.name || id}`, startedAt: Date.now() };
+  const ctx = { trigger: { ...트리거, input: 입력 }, steps: {} };
+  let 멈춤 = false;
+  const 단계쓰기 = (s) => { run.steps = run.steps.filter((x) => x.nodeId !== s.nodeId || x.at !== s.at).concat(s); 기록쓰기(runId, run); };
+
+  async function 노드실행(node, depth) {
+    if (멈춤 || depth > 50) return;
+    const t0 = Date.now(), step = { nodeId: node.id, name: node.name || node.type, type: node.type, at: new Date().toISOString(), status: '실행중' };
+    단계쓰기(step);
+    const c = node.config || {};
+    let 결과 = null, 다음포트 = 'out';
+    try {
+      if (node.type === 'start' || node.type === 'schedule' || node.type === 'watch') 결과 = ctx.trigger.input || '';
+      else if (node.type === 'ai') {
+        const r = await 두뇌한번({ prompt: 채우기(c.prompt || '', ctx) + (c.format ? `\n\n답은 ${c.format} 형식으로만 써라. 설명은 붙이지 마라.` : ''), model: c.model || undefined });
+        if (!r.ok) throw new Error(r.text || '두뇌가 답하지 못했어요');
+        결과 = r.text;
+      } else if (node.type === 'dbRead') {
+        const rows = Object.entries(컬렉션(컬렉션이름(c.collection) || '_')).map(([k, v]) => ({ id: k, ...v }));
+        const 걸러낸 = c.field ? rows.filter((r) => 참인가(흐름값(r, c.field), c.op || '같음', 채우기(c.value || '', ctx))) : rows;
+        결과 = { count: 걸러낸.length, rows: 걸러낸.slice(0, Number(c.limit) || 50) };
+      } else if (node.type === 'dbWrite') {
+        const col = 컬렉션이름(c.collection); if (!col) throw new Error('컬렉션 이름이 필요해요');
+        let data; try { data = JSON.parse(채우기(c.data || '{}', ctx)); } catch (e) { throw new Error(`내용이 JSON 이 아니에요: ${e.message}`); }
+        const docId = 채우기(c.docId || '', ctx).trim() || `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+        결과 = db쓰기(col, docId, data, c.merge !== false ? 'deep' : false); 결과 = { id: docId, ...결과 };
+      } else if (node.type === 'if') {
+        const 왼 = 채우기(c.left || '', ctx);
+        다음포트 = 참인가(왼, c.op || '포함', 채우기(c.right || '', ctx)) ? 'true' : 'false';
+        결과 = { 판정: 다음포트 === 'true' ? '참' : '거짓', 값: 왼.slice(0, 200) };
+      } else if (node.type === 'http') {
+        const r = await fetch(채우기(c.url || '', ctx), {
+          method: c.method || 'GET',
+          headers: { ...(c.contentType ? { 'content-type': c.contentType } : {}), ...(() => { try { return JSON.parse(채우기(c.headers || '{}', ctx)); } catch { return {}; } })() },
+          body: (c.method && c.method !== 'GET') ? 채우기(c.body || '', ctx) : undefined,
+          signal: AbortSignal.timeout(30000),
+        });
+        const txt = (await r.text()).slice(0, 20000);
+        결과 = { status: r.status, text: txt, json: (() => { try { return JSON.parse(txt); } catch { return null; } })() };
+        if (!r.ok) throw new Error(`${r.status} 응답: ${txt.slice(0, 200)}`);
+      } else if (node.type === 'telegram') {
+        const 보냄 = await 텔레그램(채우기(c.text || '', ctx));
+        if (!보냄) throw new Error('텔레그램 설정(봇 토큰·chat id)이 없어요');
+        결과 = '보냈어요';
+      } else if (node.type === 'journal') {
+        appendFileSync(join(일지폴더(), `${ymd(new Date())}.md`), `## ${hhmm(new Date())} · ${wf.name || id}\n${채우기(c.text || '', ctx)}\n\n`);
+        결과 = '알림에 남겼어요';
+      } else if (node.type === 'message') {
+        const ch = 채우기(c.channelId || '', ctx).trim() || 'c1';
+        결과 = db쓰기('messages', `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, { channelId: ch, userId: 'sancho', userName: 설정().name, text: 채우기(c.text || '', ctx), ts: new Date().toISOString() }, false);
+      } else if (node.type === 'wait') {
+        await new Promise((r) => setTimeout(r, Math.min(300, Math.max(1, Number(c.seconds) || 5)) * 1000));
+        결과 = `${c.seconds || 5}초 기다렸어요`;
+      } else if (node.type === 'set') {
+        결과 = 채우기(c.value || '', ctx);
+      } else throw new Error(`모르는 노드 종류: ${node.type}`);
+
+      ctx.steps[node.name || node.id] = 결과;
+      단계쓰기({ ...step, status: '완료', ms: Date.now() - t0, out: typeof 결과 === 'string' ? 결과.slice(0, 2000) : JSON.stringify(결과).slice(0, 2000), port: 다음포트 });
+    } catch (e) {
+      단계쓰기({ ...step, status: '실패', ms: Date.now() - t0, err: String(e?.message || e).slice(0, 500) });
+      if (c.continueOnFail) { ctx.steps[node.name || node.id] = { error: String(e?.message || e) }; }
+      else { 멈춤 = true; return; }
+    }
+    for (const n of 다음(node.id, 다음포트)) await 노드실행(n, depth + 1);
+  }
+
+  try {
+    for (const s of 시작) await 노드실행(s, 0);
+    run.status = 멈춤 ? '실패' : '완료';
+  } catch (e) { run.status = '실패'; run.error = String(e?.message || e); }
+  run.finishedAt = new Date().toISOString();
+  run.ms = Date.parse(run.finishedAt) - Date.parse(run.startedAt);
+  기록쓰기(runId, run); 기록정리();
+  db쓰기('workflows', id, { lastRun: run.finishedAt, lastStatus: run.status }, 'deep');
+  일끝();
+  return { ok: true, runId, status: run.status };
+}
+
+// 시간 트리거: 예약과 같은 시계에 얹는다(사용자별로 돈다)
+function 워크플로시계() {
+  if (현재) return;
+  const st = 상태(), now = new Date(), hm = hhmm(now), today = ymd(now);
+  const runs = st.wfRuns || {};
+  for (const [id, wf] of Object.entries(워크플로())) {
+    if (!wf || wf.enabled === false || !wf.trigger) continue;
+    const t = wf.trigger;
+    if (t.type === 'schedule') {
+      if (!/^\d{1,2}:\d{2}$/.test(String(t.time || ''))) continue;
+      if (hm < String(t.time).padStart(5, '0') || runs[id] === today) continue;
+      상태저장({ wfRuns: { ...runs, [id]: today } });
+      워크플로실행(id, { type: 'schedule' }); return;
+    }
+    if (t.type === 'watch') {
+      const 분 = Math.max(5, Number(t.minutes) || 10), last = (st.wfLast || {})[id] || 0;
+      if (Date.now() - last < 분 * 60000) continue;
+      상태저장({ wfLast: { ...(st.wfLast || {}), [id]: Date.now() } });
+      워크플로실행(id, { type: 'watch' }); return;
+    }
+  }
+}
+
 // ---------- HTTP ----------
 const send = (res, code, body, type = 'application/json; charset=utf-8') => { res.writeHead(code, { 'content-type': type }); res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body)); };
 const readBody = (req) => new Promise((ok) => { let b = ''; req.on('data', (c) => { b += c; }); req.on('end', () => { try { ok(JSON.parse(b || '{}')); } catch { ok({}); } }); });
@@ -632,6 +792,11 @@ createServer(async (req, res) => {
         if (req.method === 'DELETE') return send(res, 200, { ok: db지우기(col, id) });
       }
       return send(res, 405, { error: 'method' });
+    }
+    if (route === 'POST /api/workflow/run') {   // 화면의 ▶ 실행. 진행 상황은 db/workflowruns 구독으로 실시간으로 본다
+      const { id, input } = await readBody(req);
+      const r = await 워크플로실행(String(id || ''), { type: 'manual' }, String(input || ''));
+      return send(res, r.error ? 409 : 200, r);
     }
     if (route === 'GET /api/journal') return send(res, 200, 일지(Math.min(60, Number(url.searchParams.get('days')) || 7)));
     if (route === 'GET /api/search') { const q = String(url.searchParams.get('q') || '').trim(); return send(res, 200, q.length < 1 ? [] : 검색(q)); }
