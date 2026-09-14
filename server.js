@@ -8,8 +8,6 @@ import { readFileSync, writeFileSync, appendFileSync, mkdirSync, readdirSync, ex
 import { join, dirname, resolve, sep, basename, extname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { scryptSync, randomBytes, randomUUID } from 'node:crypto';
-import { AsyncLocalStorage } from 'node:async_hooks';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const DATA = process.env.SANCHO_DATA || join(ROOT, 'data');   // 산초의 모든 상태는 이 폴더 안 텍스트 파일이다. 지우면 초기화. (SANCHO_DATA 로 위치 변경)
@@ -19,17 +17,7 @@ for (const d of [JOURNAL, DB, join(DATA, 'uploads'), join(DATA, 'wiki'), join(DA
 const PORT = Number(process.env.SANCHO_PORT || 8790);
 
 // ---------- 파일 도우미 ----------
-const sessionContext = new AsyncLocalStorage();
-const SESSIONS = new Map();
-const p = (name) => {
-  const uid = sessionContext.getStore();
-  if (uid && ['settings.json', 'state.json', 'memory.md', 'schedule.json', 'history.jsonl', '.system.md'].includes(name)) {
-    const dir = join(DATA, 'users', uid);
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    return join(dir, name);
-  }
-  return join(DATA, name);
-};
+const p = (name) => join(DATA, name);
 const readJson = (file, fallback) => { try { return JSON.parse(readFileSync(file, 'utf8')); } catch { return fallback; } };
 const writeJson = (file, v) => writeFileSync(file, JSON.stringify(v, null, 2) + '\n');
 const readText = (file) => { try { return readFileSync(file, 'utf8'); } catch { return ''; } };
@@ -421,14 +409,6 @@ function 검색(q) {   // 헤더 검색: 플랫폼 데이터 · 공정표 · 위
   return out.slice(0, 80);
 }
 
-const hashPassword = (password, salt = randomBytes(16).toString('hex')) => {
-  return { salt, hash: scryptSync(password, salt, 64).toString('hex') };
-};
-const verifyPassword = (password, salt, hash) => {
-  if(!password || !salt || !hash) return false;
-  return scryptSync(password, salt, 64).toString('hex') === hash;
-};
-
 // ---------- HTTP ----------
 const send = (res, code, body, type = 'application/json; charset=utf-8') => { res.writeHead(code, { 'content-type': type }); res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body)); };
 const readBody = (req) => new Promise((ok) => { let b = ''; req.on('data', (c) => { b += c; }); req.on('end', () => { try { ok(JSON.parse(b || '{}')); } catch { ok({}); } }); });
@@ -486,58 +466,8 @@ async function 채팅(req, res) {
 createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const route = `${req.method} ${url.pathname}`;
-  const token = (req.headers.cookie || '').split(';').find(c => c.trim().startsWith('sancho_session='))?.split('=')[1] || req.headers['x-session'];
-  let uid = SESSIONS.get(token);
-  if (process.env.SANCHO_SKIP_SELFTEST) uid = 'owner';
-
-  sessionContext.run(uid, async () => {
-    try {
-      if (route === 'GET /api/auth/me') {
-        if (!uid) return send(res, 401, { error: 'Not logged in' });
-        const u = readJson(join(DB, 'users.json'), {})[uid];
-        if (!u) {
-          if (process.env.SANCHO_SKIP_SELFTEST) return send(res, 200, { uid: 'owner', name: '주인' });
-          return send(res, 401, { error: 'User deleted' });
-        }
-        const { passwordHash, salt, ...safeUser } = u;
-        return send(res, 200, { uid, ...safeUser });
-      }
-      if (route === 'POST /api/auth/login') {
-        const { loginId, password } = await readBody(req);
-        const users = readJson(join(DB, 'users.json'), {});
-        let userEntry = Object.entries(users).find(([k, v]) => v.loginId === loginId);
-        
-        // Auto-seed
-        if (!userEntry && !users['admin'] && loginId === 'admin' && password === 'admin123') {
-          const h = hashPassword(password);
-          users['admin'] = { name: '관리자', loginId: 'admin', role: 'super', salt: h.salt, passwordHash: h.hash, createdAt: new Date().toISOString() };
-          writeJson(join(DB, 'users.json'), users);
-          userEntry = ['admin', users['admin']];
-        }
-        
-        if (!userEntry) return send(res, 401, { error: '아이디 또는 비밀번호가 틀렸습니다.' });
-        const [id, u] = userEntry;
-        
-        if (!u.passwordHash || !verifyPassword(password, u.salt, u.passwordHash)) return send(res, 401, { error: '아이디 또는 비밀번호가 틀렸습니다.' });
-        
-        const newToken = randomUUID();
-        SESSIONS.set(newToken, id);
-        res.setHeader('Set-Cookie', `sancho_session=${newToken}; Path=/; HttpOnly; SameSite=Strict`);
-        return send(res, 200, { ok: true, uid: id });
-      }
-      if (route === 'POST /api/auth/logout') {
-        if (token) SESSIONS.delete(token);
-        res.setHeader('Set-Cookie', 'sancho_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT');
-        return send(res, 200, { ok: true });
-      }
-      
-      // Auth Guard
-      if (url.pathname.startsWith('/api/') && !url.pathname.startsWith('/api/auth/')) {
-        if (!uid) return send(res, 401, { error: '로그인이 필요합니다.' });
-      }
-
-      if (route === 'GET /login.html') return send(res, 200, readFileSync(join(ROOT, 'public', 'login.html')), 'text/html; charset=utf-8');
-      if (route === 'GET /') return send(res, 200, readFileSync(join(ROOT, 'public', 'index.html')), 'text/html; charset=utf-8');
+  try {
+    if (route === 'GET /') return send(res, 200, readFileSync(join(ROOT, 'public', 'index.html')), 'text/html; charset=utf-8');
     if ((req.method === 'GET' || req.method === 'HEAD') && url.pathname.startsWith('/m/')) {   // 플랫폼 모듈 화면(public/m/**) — iframe 으로 껍데기 안에 뜬다. HEAD 는 "있나" 확인용(부서 도구함 배지)
       const abs = resolve(join(ROOT, 'public', 'm', decodeURIComponent(url.pathname.slice(3))));
       if (!안에(abs, join(ROOT, 'public', 'm')) || !existsSync(abs) || !statSync(abs).isFile()) return send(res, 404, '없는 화면이에요', 'text/plain; charset=utf-8');
@@ -572,6 +502,7 @@ createServer(async (req, res) => {
       }
       return send(res, 405, { error: 'method' });
     }
+    if (route === 'GET /api/me') { const s = 설정(); return send(res, 200, { uid: 'owner', name: s.owner?.name || '주인', title: s.owner?.title || '', dept: s.owner?.dept || '', company: s.owner?.company || '', email: s.owner?.email || '', sancho: s.name }); }
     if (route === 'GET /api/journal') return send(res, 200, 일지(Math.min(60, Number(url.searchParams.get('days')) || 7)));
     if (route === 'GET /api/search') { const q = String(url.searchParams.get('q') || '').trim(); return send(res, 200, q.length < 1 ? [] : 검색(q)); }
     if (route === 'GET /api/state') {
@@ -580,8 +511,9 @@ createServer(async (req, res) => {
         claude: { path: CLAUDE, version: CLAUDE_VERSION, ok: !!CLAUDE }, settings: 설정(), session: st.session, sessions: st.sessions, busy: 현재 ? 현재.kind : null, pendingRestart: 재시작예약,
         schedules: 예약목록().map((j) => ({ ...j, lastRun: st.runs[j.id] || null })), memory: readText(p('memory.md')), journal: 일지(), history: 기록(st.session),
         skills: ls(join(DATA, '.claude', 'skills')), wiki: ls(join(DATA, 'wiki'), (f) => f.endsWith('.md')),
+        wbs: (() => { try { return JSON.parse(readText(p('wbs.json')) || 'null'); } catch { return null; } })(),
         canAutostart: !!시작바로가기, autostart: !!(시작바로가기 && existsSync(시작바로가기)),
-        // 만들어져 있는 플랫폼 화면 — 껍데기가 이걸 보고 메뉴를 켠다
+        // 만들어져 있는 플랫폼 화면 — 껍데기가 이걸 보고 메뉴를 켜고, 없는 것은 "준비 중" 으로 그린다
         modules: ls(join(ROOT, 'public', 'm'), (f) => f.endsWith('.html')).map((f) => f.slice(0, -5)),
         tools: ls(join(ROOT, 'public', 'm', 'tools'), (f) => f.endsWith('.html')).map((f) => f.slice(0, -5)),
         wbs: ls(join(DATA, 'wbs'), (f) => f.endsWith('.json')).map((f) => { const d = readJson(join(DATA, 'wbs', f), {}); const c = wbs계산(d); return { name: f.slice(0, -5), title: d.name || f.slice(0, -5), pct: c.ev, spi: c.spi, late: c.late }; }),
@@ -706,13 +638,12 @@ createServer(async (req, res) => {
     }
     send(res, 404, { error: 'not found' });
   } catch (e) { send(res, 500, { error: String(e?.message || e) }); }
-  });
 }).on('error', (e) => {
   if (e.code !== 'EADDRINUSE') throw e;
   console.log(`산초가 이미 켜져 있어요 → 브라우저에서 http://127.0.0.1:${PORT} 를 여세요`);   // sancho.bat 을 두 번 눌러도 놀라지 않게
   process.exit(0);
-}).listen(PORT, process.env.SANCHO_HOST || '0.0.0.0', () => {   // SANCHO_HOST=0.0.0.0 으로 열 때는 반드시 접속 토큰을 설정한다
-  console.log(`산초 → http://${process.env.SANCHO_HOST || '0.0.0.0'}:${PORT}   두뇌: ${CLAUDE ? CLAUDE_VERSION : 'Claude Code 를 찾지 못했어요 (README 참고)'}`);
+}).listen(PORT, process.env.SANCHO_HOST || '127.0.0.1', () => {   // SANCHO_HOST=0.0.0.0 으로 열 때는 반드시 접속 토큰을 설정한다
+  console.log(`산초 → http://${process.env.SANCHO_HOST || '127.0.0.1'}:${PORT}   두뇌: ${CLAUDE ? CLAUDE_VERSION : 'Claude Code 를 찾지 못했어요 (README 참고)'}`);
   // 잘 켜진 코드를 "마지막 정상판"으로 표시한다 — 작업 폴더가 깨끗할 때만(커밋 안 된 코드가 돌고 있으면 표시를 옮기지 않는다).
   // sancho.bat 이 비정상 종료 뒤 이 표시로 복구한다. git 이 없거나 저장소가 아니면 조용히 건너뛴다.
   git('status', '--porcelain').then((dirty) => dirty ? null : git('tag', '-f', 'last-good')).catch(() => {});

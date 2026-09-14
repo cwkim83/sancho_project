@@ -91,7 +91,7 @@
   // ---- 로그인 흉내: 주인 한 사람 (/api/me) ----
   const auth = { currentUser: { uid: 'owner', email: '', displayName: '주인', photoURL: '' }, app: {} };
   const authCbs = [];
-  const me = api('/api/auth/me').then((u) => { auth.currentUser = { uid: u.uid || 'owner', email: u.email || '', displayName: u.name || '주인', photoURL: '', ...u }; return auth.currentUser; }).catch(() => auth.currentUser);
+  const me = api('/api/me').then((u) => { auth.currentUser = { uid: 'owner', email: u.email || '', displayName: u.name || '주인', photoURL: '', ...u }; return auth.currentUser; }).catch(() => auth.currentUser);
   function onAuthStateChanged(_auth, cb) { me.then((u) => cb(u)); authCbs.push(cb); return () => {}; }
   class GoogleAuthProvider { setCustomParameters() {} addScope() {} }
   const signIn = async () => ({ user: await me });
