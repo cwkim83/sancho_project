@@ -1,6 +1,6 @@
 // probe.js — 화면 실행 검사기. 크롬을 숨겨서 띄우고 페이지를 열어 **콘솔 오류와 실제 DOM** 을 받아온다.
 // 문법 검사(node --check)만으로는 "화면이 실제로 뜨는지" 를 알 수 없어서 만든 도구다(파이스에서 화면을 두 번 죽인 교훈).
-// 쓰는 법:  node probe.js <주소> [기다릴ms=4000] [DOM저장경로] [시킬JS파일]
+// 쓰는 법:  node probe.js <주소> [기다릴ms=4000] [DOM저장경로] [시킬JS파일] [쿠키 "이름=값"]
 //   예)     node probe.js http://127.0.0.1:8790/m/calendar.html 5000 out.html click.js
 // 나오는 것: 콘솔 줄(오류·경고·로그) 요약 + 400 이상 응답 + DOM 길이. 오류가 하나라도 있으면 종료 코드 1.
 // 시킬JS파일: 화면이 뜬 뒤 그 파일의 코드를 페이지 안에서 실행한다(await 써도 된다). 돌려준 값은 JSON 으로 찍힌다 —
@@ -15,6 +15,7 @@ const url = process.argv[2];
 const waitMs = Number(process.argv[3] || 4000);
 const outPath = process.argv[4] || '';
 const jsPath = process.argv[5] || '';
+const cookie = process.argv[6] || '';   // "이름=값" — 로그인한 화면을 검사할 때
 if (!url) { console.error('쓰는 법: node probe.js <주소> [ms] [DOM저장경로] [시킬JS파일]'); process.exit(2); }
 
 const 크롬후보 = [process.env.CHROME, 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', 'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
@@ -58,6 +59,11 @@ await new Promise((ok, no) => { ws.addEventListener('open', ok); ws.addEventList
 
 await cmd('Runtime.enable'); await cmd('Log.enable'); await cmd('Network.enable'); await cmd('Page.enable');
 await cmd('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }).catch(() => {});
+if (cookie) {   // 로그인 쿠키를 먼저 심는다(로그인 뒤 화면을 검사할 때)
+  const [name, ...rest] = cookie.split('=');
+  const u = new URL(url);
+  await cmd('Network.setCookie', { name, value: rest.join('='), domain: u.hostname, path: '/', httpOnly: true });
+}
 await cmd('Page.navigate', { url });
 await 잠깐(waitMs);
 const dom = (await cmd('Runtime.evaluate', { expression: 'document.documentElement.outerHTML', returnByValue: true })).result?.value || '';

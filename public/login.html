@@ -696,6 +696,11 @@
   </div>
 
   <script>
+    // 모듈 화면(iframe) 안에서 로그인 페이지가 열렸다면, 창 전체를 로그인으로 돌린다
+    // (안 그러면 달력 자리에 로그인 화면이 끼어 있어 "화면이 안 된다" 로 보인다)
+    if (window.top !== window.self) { try { window.top.location.href = '/login.html'; } catch (e) {} }
+    const 다음 = new URLSearchParams(location.search).get('next') || '/';
+
     // 배경 테마 전환 (단일 고화질 이미지 전환, 렉/드래그/버벅임 제로)
     const shot1 = document.getElementById('bgShot1');
     const shot2 = document.getElementById('bgShot2');
@@ -771,7 +776,7 @@
         });
         const json = await res.json();
         if (res.ok && json.ok) {
-          window.location.href = '/';
+          window.location.href = 다음.startsWith('/') ? 다음 : '/';
         } else {
           errorText.textContent = json.error || '아이디 또는 비밀번호가 올바르지 않습니다.';
           errorBox.style.display = 'flex';

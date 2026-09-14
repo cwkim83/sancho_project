@@ -163,6 +163,21 @@ async function 시험() {
       assert.equal((await A('/setup', { name: '또', loginId: 'boss2', password: 'longenough1' })).status, 409, '계정이 생긴 뒤엔 setup 막힘');
       assert.equal((await A('/login', { loginId: 'boss', password: 'wrongpass1' })).status, 401, '틀린 비밀번호');
       assert.equal((await A('/login', { loginId: 'boss', password: 'longenough1' })).status, 200, '맞는 비밀번호');
+      // 계정이 생겨도 이 컴퓨터(루프백)에서는 로그인 없이 쓸 수 있다(기본값). 스위치를 끄면 잠긴다.
+      // 이 서버는 시험용 통과권(SANCHO_TEST_USER)이 있어 판정이 안 되므로, 통과권 없는 서버를 하나 더 띄워 확인한다.
+      const PORT2 = PORT + 10, B2 = `http://127.0.0.1:${PORT2}`;
+      const srv2 = spawn(process.execPath, [join(dirname(HERE), 'server.js')], {
+        env: { ...process.env, SANCHO_PORT: String(PORT2), SANCHO_DATA: data, SANCHO_CLAUDE: HERE, SANCHO_SKIP_SELFTEST: '1', SANCHO_TEST_USER: '' }, stdio: ['ignore', 'ignore', 'ignore'],
+      });
+      try {
+        await 기다림(async () => (await fetch(`${B2}/health`)).ok, 6000, '두 번째 서버 기동');
+        assert.equal((await fetch(`${B2}/api/state`)).status, 200, '계정이 있어도 이 컴퓨터에선 쿠키 없이 열린다');
+        await fetch(`${BASE}/api/settings`, { method: 'POST', headers: J, body: JSON.stringify({ localNoLogin: false }) });
+        assert.equal((await fetch(`${B2}/api/state`)).status, 401, '스위치를 끄면 로그인 필요');
+        assert.equal((await fetch(`${B2}/`, { redirect: 'manual' })).status, 302, '화면은 로그인 화면으로 보낸다');
+        await fetch(`${BASE}/api/settings`, { method: 'POST', headers: J, body: JSON.stringify({ localNoLogin: true }) });
+        assert.equal((await fetch(`${B2}/api/state`)).status, 200, '다시 켜면 열린다');
+      } finally { srv2.kill(); }
     }
 
     // 1d4) 워크플로: 노드를 이어 붙인 흐름이 순서대로 돌고, 조건 분기·템플릿·실행 기록이 맞는지

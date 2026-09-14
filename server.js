@@ -45,7 +45,8 @@ const hhmm = (d) => d.toTimeString().slice(0, 5);      // HH:MM
 
 const 기본설정 = { name: '산초', model: 'sonnet', effort: 'high', allowShell: false, allowHome: false, allowSelfEdit: false, allowApps: false,
   vaultPath: '', telegramToken: '', telegramChat: '', geminiKey: '', geminiModel: 'gemini-2.5-flash', token: '',   // 연결(선택): 옵시디언 볼트 · 텔레그램 배달 · 비상두뇌(Gemini) · 외부 접속 토큰
-  owner: { name: '', title: '', dept: '', company: '', email: '' } };   // 주인(플랫폼 화면의 인사말·사용자 칩·결재선에 쓴다)
+  owner: { name: '', title: '', dept: '', company: '', email: '' },
+  localNoLogin: true };   // 이 컴퓨터(127.0.0.1)에서 열 때는 로그인 없이 바로 쓴다. 밖으로 열어 두었으면(SANCHO_HOST) 이 값과 무관하게 항상 로그인.   // 주인(플랫폼 화면의 인사말·사용자 칩·결재선에 쓴다)
 const 모델ID = { sonnet: 'sonnet', opus: 'opus', haiku: 'haiku', fable: 'claude-fable-5-1' };   // 화면 이름 → claude --model 값
 const 노력 = ['low', 'medium', 'high', 'xhigh', 'max'];                                            // claude --effort 값(2.1.269 실측)
 const 연결앱 = ['mcp__claude_ai_Gmail', 'mcp__claude_ai_Google_Calendar', 'mcp__claude_ai_Google_Drive', 'mcp__claude_ai_Microsoft_365'];   // claude.ai 커넥터 서버 이름(공백·점 → _)
@@ -454,6 +455,10 @@ function 이사(uid) {
   } catch {}
 }
 
+const 기계설정 = () => readJson(join(DATA, 'settings.json'), {});   // 로그인 전에도 읽는 컴퓨터 단위 설정
+const 로컬접속 = (req) => { const a = String(req.socket?.remoteAddress || ''); return a === '127.0.0.1' || a === '::1' || a === '::ffff:127.0.0.1'; };
+const 밖으로열림 = !['127.0.0.1', 'localhost', '', undefined].includes(process.env.SANCHO_HOST);
+const 첫계정 = () => { const u = readJson(join(DB, 'users.json'), {}); const id = Object.keys(u).find((k) => u[k]?.passwordHash) || Object.keys(u)[0]; return id || 'owner'; };
 const 계정있음 = () => { try { return Object.values(readJson(join(DB, 'users.json'), {})).some((u) => u && u.passwordHash); } catch { return false; } };
 
 const hashPassword = (password, salt = randomBytes(16).toString('hex')) => {
@@ -686,6 +691,9 @@ createServer(async (req, res) => {
   if (process.env.SANCHO_TEST_USER) uid = process.env.SANCHO_TEST_USER;   // 자가시험 전용 — 실제 실행에서는 절대 설정하지 않는다
   // 아직 계정을 하나도 만들지 않은 산초(옛 단일 사용자 판)는 그대로 열어 둔다 — 계정을 만드는 순간부터 로그인이 필요해진다
   if (!uid && !계정있음()) uid = 'owner';
+  // 이 컴퓨터에서 직접 열었고(루프백) 밖으로 열어 두지 않았으면, 설정에 따라 로그인 없이 쓴다.
+  // 산초는 본디 "내 PC 의 개인 비서" 라서 혼자 쓸 땐 로그인이 걸리적거린다. 여럿이 쓰거나 밖으로 열면 자동으로 꺼진다.
+  if (!uid && 로컬접속(req) && !밖으로열림 && 기계설정().localNoLogin !== false) uid = 첫계정();
   if (uid && !이사한.has(uid)) { 이사한.add(uid); 이사(uid); }   // 그 사람 폴더가 비어 있으면 옛 데이터를 한 번 옮겨 준다
 
   sessionContext.run(uid, async () => {
@@ -702,7 +710,8 @@ createServer(async (req, res) => {
       // 기본 비밀번호(admin123 같은 것)는 절대 심지 않는다 — 그 판이 밖으로 열리면 이 컴퓨터가 통째로 남의 것이 된다.
       if (route === 'GET /api/auth/status') {
         const users = readJson(join(DB, 'users.json'), {});
-        return send(res, 200, { setup: !Object.values(users).some((u) => u && u.passwordHash), loggedIn: !!uid, host: process.env.SANCHO_HOST || '127.0.0.1' });
+        return send(res, 200, { setup: !Object.values(users).some((u) => u && u.passwordHash), loggedIn: !!uid, host: process.env.SANCHO_HOST || '127.0.0.1',
+          localNoLogin: 기계설정().localNoLogin !== false, openToNetwork: 밖으로열림 });
       }
       if (route === 'POST /api/auth/setup') {
         const users = readJson(join(DB, 'users.json'), {});
@@ -754,7 +763,7 @@ createServer(async (req, res) => {
         if (!uid) return send(res, 401, { error: '로그인이 필요합니다.' });
       }
       if (!uid && (route === 'GET /' || url.pathname.endsWith('.html') || url.pathname.startsWith('/m/')) && route !== 'GET /login.html') {
-        res.writeHead(302, { location: '/login.html' }); return res.end();
+        res.writeHead(302, { location: '/login.html?next=' + encodeURIComponent(url.pathname + url.search) }); return res.end();
       }
 
       if (route === 'GET /login.html') return send(res, 200, readFileSync(join(ROOT, 'public', 'login.html')), 'text/html; charset=utf-8');
@@ -883,7 +892,13 @@ createServer(async (req, res) => {
       req.on('end', () => { const rel = `uploads/${Date.now().toString(36)}-${name}`; writeFileSync(p(rel), Buffer.concat(chunks)); send(res, 200, { path: rel, size }); });
       return;
     }
-    if (route === 'POST /api/settings') { writeJson(p('settings.json'), { ...설정(), ...(await readBody(req)) }); return send(res, 200, 설정()); }
+    if (route === 'POST /api/settings') {
+      const b = await readBody(req);
+      writeJson(p('settings.json'), { ...설정(), ...b });
+      // "이 컴퓨터에선 로그인 없이" 는 사람이 아니라 컴퓨터의 성질이라 공용 파일에도 같이 적는다(로그인 전에 읽어야 한다)
+      if ('localNoLogin' in b) writeJson(join(DATA, 'settings.json'), { ...기계설정(), localNoLogin: !!b.localNoLogin });
+      return send(res, 200, 설정());
+    }
     if (route === 'POST /api/new') { 상태저장({ session: null }); return send(res, 200, { ok: true }); }
     if (route === 'POST /api/session') {   // 대화 목록에서 이전 대화로 돌아가기(Claude Code 가 그 대화를 --resume 한다)
       const { id } = await readBody(req);
