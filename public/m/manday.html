@@ -1,0 +1,477 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>산초 · 공수 관리</title>
+<link rel="stylesheet" href="/m/platform.css">
+<script src="/m/sdb.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js" onload="window.chartReady && window.chartReady()"></script>
+<style>
+/* 공수 관리 — 세종 플랫폼 v2 modules/manday-tracker/manday-tracker.html 이식. 색은 전부 platform.css 변수 */
+.mt-hint { font-size: 12px; color: var(--text-light); background: var(--bg2); border: 1px dashed var(--border); border-radius: var(--radius); padding: 10px 13px; margin-bottom: 10px; line-height: 1.75; }
+.mt-hint code { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; background: var(--white); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
+.mt-ta { width: 100%; min-height: 92px; font-family: ui-monospace, Consolas, "D2Coding", monospace; font-size: 13px; line-height: 1.7; }
+.pv { margin-top: 12px; }
+.pv-t { font-size: 12px; font-weight: 700; color: var(--text-light); margin-bottom: 6px; }
+.pv-err { border-left: 3px solid var(--danger); }
+.pv-err .r { color: var(--danger); font-weight: 600; font-size: 12.5px; }
+.pv-raw { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: var(--text-lighter); margin-top: 3px; word-break: break-all; }
+.mt-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 16px; box-shadow: var(--shadow); }
+.mt-card > h3 { font-size: 14px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+.f-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 12px; }
+.f-row .fg { margin-bottom: 0; }
+.md-out { font-size: 13px; color: var(--text-light); }
+.md-out b { font-size: 17px; color: var(--primary); }
+.chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+.chart-wrap { height: 250px; position: relative; }
+.table th.s { cursor: pointer; user-select: none; white-space: nowrap; }
+.table th.s:hover { color: var(--primary); }
+.table td.num, .table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.ot { color: var(--warning); font-weight: 600; }
+.md { color: var(--primary); font-weight: 700; }
+.tw { overflow-x: auto; }
+.recent { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border-light); font-size: 13px; }
+.recent .g { flex: 1; min-width: 0; }
+.recent .s { font-size: 11px; color: var(--text-lighter); }
+@media (max-width: 900px) { .f-row { grid-template-columns: 1fr 1fr; } .chart-grid { grid-template-columns: 1fr; } }
+</style>
+</head><body><div class="content-pad" id="root"></div>
+<div class="toast" id="toast"></div>
+<div class="overlay" id="modal"><div class="modal">
+  <div class="modal-head"><div class="modal-title" id="mTitle"></div><button class="btn btn-sm btn-ghost" data-close>✕</button></div>
+  <div class="modal-body" id="mBody"></div>
+  <div class="modal-foot"><button class="btn" data-close>취소</button><button class="btn btn-primary" id="mOk">저장</button></div>
+</div></div>
+<script>
+const { db, doc, collection, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, query, where, orderBy, limit, writeBatch } = window.fb;
+const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const toast = (t, kind = '') => { const el = document.getElementById('toast'); el.textContent = t; el.className = 'toast on ' + kind; clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove('on'), 2200); };
+window.addEventListener('message', (e) => { if (e.data?.sancho && e.data.act === 'theme') document.documentElement.dataset.theme = e.data.theme || ''; });
+let me = null;                                  // 주인(단일 사용자): {uid:'owner', name, title, dept, email}
+
+const $ = (s) => document.querySelector(s);
+const v = (s) => ($(s) ? $(s).value : '').trim();
+const S = { rows: [], projects: [], users: [], ready: false };   // onSnapshot 이 채운다 — 별도 캐시 없음
+const V = { tab: 'sum', period: 'month', from: '', to: '', user: '', proj: '', sort: 'date', dir: -1, draft: '', preview: null };
+const charts = {};
+
+// ── 날짜 · 계산 (순수) ──
+const pad = (n) => String(n).padStart(2, '0');
+const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const today = () => ymd(new Date());
+const shift = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return ymd(d); };
+const num = (x) => { const n = Number(x); return isFinite(n) ? n : 0; };
+const MD = (r, o) => Math.round((num(r) + num(o)) / 8 * 100) / 100;          // M/D = (정규+야근) ÷ 8
+const rowMd = (e) => (e && e.md != null && e.md !== '') ? num(e.md) : MD(e && e.regular, e && e.overtime);
+const f1 = (n) => (Math.round(n * 10) / 10).toFixed(1);
+const f2 = (n) => (Math.round(n * 100) / 100).toFixed(2);
+
+function range() {
+  const d = new Date();
+  if (V.period === 'week') { const g = d.getDay(), mon = new Date(d); mon.setDate(d.getDate() - (g === 0 ? 6 : g - 1)); const sun = new Date(mon); sun.setDate(mon.getDate() + 6); return { from: ymd(mon), to: ymd(sun), name: '이번 주' }; }
+  if (V.period === 'month') return { from: ymd(new Date(d.getFullYear(), d.getMonth(), 1)), to: ymd(new Date(d.getFullYear(), d.getMonth() + 1, 0)), name: '이번 달' };
+  if (V.period === 'last') return { from: ymd(new Date(d.getFullYear(), d.getMonth() - 1, 1)), to: ymd(new Date(d.getFullYear(), d.getMonth(), 0)), name: '지난 달' };
+  return { from: V.from, to: V.to, name: '직접 선택' };
+}
+
+// ══════════ 카톡식 한 줄 파서 (원본 parseLine 627-666 — 순수 함수, selfCheck() 가 검사한다) ══════════
+// 예) "9/15 SJ456-25 삼성전기, V-103 외관검사 정규8시간 야근2시간"
+//     날짜(오늘·어제·9/15·2026-09-15) + 쉼표 앞 = 프로젝트 코드·고객, 쉼표 뒤 = 작업, 시간은 어디에 있어도 뽑는다.
+const CODE_RE = /^[A-Za-z][A-Za-z0-9]*-[A-Za-z0-9-]+$/;                      // 영문+숫자+하이픈 (SJ456-25, ABC-12-1)
+function parseLine(text) {
+  const raw = String(text ?? '').trim();
+  if (!raw) return { error: '빈 줄입니다.', raw };
+  let s = raw, date = today(), m;
+  if ((m = s.match(/^(오늘|어제|그저께|엊그제)[\s,]+/))) { date = shift(m[1] === '오늘' ? 0 : m[1] === '어제' ? -1 : -2); s = s.slice(m[0].length); }
+  else if ((m = s.match(/^(\d{4})[-.\/](\d{1,2})[-.\/](\d{1,2})[\s,]+/))) { date = `${m[1]}-${pad(+m[2])}-${pad(+m[3])}`; s = s.slice(m[0].length); }
+  else if ((m = s.match(/^(\d{1,2})[\/.](\d{1,2})[\s,]+/))) { date = `${new Date().getFullYear()}-${pad(+m[1])}-${pad(+m[2])}`; s = s.slice(m[0].length); }
+
+  let regular = 0, overtime = 0;
+  s = s.replace(/정규\s*(\d+(?:\.\d+)?)\s*(?:시간|h)?/gi, (_, n) => { regular += parseFloat(n); return ' '; });
+  s = s.replace(/(?:야근|잔업|연장|초과|OT)\s*(\d+(?:\.\d+)?)\s*(?:시간|h)?/gi, (_, n) => { overtime += parseFloat(n); return ' '; });
+  if (!regular && !overtime) s = s.replace(/(\d+(?:\.\d+)?)\s*(?:시간|h)(?![가-힣A-Za-z0-9])/i, (_, n) => { regular = parseFloat(n); return ' '; });
+
+  const parts = s.split(',').map((x) => x.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const t1 = (parts[0] || '').split(' ').filter(Boolean);
+  let projectCode = '', client = '', task = '';
+  if (t1.length && CODE_RE.test(t1[0])) projectCode = t1.shift();
+  if (parts.length > 1) { client = t1.join(' '); task = parts.slice(1).join(' ').replace(/\s+/g, ' ').trim(); }
+  else task = t1.join(' ');
+
+  if (!projectCode) return { error: '프로젝트 코드를 찾지 못했습니다. (예: SJ456-25)', raw };
+  if (!regular && !overtime) return { error: '시간을 찾지 못했습니다. (예: 정규8시간 야근2시간, 4시간)', raw };
+  return { date, projectCode, client, task, regular, overtime, md: MD(regular, overtime), raw };
+}
+
+// 파서 자가검사 — /m/manday.html?selftest 로 열면 콘솔에 결과를 찍는다 (probe.js 가 이 주소를 연다)
+function selfCheck() {
+  const Y = new Date().getFullYear(), T = [];
+  const eq = (name, got, want) => T.push({ name, ok: JSON.stringify(got) === JSON.stringify(want), got, want });
+  let r;
+  r = parseLine('SJ456-25 삼성전기, V-103 외관검사 정규8시간 야근2시간');
+  eq('1 기본 한 줄', [r.projectCode, r.client, r.task, r.regular, r.overtime, r.md], ['SJ456-25', '삼성전기', 'V-103 외관검사', 8, 2, 1.25]);
+  r = parseLine('SJ501-26 LG화학, 열교환기 수압시험 정규8h 야근1.5h');
+  eq('2 h 단위·소수', [r.regular, r.overtime, r.md], [8, 1.5, 1.19]);
+  r = parseLine('SJ512-26 한화, 도면 검토 정규 8 야근 2');
+  eq('3 단위 없는 야근', [r.regular, r.overtime, r.task], [8, 2, '도면 검토']);
+  r = parseLine('SJ512-26 한화, 자재 입고 검사 정규6시간 연장 1.5');
+  eq('4 연장 표기', [r.regular, r.overtime, r.md], [6, 1.5, 0.94]);
+  r = parseLine('SJ456-25 삼성전기, 성적서 편철 4시간');
+  eq('5 단독 N시간 = 정규', [r.regular, r.overtime, r.md], [4, 0, 0.5]);
+  r = parseLine('9/15 SJ456-25 삼성전기, 외관검사 정규8시간');
+  eq('6 9/15 날짜 앞머리', r.date, `${Y}-09-15`);
+  r = parseLine('오늘 SJ456-25 삼성전기, 외관검사 8시간');
+  eq('7 오늘', r.date, today());
+  r = parseLine('어제 SJ456-25 삼성전기, 외관검사 8시간');
+  eq('8 어제', r.date, shift(-1));
+  r = parseLine('SJ456-25 외관검사 정규8시간');
+  eq('9 쉼표 없는 줄', [r.projectCode, r.client, r.task], ['SJ456-25', '', '외관검사']);
+  eq('10 시간 없음 = 오류', !!parseLine('SJ456-25 삼성전기, 외관검사').error, true);
+  eq('11 코드 없음 = 오류', !!parseLine('외관검사 정규8시간').error, true);
+  eq('12 빈 줄 = 오류', !!parseLine('   ').error, true);
+  const fail = T.filter((t) => !t.ok);
+  fail.forEach((t) => console.log(`FAIL ${t.name} → ${JSON.stringify(t.got)} ≠ ${JSON.stringify(t.want)}`));
+  console.log(`파서 자가검사 ${T.length - fail.length}/${T.length} ${fail.length ? 'FAIL' : 'PASS'}`);
+  return !fail.length;
+}
+if (location.search.includes('selftest')) selfCheck();
+
+// ── 조회 헬퍼 ──
+const projById = (id) => S.projects.find((p) => p.id === id);
+const projByCode = (c) => S.projects.find((p) => p.code === c);
+const projOf = (e) => projById(e.projectId) || projByCode(e.projectCode);
+const projLabel = (e) => { const p = projOf(e); return (e.projectCode || (p && p.code) || '') + (p && p.name ? ' · ' + p.name : ''); };
+const uName = (id) => { const u = S.users.find((x) => x.id === id); return (u && u.name) || (id === 'owner' && me ? me.name : '') || id || ''; };
+const myId = () => (me && me.uid) || 'owner';
+
+function filtered() {
+  const r = range();
+  return S.rows.filter((e) => {
+    if (!e || !e.date) return false;
+    if (r.from && e.date < r.from) return false;
+    if (r.to && e.date > r.to) return false;
+    if (V.user && e.userId !== V.user) return false;
+    if (V.proj && (e.projectCode || '') !== V.proj) return false;
+    return true;
+  });
+}
+const SORTV = { date: (e) => e.date || '', userName: (e) => uName(e.userId) || e.userName || '', projectCode: (e) => e.projectCode || '', task: (e) => e.task || '', regular: (e) => num(e.regular), overtime: (e) => num(e.overtime), md: (e) => rowMd(e) };
+function sorted(rows) {
+  const g = SORTV[V.sort] || SORTV.date;
+  return [...rows].sort((a, b) => { const x = g(a), y = g(b); const c = typeof x === 'number' ? x - y : String(x).localeCompare(String(y)); return (c || String(a.id).localeCompare(String(b.id))) * V.dir; });
+}
+
+// ── 산초에게 ──
+function askLog() {
+  const t = today();
+  SANCHO.ask(`data/db/manday.json 에 오늘 공수를 기록해줘: 오늘(${t}) 내가(${(me && me.name) || '주인'}, userId "owner") 한 일을 캘린더(data/db/events.json)·업무(data/db/tasks.json)·회의(data/db/meetings.json)·메일(data/db/mail.json)에서 찾아 프로젝트별로 나누고, platform 스킬의 manday 규격(date "${t}", userId, userName, projectId = data/db/projects.json 의 문서 id, projectCode = 그 프로젝트의 code, task(무엇을 했는지 한 줄), regular(정규 시간 number), overtime(야근 시간 number), md = (regular+overtime)/8, memo, raw)으로 새 문서를 추가해줘. 하루 정규 합이 8시간을 넘지 않게 나누고, 근거가 없는 프로젝트는 추측하지 말고 나에게 물어봐줘. 기존 문서는 고치지 말고 새 id 로 추가만 해줘.`);
+}
+function askSum() {
+  const r = range();
+  SANCHO.ask(`data/db/manday.json 의 ${r.from || '처음'} ~ ${r.to || '오늘'} 공수를 집계해서 요약해줘: (1) 프로젝트별 M/D 합계(projects.json 의 name 을 붙여서), (2) 담당자별 M/D 와 야근 시간, (3) 야근 시간 총합과 야근이 몰린 사람·프로젝트, (4) 투입이 가장 많은 프로젝트 3개를 표로 만들어줘. 그리고 지난 달 같은 기간과 비교해 늘고 준 것을 세 줄로 알려줘. 집계 결과는 대화로만 보고하고 db 파일은 고치지 말아줘.`);
+}
+
+// ══════════ 화면 ══════════
+function render() {
+  if (!S.ready) return;
+  const r = range(), rows = filtered();
+  const root = $('#root');
+  root.innerHTML = head() + (V.tab === 'sum' ? viewSum(r, rows) : viewIn());
+  if (V.tab === 'in') { const ta = $('#kakao'); if (ta) ta.value = V.draft; }
+  if (V.tab === 'sum') drawCharts(rows);
+}
+function head() {
+  return `<div class="mod-head">
+    <div><div class="mod-title">🗓 공수 관리</div><div class="mod-sub">카톡처럼 한 줄로 붙여넣으면 프로젝트·작업·시간을 뽑아 M/D 로 집계합니다 · M/D = (정규 + 야근) ÷ 8</div></div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-ai" data-act="ai-log" title="오늘 한 일을 산초가 찾아 공수로 기록합니다">✳ 산초에게 · 오늘 공수 기록</button>
+      <button class="btn btn-ai" data-act="ai-sum" title="선택한 기간의 공수를 산초가 집계해 요약합니다">✳ 산초에게 · 집계 요약</button>
+      <button class="btn" data-act="csv-out">📥 CSV 내보내기</button>
+      <button class="btn" data-act="csv-in">📋 CSV 붙여넣기</button>
+      <button class="btn btn-primary" data-act="row-new">＋ 공수 입력</button>
+    </div></div>
+  <div class="tabs">
+    <div class="tab ${V.tab === 'sum' ? 'on' : ''}" data-act="tab" data-v="sum">📈 집계 · 상세</div>
+    <div class="tab ${V.tab === 'in' ? 'on' : ''}" data-act="tab" data-v="in">⚡ 입력</div>
+  </div>`;
+}
+
+// ── 집계 탭 ──
+function viewSum(r, rows) {
+  if (!S.rows.length) return `<div class="empty"><h3>기록된 공수가 없습니다</h3>
+    카톡에 쓰듯 <b>“SJ456-25 삼성전기, V-103 외관검사 정규8시간 야근2시간”</b> 한 줄을 붙여넣으면 그대로 저장됩니다.<br>오늘 한 일을 산초가 대신 찾아 기록하게 할 수도 있습니다.
+    <div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+      <button class="btn btn-primary" data-act="tab" data-v="in">⚡ 한 줄 붙여넣기</button>
+      <button class="btn btn-ai" data-act="ai-log">✳ 산초에게: 오늘 공수 기록해줘</button></div></div>`;
+  const totMd = rows.reduce((a, e) => a + rowMd(e), 0);
+  const myMd = rows.filter((e) => e.userId === myId()).reduce((a, e) => a + rowMd(e), 0);
+  const totOt = rows.reduce((a, e) => a + num(e.overtime), 0);
+  const totReg = rows.reduce((a, e) => a + num(e.regular), 0);
+  const codes = [...new Set(rows.map((e) => e.projectCode).filter(Boolean))];
+  const users = [...new Set(S.rows.map((e) => e.userId).filter(Boolean))];
+  const allCodes = [...new Set(S.rows.map((e) => e.projectCode).filter(Boolean))].sort();
+  const opt = (val, label, sel) => `<option value="${esc(val)}" ${sel ? 'selected' : ''}>${esc(label)}</option>`;
+  const seg = (k, label) => `<button class="${V.period === k ? 'on' : ''}" data-act="period" data-v="${k}">${label}</button>`;
+
+  // 프로젝트별 집계 (원본 #project-summary-table — 한 번도 채워지지 않던 표를 여기서 구현)
+  const byProj = {};
+  rows.forEach((e) => { const k = e.projectCode || '(코드 없음)'; const g = byProj[k] || (byProj[k] = { code: k, name: (projOf(e) || {}).name || '', reg: 0, ot: 0, md: 0, n: 0, who: new Set() }); g.reg += num(e.regular); g.ot += num(e.overtime); g.md += rowMd(e); g.n++; if (e.userId) g.who.add(e.userId); });
+  const projRows = Object.values(byProj).sort((a, b) => b.md - a.md);
+
+  return `<div class="toolbar">
+    <div class="seg">${seg('week', '이번 주')}${seg('month', '이번 달')}${seg('last', '지난 달')}${seg('custom', '직접')}</div>
+    ${V.period === 'custom' ? `<input class="fi" type="date" id="qFrom" style="width:150px" value="${esc(V.from)}"> ~ <input class="fi" type="date" id="qTo" style="width:150px" value="${esc(V.to)}">` : `<span class="fh" style="margin:0">${esc(r.from)} ~ ${esc(r.to)}</span>`}
+    <select class="fs" id="qUser" style="width:auto">${opt('', '담당: 전체', !V.user)}${users.map((u) => opt(u, uName(u), V.user === u)).join('')}</select>
+    <select class="fs" id="qProj" style="width:auto">${opt('', '프로젝트: 전체', !V.proj)}${allCodes.map((c) => opt(c, c + ((projByCode(c) || {}).name ? ' · ' + projByCode(c).name : ''), V.proj === c)).join('')}</select>
+    <span class="sp"></span><span class="fh" style="margin:0">${rows.length}건 / 전체 ${S.rows.length}건</span>
+  </div>
+  <div class="kpi-grid">
+    <div class="kpi"><div class="kpi-label">${esc(r.name)} 총 M/D</div><div class="kpi-value">${f2(totMd)}</div><div class="kpi-trend">정규 ${f1(totReg)}h · 야근 ${f1(totOt)}h</div></div>
+    <div class="kpi"><div class="kpi-label">내 M/D</div><div class="kpi-value green">${f2(myMd)}</div><div class="kpi-trend">${esc((me && me.name) || '주인')} · 전체의 ${totMd ? Math.round(myMd / totMd * 100) : 0}%</div></div>
+    <div class="kpi"><div class="kpi-label">야근 시간</div><div class="kpi-value ${totOt > 0 ? 'orange' : 'gray'}">${f1(totOt)}<span style="font-size:15px"> h</span></div><div class="kpi-trend">야근 M/D ${f2(totOt / 8)}</div></div>
+    <div class="kpi"><div class="kpi-label">참여 프로젝트</div><div class="kpi-value">${codes.length}</div><div class="kpi-trend">담당 ${[...new Set(rows.map((e) => e.userId))].length}명 · 기록 ${rows.length}건</div></div>
+  </div>
+  ${window.Chart ? `<div class="chart-grid">
+    <div class="mt-card"><h3>📊 프로젝트별 M/D</h3><div class="chart-wrap"><canvas id="cProj"></canvas></div></div>
+    <div class="mt-card"><h3>📈 일자별 M/D 추이</h3><div class="chart-wrap"><canvas id="cDay"></canvas></div></div></div>` : ''}
+  <div class="mt-card"><h3>📊 프로젝트별 집계</h3><div class="tw"><table class="table">
+    <thead><tr><th>코드</th><th>프로젝트명</th><th class="num">정규</th><th class="num">야근</th><th class="num">총 시간</th><th class="num">M/D</th><th class="num">담당</th><th class="num">기록</th><th style="width:130px">비율</th></tr></thead>
+    <tbody>${projRows.length ? projRows.map((g) => `<tr>
+      <td><b>${esc(g.code)}</b></td><td>${esc(g.name)}</td><td class="num">${f1(g.reg)}h</td><td class="num ${g.ot ? 'ot' : ''}">${g.ot ? f1(g.ot) + 'h' : '-'}</td>
+      <td class="num">${f1(g.reg + g.ot)}h</td><td class="num md">${f2(g.md)}</td><td class="num">${g.who.size}명</td><td class="num">${g.n}건</td>
+      <td><div class="bar"><div class="bar-fill" style="width:${totMd ? Math.round(g.md / totMd * 100) : 0}%"></div></div><span class="fh">${totMd ? Math.round(g.md / totMd * 100) : 0}%</span></td></tr>`).join('')
+      : '<tr><td colspan="9" style="text-align:center;color:var(--text-lighter)">조건에 맞는 기록이 없습니다.</td></tr>'}</tbody></table></div></div>
+  <div class="mt-card"><h3>📄 상세 기록 <span class="fh" style="margin:0">머리글을 누르면 정렬됩니다</span></h3><div class="tw">${detailTable(rows)}</div></div>`;
+}
+const TH = [['date', '날짜', ''], ['userName', '담당', ''], ['projectCode', '프로젝트', ''], ['task', '작업', ''], ['regular', '정규', 'num'], ['overtime', '야근', 'num'], ['md', 'M/D', 'num']];
+function detailTable(rows) {
+  const list = sorted(rows);
+  return `<table class="table"><thead><tr>
+    ${TH.map(([k, label, cls]) => `<th class="s ${cls}" data-act="sort" data-v="${k}">${label}${V.sort === k ? (V.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}
+    <th>비고</th><th style="width:92px">동작</th></tr></thead><tbody>
+    ${list.length ? list.map((e) => `<tr data-id="${esc(e.id)}">
+      <td>${esc(e.date)}</td><td>${esc(uName(e.userId) || e.userName)}</td><td>${esc(projLabel(e))}</td><td>${esc(e.task)}</td>
+      <td class="num">${f1(num(e.regular))}h</td><td class="num ${num(e.overtime) ? 'ot' : ''}">${num(e.overtime) ? f1(num(e.overtime)) + 'h' : '-'}</td>
+      <td class="num md">${f2(rowMd(e))}</td><td title="${esc(e.raw || '')}">${esc(e.memo || '')}${e.raw && !e.memo ? '<span class="fh" style="margin:0">원문 있음</span>' : ''}</td>
+      <td><button class="btn btn-sm" data-act="row-edit" title="수정">✎</button> <button class="btn btn-sm btn-danger" data-act="row-del" title="삭제">✕</button></td></tr>`).join('')
+      : '<tr><td colspan="9" style="text-align:center;color:var(--text-lighter)">조건에 맞는 기록이 없습니다.</td></tr>'}</tbody></table>`;
+}
+function drawCharts(rows) {
+  if (!window.Chart) return;
+  const css = (n, d) => (getComputedStyle(document.documentElement).getPropertyValue(n) || '').trim() || d;
+  const pri = css('--primary', '#1E6FD9'), txt = css('--text-light', '#6B7280'), grid = css('--border-light', '#F0F0F0');
+  const base = { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+    scales: { y: { beginAtZero: true, ticks: { color: txt }, grid: { color: grid } }, x: { ticks: { color: txt }, grid: { display: false } } } };
+  const byProj = {}; rows.forEach((e) => { const k = e.projectCode || '(코드 없음)'; byProj[k] = (byProj[k] || 0) + rowMd(e); });
+  const byDay = {}; rows.forEach((e) => { byDay[e.date] = (byDay[e.date] || 0) + rowMd(e); });
+  const days = Object.keys(byDay).sort();
+  try {
+    if (charts.p) charts.p.destroy();
+    if ($('#cProj')) charts.p = new Chart($('#cProj'), { type: 'bar', data: { labels: Object.keys(byProj), datasets: [{ label: 'M/D', data: Object.values(byProj).map((x) => Math.round(x * 100) / 100), backgroundColor: pri, borderRadius: 4 }] }, options: base });
+    if (charts.d) charts.d.destroy();
+    if ($('#cDay')) charts.d = new Chart($('#cDay'), { type: 'line', data: { labels: days, datasets: [{ label: 'M/D', data: days.map((d) => Math.round(byDay[d] * 100) / 100), borderColor: pri, backgroundColor: pri + '26', fill: true, tension: 0.3, pointRadius: 3 }] }, options: base });
+  } catch (e) { console.warn('차트 그리기 실패', e.message); }
+}
+window.chartReady = () => render();      // CDN 이 늦게 도착해도 그때 한 번 더 그린다
+
+// ── 입력 탭 ──
+function viewIn() {
+  const recent = [...S.rows].sort((a, b) => String(b.createdAt || b.date).localeCompare(String(a.createdAt || a.date))).slice(0, 20);
+  return `<div class="mt-card"><h3>📱 한 줄 붙여넣기 <span class="fh" style="margin:0">카톡·메모에 쓰던 그대로</span></h3>
+    <div class="mt-hint">한 줄에 하나씩, 여러 줄을 한꺼번에 붙여넣으세요.<br>
+      <code>SJ456-25 삼성전기, V-103 외관검사 정규8시간 야근2시간</code><br>
+      <code>9/15 SJ501-26 LG화학, 수압시험 입회 정규8h 야근1.5h</code> · <code>어제 SJ512-26, 도면 검토 4시간</code><br>
+      날짜(<b>오늘·어제·9/15·2026-09-15</b>)는 생략하면 오늘, 시간은 <b>정규 N시간 / 야근 N / 연장 N / N시간</b> 모두 알아봅니다.</div>
+    <textarea class="ft mt-ta" id="kakao" placeholder="여기에 붙여넣고 [파싱 미리보기]를 누르세요"></textarea>
+    <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn btn-primary" data-act="parse">🔍 파싱 미리보기</button>
+      <button class="btn" data-act="parse-clear">지우기</button></div>
+    ${V.preview ? preview() : ''}</div>
+  <div class="mt-card"><h3>✍️ 수동 입력</h3>${formHtml({ date: today(), userId: myId(), regular: 8, overtime: 0 }, 'f')}
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span class="md-out">계산된 공수 <b id="fMd">1.00</b> M/D</span><span class="sp" style="flex:1"></span>
+      <button class="btn btn-primary" data-act="manual-add">＋ 추가</button>
+      <button class="btn" data-act="manual-clear">초기화</button></div></div>
+  <div class="mt-card"><h3>📋 최근 입력 <span class="fh" style="margin:0">최신 20건</span></h3>
+    ${recent.length ? recent.map((e) => `<div class="recent" data-id="${esc(e.id)}"><div class="g">
+      <b>${esc(e.date)}</b> <span class="s">${esc(uName(e.userId) || e.userName)}</span> · ${esc(projLabel(e))} · ${esc(e.task)}<br>
+      <span class="s">정규 ${f1(num(e.regular))}h${num(e.overtime) ? ' · 야근 ' + f1(num(e.overtime)) + 'h' : ''} = <b class="md">${f2(rowMd(e))}</b> M/D</span></div>
+      <button class="btn btn-sm" data-act="row-edit">✎</button><button class="btn btn-sm btn-danger" data-act="row-del">✕</button></div>`).join('')
+      : '<div class="fh">아직 입력된 기록이 없습니다.</div>'}</div>`;
+}
+function preview() {
+  const ok = V.preview.filter((r) => !r.error);
+  return `<div class="pv"><div class="pv-t">📝 파싱 결과 (${V.preview.length}건 · 유효 ${ok.length}건)</div>
+    ${V.preview.map((r, i) => r.error ? `<div class="mt-card pv-err" style="padding:10px 13px;margin-bottom:8px">
+        <div class="r">❌ ${i + 1}번째 줄 — ${esc(r.error)}</div><div class="pv-raw">${esc(r.raw)}</div>
+        <div style="margin-top:6px"><button class="btn btn-sm" data-act="pv-manual" data-v="${i}">✍️ 수동 입력</button></div></div>`
+      : `<div class="mt-card" style="padding:10px 13px;margin-bottom:8px">
+        <span class="b-pill gray">${esc(r.date)}</span> <span class="b-pill purple">👤 ${esc((me && me.name) || '주인')}</span>
+        <b style="margin-left:4px">${esc(r.projectCode)}</b> ${esc(r.client)}${projByCode(r.projectCode) ? '' : ' <span class="b-pill orange" title="projects 에 없는 코드입니다 — 코드만 저장됩니다">미등록 코드</span>'}
+        <div style="margin-top:4px">${esc(r.task) || '<span class="fh">작업 없음</span>'}</div>
+        <div style="margin-top:4px"><span class="b-pill blue">정규 ${r.regular}h</span> ${r.overtime ? `<span class="b-pill orange">야근 ${r.overtime}h</span>` : ''} <b class="md">= ${f2(r.md)} M/D</b></div></div>`).join('')}
+    <div style="display:flex;gap:6px"><button class="btn btn-primary" data-act="pv-save" ${ok.length ? '' : 'disabled'}>✓ 유효 항목 ${ok.length}건 저장</button>
+      <button class="btn" data-act="parse-clear">취소</button></div></div>`;
+}
+// 수동 입력 · 수정 공용 폼 (pre = 접두사 — 탭 안 폼은 'f', 모달은 'm')
+function formHtml(e, pre) {
+  const opt = (val, label, sel) => `<option value="${esc(val)}" ${sel ? 'selected' : ''}>${esc(label)}</option>`;
+  const users = S.users.length ? S.users.filter((u) => u.active !== false) : [{ id: myId(), name: (me && me.name) || '주인', title: '' }];
+  const pid = e.projectId || (projByCode(e.projectCode) || {}).id || '';
+  return `<div class="f-row">
+    <div class="fg"><label class="fl">날짜</label><input class="fi" type="date" id="${pre}Date" value="${esc(e.date || today())}"></div>
+    <div class="fg"><label class="fl">담당</label><select class="fs" id="${pre}User">${users.map((u) => opt(u.id, `${u.name} ${u.title || ''}`.trim(), (e.userId || myId()) === u.id)).join('')}</select></div>
+    <div class="fg"><label class="fl">프로젝트</label><select class="fs" id="${pre}Proj">${opt('', '(선택 안 함)', !pid)}${S.projects.map((p) => opt(p.id, `${p.code} · ${p.name || ''}`, pid === p.id)).join('')}</select>
+      <div class="fh" id="${pre}Code">코드 ${esc(e.projectCode || (projById(pid) || {}).code || '—')}</div></div>
+    <div class="fg"><label class="fl">작업</label><input class="fi" id="${pre}Task" placeholder="예: V-103 외관검사" value="${esc(e.task)}"></div>
+  </div><div class="f-row">
+    <div class="fg"><label class="fl">정규 (시간)</label><input class="fi md-in" type="number" step="0.5" min="0" id="${pre}Reg" value="${num(e.regular) || (e.regular === 0 ? 0 : 8)}"></div>
+    <div class="fg"><label class="fl">야근 (시간)</label><input class="fi md-in" type="number" step="0.5" min="0" id="${pre}Ot" value="${num(e.overtime)}"></div>
+    <div class="fg" style="grid-column:span 2"><label class="fl">비고</label><input class="fi" id="${pre}Memo" placeholder="선택" value="${esc(e.memo)}"></div>
+  </div>`;
+}
+function readForm(pre) {
+  const pid = v('#' + pre + 'Proj'), p = projById(pid);
+  const regular = num(v('#' + pre + 'Reg')), overtime = num(v('#' + pre + 'Ot'));
+  return { date: v('#' + pre + 'Date'), userId: v('#' + pre + 'User') || myId(), userName: uName(v('#' + pre + 'User')) || (me && me.name) || '',
+    projectId: pid, projectCode: (p && p.code) || '', task: v('#' + pre + 'Task'), regular, overtime, md: MD(regular, overtime), memo: v('#' + pre + 'Memo') };
+}
+
+// ══════════ 동작 ══════════
+async function saveRows(list) {
+  if (!list.length) return;
+  const b = writeBatch();
+  list.forEach((d) => b.set(doc(collection(db, 'manday')), d));
+  await b.commit();
+}
+const ACT = {
+  'tab': (_e, el) => { V.tab = el.dataset.v; V.preview = null; render(); },
+  'period': (_e, el) => { V.period = el.dataset.v; if (V.period === 'custom' && !V.from) { const d = new Date(); V.from = ymd(new Date(d.getFullYear(), d.getMonth(), 1)); V.to = today(); } render(); },
+  'sort': (_e, el) => { const k = el.dataset.v; if (V.sort === k) V.dir = -V.dir; else { V.sort = k; V.dir = -1; } render(); },
+  'ai-log': askLog, 'ai-sum': askSum,
+  'parse': () => { const t = ($('#kakao') || {}).value || ''; V.draft = t; if (!t.trim()) return toast('붙여넣은 내용이 없습니다.', 'err'); V.preview = t.split('\n').map((x) => x.trim()).filter(Boolean).map(parseLine); render(); },
+  'parse-clear': () => { V.preview = null; V.draft = ''; render(); },
+  'pv-manual': (_e, el) => { const r = V.preview[Number(el.dataset.v)]; openRowModal({ date: today(), task: (r && r.raw) || '', memo: '', raw: (r && r.raw) || '' }); },
+  'pv-save': async () => {
+    const ok = (V.preview || []).filter((r) => !r.error);
+    if (!ok.length) return toast('저장할 유효 항목이 없습니다.', 'err');
+    try {
+      await saveRows(ok.map((r) => ({ date: r.date, userId: myId(), userName: (me && me.name) || '', projectId: (projByCode(r.projectCode) || {}).id || '', projectCode: r.projectCode,
+        task: r.task, regular: r.regular, overtime: r.overtime, md: r.md, memo: r.client && !projByCode(r.projectCode) ? r.client : '', raw: r.raw })));
+      V.preview = null; V.draft = ''; toast(`${ok.length}건 저장했습니다`, 'ok'); render();
+    } catch (e) { toast('저장 실패: ' + e.message, 'err'); }
+  },
+  'manual-add': async () => {
+    const d = readForm('f');
+    if (!d.date) return toast('날짜를 입력하세요.', 'err');
+    if (!d.regular && !d.overtime) return toast('정규 또는 야근 시간을 입력하세요.', 'err');
+    try { await saveRows([d]); toast('추가했습니다', 'ok'); V.preview = null; render(); } catch (e) { toast('저장 실패: ' + e.message, 'err'); }
+  },
+  'manual-clear': () => render(),
+  'row-new': () => openRowModal(null),
+  'row-edit': (e) => openRowModal(e),
+  'row-del': async (e) => {
+    if (!e || !confirm(`${e.date} · ${e.projectCode || ''} · ${e.task || ''} 기록을 삭제하시겠습니까?`)) return;
+    try { await deleteDoc(doc(db, 'manday', e.id)); toast('삭제했습니다'); } catch (x) { toast('삭제 실패: ' + x.message, 'err'); }
+  },
+  'csv-out': () => {
+    const rows = sorted(filtered());
+    if (!rows.length) return toast('내보낼 기록이 없습니다.', 'err');
+    const head = ['날짜', '담당', '프로젝트코드', '프로젝트명', '작업', '정규(h)', '야근(h)', 'M/D', '비고'];
+    const body = rows.map((e) => [e.date, uName(e.userId) || e.userName || '', e.projectCode || '', (projOf(e) || {}).name || '', e.task || '', num(e.regular), num(e.overtime), f2(rowMd(e)), e.memo || '']);
+    const csv = [head, ...body].map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
+    const a = document.createElement('a'), url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }));
+    a.href = url; a.download = `공수_${range().from || ''}_${range().to || today()}.csv`; a.click(); URL.revokeObjectURL(url);
+    toast(`${rows.length}건을 CSV 로 내보냈습니다`, 'ok');
+  },
+  'csv-in': () => openCsvModal(),
+};
+$('#root').addEventListener('click', (ev) => {
+  const el = ev.target.closest('[data-act]'); if (!el) return;
+  const host = el.closest('[data-id]'), e = host ? S.rows.find((x) => x.id === host.dataset.id) : null;
+  ACT[el.dataset.act] && ACT[el.dataset.act](e, el);
+});
+$('#root').addEventListener('change', (ev) => {
+  const t = ev.target;
+  if (t.id === 'qUser') { V.user = t.value; render(); }
+  else if (t.id === 'qProj') { V.proj = t.value; render(); }
+  else if (t.id === 'qFrom') { V.from = t.value; render(); }
+  else if (t.id === 'qTo') { V.to = t.value; render(); }
+  else if (t.id === 'fProj') syncCode(t);
+});
+$('#root').addEventListener('input', (ev) => {
+  const t = ev.target;
+  if (t.id === 'kakao') V.draft = t.value;
+  if (t.id === 'fReg' || t.id === 'fOt') { const o = $('#fMd'); if (o) o.textContent = f2(MD(v('#fReg'), v('#fOt'))); }
+  if (t.id === 'fProj') syncCode(t);
+});
+function syncCode(sel) {
+  const pre = sel.id.replace('Proj', ''), p = projById(sel.value), el = $('#' + pre + 'Code');
+  if (el) el.textContent = '코드 ' + ((p && p.code) || '—');
+}
+
+// ── 모달 셸 (okr.html 과 같은 방식) ──
+let mOnOk = null;
+function openModal(title, html, onOk, wide) {
+  $('#mTitle').textContent = title; $('#mBody').innerHTML = html; mOnOk = onOk;
+  $('#modal').querySelector('.modal').classList.toggle('wide', !!wide);
+  $('#modal').classList.add('active');
+  const first = $('#mBody').querySelector('input,select,textarea'); if (first) first.focus();
+}
+function closeModal() { $('#modal').classList.remove('active'); mOnOk = null; }
+$('#mOk').onclick = () => mOnOk && mOnOk();
+$('#modal').addEventListener('click', (e) => { if (e.target === $('#modal') || e.target.closest('[data-close]')) closeModal(); });
+$('#mBody').addEventListener('keydown', (e) => { if (e.isComposing) return; if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); mOnOk && mOnOk(); } });
+$('#mBody').addEventListener('change', (e) => { if (e.target.id === 'mProj') syncCode(e.target); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+function openRowModal(ex) {
+  const e = ex || { date: today(), userId: myId(), regular: 8, overtime: 0 };
+  openModal(ex && ex.id ? '공수 수정' : '공수 입력', formHtml(e, 'm') + (e.raw ? `<div class="fh">원문: ${esc(e.raw)}</div>` : ''), async () => {
+    const d = readForm('m');
+    if (!d.date) return toast('날짜를 입력하세요.', 'err');
+    if (!d.regular && !d.overtime) return toast('정규 또는 야근 시간을 입력하세요.', 'err');
+    try {
+      if (ex && ex.id) await updateDoc(doc(db, 'manday', ex.id), d);
+      else await setDoc(doc(collection(db, 'manday')), { ...d, raw: e.raw || '' });
+      closeModal(); toast('저장했습니다', 'ok');
+    } catch (x) { toast('저장 실패: ' + x.message, 'err'); }
+  });
+}
+
+// CSV 붙여넣기 복원 — 내보낸 CSV(또는 엑셀에서 복사한 표)를 그대로 붙여넣으면 되돌린다
+function csvRows(text) {
+  const rows = []; let row = [], cur = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+    else if (c === '"') q = true;
+    else if (c === ',' || c === '\t') { row.push(cur); cur = ''; }
+    else if (c === '\n') { row.push(cur); cur = ''; rows.push(row); row = []; }
+    else if (c !== '\r') cur += c;
+  }
+  if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+  return rows.map((r) => r.map((x) => x.trim())).filter((r) => r.some(Boolean));
+}
+function openCsvModal() {
+  openModal('CSV 붙여넣기 복원', `<div class="fh" style="margin-bottom:8px">내보낸 CSV 파일을 열어 전체 복사해 붙여넣으세요. 열 순서: <b>날짜, 담당, 프로젝트코드, 프로젝트명, 작업, 정규(h), 야근(h), M/D, 비고</b> · 첫 줄이 머리글이면 건너뜁니다. 기존 기록은 지우지 않고 <b>추가</b>됩니다.</div>
+    <textarea class="ft" id="csvIn" style="min-height:180px;font-family:ui-monospace,Consolas,monospace;font-size:12px" placeholder="날짜,담당,프로젝트코드,..."></textarea>`, async () => {
+    const rows = csvRows(($('#csvIn') || {}).value || '');
+    if (!rows.length) return toast('붙여넣은 내용이 없습니다.', 'err');
+    if (rows[0][0] === '날짜') rows.shift();
+    const list = rows.map((r) => {
+      const regular = num(r[5]), overtime = num(r[6]), code = r[2] || '';
+      const u = S.users.find((x) => x.name === r[1]);
+      return { date: r[0] || today(), userId: (u && u.id) || myId(), userName: r[1] || (me && me.name) || '', projectId: (projByCode(code) || {}).id || '',
+        projectCode: code, task: r[4] || '', regular, overtime, md: MD(regular, overtime), memo: r[8] || '', raw: '' };
+    }).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d.date) && (d.regular || d.overtime));
+    if (!list.length) return toast('읽을 수 있는 줄이 없습니다. 날짜는 YYYY-MM-DD 형식이어야 합니다.', 'err');
+    try { await saveRows(list); closeModal(); toast(`${list.length}건을 복원했습니다`, 'ok'); } catch (e) { toast('복원 실패: ' + e.message, 'err'); }
+  }, true);
+}
+
+async function boot() {
+  const docs = (s) => s.docs.map((d) => ({ id: d.id, ...d.data() }));
+  onSnapshot(collection(db, 'manday'), (s) => { S.rows = docs(s); S.ready = true; render(); }, (e) => { S.ready = true; toast('공수 읽기 실패: ' + e.message, 'err'); render(); });
+  onSnapshot(collection(db, 'projects'), (s) => { S.projects = docs(s).filter((p) => !p.hidden).sort((a, b) => String(a.code).localeCompare(String(b.code))); render(); });
+  onSnapshot(collection(db, 'users'), (s) => { S.users = docs(s).sort((a, b) => (a.id === 'owner' ? -1 : b.id === 'owner' ? 1 : 0)); render(); });
+}
+window.fb.me().then((u) => { me = u; boot(); });
+</script></body></html>

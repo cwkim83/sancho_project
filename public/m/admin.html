@@ -1,0 +1,288 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>산초 · 관리</title>
+<link rel="stylesheet" href="/m/platform.css">
+<script src="/m/sdb.js"></script>
+<style>
+/* 관리 — 세종 플랫폼 v2 index.html 6830-7028(admin 탭·_admFetch30d·loadErrorLog/ActivityLog) 이식.
+   접속 기록·접근 권한 탭은 단일 사용자라 뺐고, 그 자리에 산초 상태·실행 기록·데이터를 넣었다. */
+.kv { display: grid; grid-template-columns: 150px 1fr; gap: 2px 12px; font-size: 13px; }
+.kv dt { color: var(--text-light); font-size: 12px; padding: 6px 0; border-top: 1px solid var(--border-light); }
+.kv dd { padding: 6px 0; border-top: 1px solid var(--border-light); min-width: 0; overflow-wrap: anywhere; }
+.kv dt:first-of-type, .kv dd:first-of-type { border-top: 0; }
+.mono { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: var(--text-light); }
+.jday { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); margin-bottom: 8px; box-shadow: var(--shadow); }
+.jday > summary { cursor: pointer; padding: 10px 14px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; list-style: none; }
+.jday > summary::-webkit-details-marker { display: none; }
+.jday > summary::before { content: '▸'; color: var(--text-lighter); font-size: 11px; }
+.jday[open] > summary::before { content: '▾'; }
+.jday .body { padding: 0 14px 12px; }
+.jitem { border-top: 1px solid var(--border-light); padding: 9px 0; }
+.jitem .ttl { font-size: 12px; font-weight: 700; color: var(--primary); margin-bottom: 4px; }
+.jitem pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.6; font-family: inherit; color: var(--text-light); margin: 0; }
+.log-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+.log-tbl th { text-align: left; color: var(--text-light); font-size: 11px; font-weight: 700; padding: 7px 8px; background: var(--bg2); white-space: nowrap; }
+.log-tbl td { padding: 6px 8px; border-top: 1px solid var(--border-light); vertical-align: top; }
+.log-tbl td.t, .log-tbl td.v { white-space: nowrap; color: var(--text-light); }
+.log-tbl td.msg { color: var(--danger); }
+.doc-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-top: 1px solid var(--border-light); font-size: 12px; cursor: pointer; }
+.doc-row:hover { background: var(--bg2); }
+.doc-row.on { background: var(--primary-lighter); }
+.doc-row .id { font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: var(--text-lighter); flex-shrink: 0; }
+.doc-row .ti { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-split { display: grid; grid-template-columns: 260px 1fr; gap: 12px; }
+.doc-list { max-height: 380px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+.doc-json { max-height: 380px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--bg2); padding: 10px; font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; white-space: pre-wrap; word-break: break-word; margin: 0; }
+@media (max-width: 900px) { .kv { grid-template-columns: 1fr; } .kv dd { padding-top: 0; border-top: 0; } .doc-split { grid-template-columns: 1fr; } }
+</style>
+</head><body><div class="content-pad" id="root"></div>
+<div class="toast" id="toast"></div>
+<div class="overlay" id="modal"><div class="modal wide" id="modalBox">
+  <div class="modal-head"><div class="modal-title" id="mTitle"></div><button class="btn btn-sm btn-ghost" data-close>✕</button></div>
+  <div class="modal-body" id="mBody"></div>
+  <div class="modal-foot"><button class="btn" data-close>닫기</button><button class="btn btn-primary" id="mOk">확인</button></div>
+</div></div>
+<script>
+const { db, doc, collection, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, query, where, orderBy, limit, writeBatch } = window.fb;
+const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const toast = (t, kind = '') => { const el = document.getElementById('toast'); el.textContent = t; el.className = 'toast on ' + kind; clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove('on'), 2200); };
+window.addEventListener('message', (e) => { if (e.data?.sancho && e.data.act === 'theme') document.documentElement.dataset.theme = e.data.theme || ''; });
+let me = null;                                  // 주인(단일 사용자): {uid:'owner', name, title, dept, email}
+window.fb.me().then((u) => { me = u; boot(); });
+
+const $ = (s) => document.querySelector(s);
+const S = { state: null, cols: [], errs: [], journal: [], ready: false, err: '' };
+const V = { tab: 'state', days: 30, q: '' };    // UI 취향(메모리)
+// 껍데기가 SANCHO.open('admin','tab=err') 로 부르면 /m/admin.html?tab=err 로 열린다
+{ const t = new URLSearchParams(location.search).get('tab'); if (['state', 'journal', 'err', 'data'].includes(t)) V.tab = t; }
+
+// ── 날짜 ──
+const today = () => new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+const sinceISO = (d) => new Date(Date.now() - d * 864e5).toISOString();
+const when = (iso) => { const s = String(iso || ''); return s.length >= 16 ? s.slice(5, 10) + ' ' + s.slice(11, 16) : (s || '—'); };
+const yn = (b) => b ? '<span class="b-pill green">켜짐</span>' : '<span class="b-pill gray">꺼짐</span>';
+
+// ── 읽기 (산초 고유 데이터는 서버 API, errorlog 는 컬렉션이라 onSnapshot) ──
+async function loadAll() {
+  try {
+    const [st, cols] = await Promise.all([SANCHO.api('/api/state'), SANCHO.api('/api/db')]);
+    S.state = st; S.cols = Array.isArray(cols) ? cols : []; S.err = '';
+  } catch (e) { S.err = e.message; }
+  S.ready = true; render();
+}
+async function loadJournal() {
+  try { const j = await SANCHO.api('/api/journal?days=30'); S.journal = Array.isArray(j) ? j.slice().reverse() : []; }
+  catch (e) { S.journal = []; toast('실행 기록을 읽지 못했습니다: ' + e.message, 'err'); }
+  render();
+}
+
+// ── 산초에게 ──
+const askFix = () => SANCHO.ask('data/db/errorlog.json 에 쌓인 화면 오류를 살펴봐줘: 오류 메시지와 src(파일:줄), view(화면 id)를 보고 public/m/<화면>.html 의 원인을 찾아 고쳐줘. 고치기 전에 무엇을 왜 고치는지 먼저 한 줄로 알려주고, 고친 뒤에는 probe.js 로 그 화면을 다시 검사해 "오류 0" 인지 확인해줘. 확실하지 않은 오류는 고치지 말고 이유만 적어줘.');
+
+// ── 화면 ──
+function render() {
+  if (!S.ready) return;
+  const docN = S.cols.reduce((a, c) => a + (Number(c.count) || 0), 0);
+  const errToday = S.errs.filter((e) => String(e.at || '').slice(0, 10) === today()).length;
+  const schN = (S.state && S.state.schedules || []).length;
+  const tabs = [['state', '🧠 산초 상태'], ['journal', '🗓 실행 기록'], ['err', '🐞 오류 기록'], ['data', '🗄 데이터']];
+  $('#root').innerHTML = `<div class="mod-head"><div><div class="mod-title">⚙️ 관리</div>
+      <div class="mod-sub">산초 상태 · 예약 실행 기록 · 화면 오류 · 저장된 데이터를 한자리에서 봅니다</div></div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-ai" data-act="ai">✳ 산초에게 · 오류 고치기</button>
+      <button class="back-btn" data-act="reload">↺ 새로고침</button>
+    </div></div>
+    ${S.err ? `<div class="card" style="margin-bottom:14px;color:var(--danger)">산초 상태를 읽지 못했습니다: ${esc(S.err)}<div class="fh">서버가 켜져 있는지, 토큰이 맞는지 확인해 주세요.</div></div>` : ''}
+    <div class="kpi-grid">
+      <div class="kpi"><div class="kpi-label">🗄 컬렉션</div><div class="kpi-value">${S.cols.length}</div><div class="kpi-trend">data/db/*.json</div></div>
+      <div class="kpi"><div class="kpi-label">📄 전체 문서</div><div class="kpi-value">${docN}</div><div class="kpi-trend">모든 컬렉션 합계</div></div>
+      <div class="kpi"><div class="kpi-label">🐞 오늘 오류</div><div class="kpi-value ${errToday ? 'red' : 'green'}">${errToday}</div><div class="kpi-trend">전체 ${S.errs.length}건 기록됨</div></div>
+      <div class="kpi"><div class="kpi-label">⏰ 예약</div><div class="kpi-value">${schN}</div><div class="kpi-trend">정해진 시각에 혼자 실행</div></div>
+    </div>
+    <div class="tabs">${tabs.map(([id, label]) => `<div class="tab ${V.tab === id ? 'on' : ''}" data-act="tab" data-tab="${id}">${label}</div>`).join('')}</div>
+    <div id="body">${V.tab === 'state' ? stateView() : V.tab === 'journal' ? journalView() : V.tab === 'err' ? errView() : dataView()}</div>`;
+}
+
+// ① 산초 상태 — /api/state
+function stateView() {
+  const st = S.state;
+  if (!st) return '<div class="empty"><h3>산초 상태를 읽지 못했습니다</h3>↺ 새로고침을 눌러 보세요.</div>';
+  const s = st.settings || {}, c = st.claude || {};
+  const row = (k, v2) => `<dt>${k}</dt><dd>${v2}</dd>`;
+  return `<div class="card" style="margin-bottom:14px">
+      <h3>🧠 두뇌 (Claude Code)</h3>
+      <dl class="kv">
+        ${row('설치 경로', c.path ? `<span class="mono">${esc(c.path)}</span>` : '<span class="b-pill red">찾지 못함</span>')}
+        ${row('버전', esc(c.version || '—'))}
+        ${row('모델', `<b>${esc(s.model || 'sonnet')}</b>`)}
+        ${row('생각의 깊이', `<b>${esc(s.effort || 'high')}</b> <span class="fh" style="margin:0">low · medium · high · xhigh · max</span>`)}
+        ${row('지금 하는 일', st.busy ? `<span class="b-pill orange">${esc(st.busy)}</span>` : '<span class="b-pill gray">쉬는 중</span>')}
+      </dl></div>
+    <div class="card" style="margin-bottom:14px">
+      <h3>🔐 권한 · 자동 실행</h3>
+      <dl class="kv">
+        ${row('명령 실행 (Bash)', yn(s.allowShell))}
+        ${row('홈 폴더 읽기·쓰기', yn(s.allowHome))}
+        ${row('자기 코드 수정', yn(s.allowSelfEdit))}
+        ${row('연결 앱 (Gmail·캘린더 등)', yn(s.allowApps))}
+        ${row('컴퓨터 켜면 자동 시작', st.canAutostart ? yn(st.autostart) : '<span class="b-pill gray">이 PC 에서는 설정할 수 없습니다</span>')}
+      </dl></div>
+    <div class="card" style="margin-bottom:14px">
+      <h3>📦 가진 것</h3>
+      <dl class="kv">
+        ${row('예약', `<b>${(st.schedules || []).length}</b>개`)}
+        ${row('대화', `<b>${(st.sessions || []).length}</b>개`)}
+        ${row('스킬', `<b>${(st.skills || []).length}</b>개 <span class="fh" style="margin:0">${esc((st.skills || []).join(', ')) || '—'}</span>`)}
+        ${row('위키 노트', `<b>${(st.wiki || []).length}</b>개`)}
+        ${row('화면(모듈)', `<b>${(st.modules || []).length}</b>개 <span class="fh" style="margin:0">${esc((st.modules || []).join(', '))}</span>`)}
+        ${row('부서 도구', `<b>${(st.tools || []).length}</b>개 <span class="fh" style="margin:0">${esc((st.tools || []).join(', ')) || '아직 없음'}</span>`)}
+      </dl></div>
+    <div class="card"><h3>🛠 백업 · 재시작 · 업데이트</h3>
+      <div style="font-size:13px;color:var(--text-light);line-height:1.8">
+        데이터 백업, 산초 재시작, 업데이트는 화면 오른쪽 위 <b>⚙ 설정</b> 에서 하실 수 있습니다.<br>
+        이 관리 화면은 <b>보기 전용</b> 입니다 — 여기서 잘못 눌러 산초가 멈추는 일이 없도록 일부러 버튼을 두지 않았습니다.
+      </div></div>`;
+}
+
+// ② 실행 기록 — /api/journal?days=30 (날짜별로 접고, 검색)
+function journalView() {
+  if (!S.journal.length) return `<div class="toolbar"><input class="fi" id="jq" placeholder="🔍 실행 기록 검색" value="${esc(V.q)}" style="max-width:280px"></div>
+    <div class="empty"><h3>최근 30일 실행 기록이 없습니다</h3>예약이 실행되면 날짜별로 여기에 쌓입니다.</div>`;
+  return `<div class="toolbar"><input class="fi" id="jq" placeholder="🔍 실행 기록 검색 (내용·시각)" value="${esc(V.q)}" style="max-width:280px">
+      <span class="sp"></span><span class="fh" style="margin:0">최근 30일 · ${S.journal.length}일치</span></div>
+    <div id="jList">${journalList()}</div>`;
+}
+function journalList() {
+  const q = V.q.trim().toLowerCase();
+  const days = S.journal.map((d, i) => {
+    // 하루치 md 를 '## HH:MM · id' 로 쪼갠다 (서버 일지 형식)
+    const items = String(d.text || '').split(/\n(?=##\s)/).map((t) => t.trim()).filter(Boolean)
+      .map((t) => { const nl = t.indexOf('\n'); const head = (nl < 0 ? t : t.slice(0, nl)).replace(/^#+\s*/, ''); return { head, body: nl < 0 ? '' : t.slice(nl + 1).trim() }; })
+      .filter((it) => !q || (it.head + ' ' + it.body).toLowerCase().includes(q));
+    return { date: d.date, items, open: i === 0 && !q };
+  }).filter((d) => d.items.length);
+  if (!days.length) return '<div class="empty"><h3>찾는 기록이 없습니다</h3>다른 말로 검색해 보세요.</div>';
+  return days.map((d) => `<details class="jday" ${d.open || q ? 'open' : ''}>
+      <summary>${esc(d.date)} <span class="fh" style="margin:0">${d.items.length}건</span></summary>
+      <div class="body">${d.items.map((it) => `<div class="jitem"><div class="ttl">${esc(it.head)}</div>${it.body ? `<pre>${esc(it.body)}</pre>` : ''}</div>`).join('')}</div>
+    </details>`).join('');
+}
+
+// ③ 오류 기록 — errorlog 컬렉션 (껍데기 window.onerror 가 쌓는다)
+function errView() {
+  const cut = V.days ? sinceISO(V.days) : '';
+  const rows = S.errs.filter((e) => !cut || String(e.at || '') >= cut).sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+  return `<div class="toolbar">
+      <select class="fs" id="errDays" style="width:auto">
+        <option value="1" ${V.days === 1 ? 'selected' : ''}>최근 1일</option>
+        <option value="7" ${V.days === 7 ? 'selected' : ''}>최근 7일</option>
+        <option value="30" ${V.days === 30 ? 'selected' : ''}>최근 30일</option>
+        <option value="0" ${V.days === 0 ? 'selected' : ''}>전체</option>
+      </select>
+      <span class="fh" style="margin:0">${rows.length}건 / 전체 ${S.errs.length}건</span>
+      <span class="sp"></span>
+      ${S.errs.length ? '<button class="btn btn-danger" data-act="err-clear">🗑 전체 삭제</button>' : ''}
+    </div>
+    ${rows.length ? `<div class="card" style="padding:0;overflow:auto">
+      <table class="log-tbl"><thead><tr><th>시각</th><th>화면</th><th>오류 내용</th><th>위치</th></tr></thead>
+      <tbody>${rows.slice(0, 300).map((e) => `<tr>
+        <td class="t">${esc(when(e.at))}</td><td class="v">${esc(e.view || '—')}</td>
+        <td class="msg">${esc(e.msg || '')}</td><td class="t mono">${esc(e.src || '')}</td></tr>`).join('')}</tbody></table>
+      ${rows.length > 300 ? '<div class="fh" style="padding:10px">가장 최근 300건만 보여 드립니다.</div>' : ''}</div>`
+      : `<div class="empty"><h3>${S.errs.length ? '이 기간에는 오류가 없습니다' : '기록된 오류가 없습니다 👍'}</h3>화면에서 오류가 나면 자동으로 여기에 쌓입니다.
+        <div style="margin-top:14px"><button class="btn btn-ai" data-act="ai">✳ 산초에게 · 오류 고치기</button></div></div>`}`;
+}
+
+// ④ 데이터 — GET /api/db (컬렉션별 문서 수)
+function dataView() {
+  if (!S.cols.length) return '<div class="empty"><h3>저장된 데이터가 없습니다</h3>각 화면에서 자료를 등록하면 컬렉션이 생깁니다.</div>';
+  const cols = [...S.cols].sort((a, b) => (b.count || 0) - (a.count || 0));
+  return `<div class="card" style="padding:0;overflow:hidden">
+      <table class="table"><thead><tr><th>컬렉션</th><th style="width:110px">문서 수</th><th style="width:200px;text-align:right">관리</th></tr></thead>
+      <tbody>${cols.map((c) => `<tr data-col="${esc(c.name)}">
+        <td><b>${esc(c.name)}</b> <span class="fh" style="margin:0">data/db/${esc(c.name)}.json</span></td>
+        <td>${c.count || 0}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="btn btn-sm" data-act="col-view">보기</button>
+          <button class="btn btn-sm" data-act="col-dl">내려받기</button></td></tr>`).join('')}</tbody></table>
+    </div>
+    <div class="fh" style="margin-top:10px">컬렉션을 통째로 지우는 버튼은 두지 않았습니다 — 지우실 때는 [보기] 에서 문서 하나씩 확인하고 지워 주세요.</div>`;
+}
+
+// ── 동작 (data-act 위임) ──
+const ACT = {
+  'tab': (el) => { V.tab = el.dataset.tab; render(); if (V.tab === 'journal' && !S.journal.length) loadJournal(); },
+  'reload': () => { loadAll(); if (V.tab === 'journal') loadJournal(); },
+  'ai': askFix,
+  'err-clear': async () => {
+    if (!confirm(`오류 기록 ${S.errs.length}건을 모두 지우시겠습니까?\n(기록만 지워지고 화면·데이터는 그대로입니다)`)) return;
+    try { const b = writeBatch(); S.errs.forEach((e) => b.delete(doc(db, 'errorlog', e.id))); await b.commit(); toast('오류 기록을 지웠습니다', 'ok'); }
+    catch (e) { toast('삭제 실패: ' + e.message, 'err'); }
+  },
+  'col-view': (el) => openDocs(el.closest('[data-col]').dataset.col),
+  'col-dl': (el) => download(el.closest('[data-col]').dataset.col),
+};
+$('#root').addEventListener('click', (e) => {
+  const el = e.target.closest('[data-act]'); if (!el) return;
+  ACT[el.dataset.act] && ACT[el.dataset.act](el);
+});
+$('#root').addEventListener('input', (e) => { if (e.target.id === 'jq') { V.q = e.target.value; const l = $('#jList'); if (l) l.innerHTML = journalList(); } });
+$('#root').addEventListener('change', (e) => { if (e.target.id === 'errDays') { V.days = Number(e.target.value); render(); } });
+
+// ── 모달 셸 ──
+let mOnOk = null;
+function openModal(title, html, onOk) {
+  $('#mTitle').textContent = title; $('#mBody').innerHTML = html; mOnOk = onOk;
+  $('#mOk').style.display = onOk ? '' : 'none';
+  $('#modal').classList.add('active');
+}
+function closeModal() { $('#modal').classList.remove('active'); mOnOk = null; }
+$('#mOk').onclick = () => mOnOk && mOnOk();
+$('#modal').addEventListener('click', (e) => { if (e.target === $('#modal') || e.target.closest('[data-close]')) closeModal(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+// 컬렉션 문서 목록 + JSON 미리보기 (문서 단위 삭제만 — 컬렉션 통째 삭제는 없다)
+const docTitle = (d, id) => String(d.title || d.name || d.subject || d.text || d.code || d.msg || id).slice(0, 60);
+async function openDocs(col) {
+  openModal(`🗄 ${col}`, '<div class="fh">불러오는 중…</div>', null);
+  let rows;
+  try { rows = await SANCHO.api('/api/db/' + encodeURIComponent(col)); }
+  catch (e) { $('#mBody').innerHTML = `<div style="color:var(--danger)">읽지 못했습니다: ${esc(e.message)}</div>`; return; }
+  const draw = (sel) => {
+    const cur = rows.find((r) => r.id === sel) || rows[0];
+    $('#mBody').innerHTML = `<div class="fh" style="margin-bottom:8px">문서 ${rows.length}개 · 왼쪽에서 문서를 고르면 내용이 보입니다. 산초(두뇌)도 같은 파일을 봅니다.</div>
+      ${rows.length ? `<div class="doc-split">
+        <div class="doc-list">${rows.map((r) => `<div class="doc-row ${cur && r.id === cur.id ? 'on' : ''}" data-id="${esc(r.id)}">
+          <span class="id">${esc(r.id)}</span><span class="ti">${esc(docTitle(r.data || {}, r.id))}</span></div>`).join('')}</div>
+        <div><pre class="doc-json">${esc(JSON.stringify(cur ? cur.data : {}, null, 2))}</pre>
+          <div style="margin-top:8px;text-align:right"><button class="btn btn-danger btn-sm" id="docDel">🗑 이 문서 삭제</button></div></div>
+      </div>` : '<div class="empty">문서가 없습니다.</div>'}`;
+    $('#mBody').querySelectorAll('.doc-row').forEach((r) => { r.onclick = () => draw(r.dataset.id); });
+    const del = $('#docDel');
+    if (del && cur) del.onclick = async () => {
+      if (!confirm(`${col} / ${cur.id} 문서를 삭제하시겠습니까?`)) return;
+      try { await deleteDoc(doc(db, col, cur.id)); rows = rows.filter((r) => r.id !== cur.id); toast('삭제했습니다'); draw(); loadAll(); }
+      catch (e) { toast('삭제 실패: ' + e.message, 'err'); }
+    };
+  };
+  draw();
+}
+
+// 컬렉션을 JSON 파일로 내려받기 (data/db/<컬렉션>.json 과 같은 모양 = { id: 문서 })
+async function download(col) {
+  try {
+    const rows = await SANCHO.api('/api/db/' + encodeURIComponent(col));
+    const map = Object.fromEntries(rows.map((r) => [r.id, r.data]));
+    const url = URL.createObjectURL(new Blob([JSON.stringify(map, null, 2)], { type: 'application/json' }));
+    const a = document.createElement('a'); a.href = url; a.download = col + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    toast(`${col}.json 을 내려받았습니다`, 'ok');
+  } catch (e) { toast('내려받기 실패: ' + e.message, 'err'); }
+}
+
+async function boot() {
+  onSnapshot(collection(db, 'errorlog'), (s) => { S.errs = s.docs.map((d) => ({ id: d.id, ...d.data() })); render(); }, () => {});
+  await loadAll();
+  if (V.tab === 'journal') loadJournal();
+}
+</script></body></html>

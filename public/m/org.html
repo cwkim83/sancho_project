@@ -57,6 +57,8 @@ const $ = (s) => document.querySelector(s);
 const v = (s) => ($(s) ? $(s).value : '').trim();
 const S = { users: [], depts: [], ready: false };      // onSnapshot 이 채운다 — 별도 캐시 없음
 const V = { tab: 'list' };                             // UI 취향(메모리)
+// 껍데기가 SANCHO.open('org','tab=chart') 로 부르면 /m/org.html?tab=chart 로 열린다
+{ const t = new URLSearchParams(location.search).get('tab'); if (t === 'chart' || t === 'list') V.tab = t; }
 
 // ── 직급·등급 (원본 TITLES 1252 / GRADES 1254 / gradeByTitle 1263) ──
 const TITLES = ['대표이사', '부사장', '상무이사', '전무이사', '이사', '부장', '차장', '과장', '대리', '주임', '사원'];

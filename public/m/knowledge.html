@@ -1,0 +1,489 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>산초 · 지식 노트</title>
+<link rel="stylesheet" href="/m/platform.css">
+<script src="/m/sdb.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/vis-network@9.1.9/dist/vis-network.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<style>
+/* 지식 노트 — 세종 플랫폼 v2 modules/knowledge-map/knowledge-map.html 이식(회사 기록 → 산초 데이터).
+   노드 종류 색은 이 모듈의 변수로만 정의하고, 그래프는 범례 조각의 실제 배경색을 읽어 쓴다(밝게/어둡게 자동). */
+:root {
+  --k-project: var(--primary); --k-task: var(--success); --k-approval: var(--warning); --k-meeting: var(--purple);
+  --k-okr: #DB2777; --k-user: #0891B2; --k-dept: #64748B; --k-wiki: #CA8A04; --k-wbs: #0EA5E9;
+}
+:root[data-theme=dark] { --k-okr: #F472B6; --k-user: #22D3EE; --k-dept: #94A3B8; --k-wiki: #FBBF24; --k-wbs: #38BDF8; }
+[hidden] { display: none !important; }
+.content-pad { display: flex; flex-direction: column; min-height: 100%; }
+#pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+/* ── 지도 ── */
+.k-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.k-bar .fs, .k-bar .fi { width: auto; padding: 6px 10px; font-size: 12.5px; }
+.k-bar .fi { width: 170px; }
+.legend { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; font-size: 11.5px; color: var(--text-light); margin-bottom: 10px; }
+.lg { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.lg.tog { cursor: pointer; padding: 2px 7px; border: 1px solid var(--border); border-radius: 12px; background: var(--white); }
+.lg.tog:hover { border-color: var(--primary); color: var(--primary); }
+.lg.tog.off { opacity: .45; }
+.lg .cnt { color: var(--text-lighter); }
+.sw { width: 11px; height: 11px; display: inline-block; flex: none; }
+.sw.dot { border-radius: 50%; }
+.sw.square { border-radius: 2px; }
+.sw.diamond { transform: rotate(45deg); border-radius: 1px; }
+.sw.triangle { clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.sw.hexagon { clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
+.sw.star { clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); }
+.gwrap { flex: 1; min-height: 420px; display: flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--card); position: relative; box-shadow: var(--shadow); }
+#graph { flex: 1; min-width: 0; background: var(--bg2); }
+.hintbar { position: absolute; left: 12px; bottom: 10px; font-size: 11px; color: var(--text-light); background: var(--card); border: 1px solid var(--border-light); padding: 4px 10px; border-radius: 8px; pointer-events: none; opacity: .92; }
+.gmsg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 30px; font-size: 13px; color: var(--text-light); background: var(--bg2); line-height: 1.8; }
+.side { width: 0; transition: width .15s; background: var(--card); border-left: 1px solid var(--border); overflow-y: auto; overflow-x: hidden; flex: none; }
+.side.open { width: 300px; }
+.side .inner { padding: 14px; width: 300px; }
+.side h2 { font-size: 14px; margin-bottom: 5px; word-break: break-all; }
+.side .tag { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 10px; color: #fff; margin-bottom: 10px; }
+.kv { font-size: 12px; line-height: 1.75; color: var(--text-light); word-break: break-all; }
+.kv b { color: var(--text); }
+.rel { margin-top: 12px; border-top: 1px dashed var(--border); padding-top: 9px; }
+.rel h3 { font-size: 12px; color: var(--text-lighter); margin-bottom: 5px; }
+.rel .r { display: flex; align-items: center; gap: 6px; padding: 2px 0; font-size: 12px; }
+.rel .r a { flex: 1; min-width: 0; color: var(--primary); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rel .r .go { cursor: pointer; color: var(--text-lighter); font-size: 11px; padding: 0 3px; }
+.rel .r .go:hover { color: var(--primary); }
+
+/* ── 노트 ── */
+.nt-wrap { flex: 1; min-height: 0; display: flex; gap: 14px; }
+.nt-list { width: 260px; flex: none; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.nt-top { display: flex; flex-direction: column; gap: 6px; }
+.nt-items { overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); min-height: 120px; flex: 1; }
+.nt-item { padding: 9px 12px; border-bottom: 1px solid var(--border-light); cursor: pointer; font-size: 13px; }
+.nt-item:last-child { border-bottom: 0; }
+.nt-item:hover { background: var(--primary-lighter); }
+.nt-item.on { background: var(--primary-light); color: var(--primary); font-weight: 600; }
+.nt-item .p { font-size: 11px; color: var(--text-lighter); font-weight: 400; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nt-body { flex: 1; min-width: 0; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); padding: 18px 22px; box-shadow: var(--shadow); }
+.nt-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; border-bottom: 1px solid var(--border-light); padding-bottom: 10px; margin-bottom: 14px; }
+.nt-head .t { font-size: 17px; font-weight: 700; }
+.nt-head .s { font-size: 11px; color: var(--text-lighter); margin-top: 3px; }
+.md { font-size: 13.5px; line-height: 1.8; color: var(--text); }
+.md h1, .md h2, .md h3, .md h4 { margin: 18px 0 8px; line-height: 1.4; }
+.md h1 { font-size: 18px; } .md h2 { font-size: 16px; } .md h3 { font-size: 14px; } .md h4 { font-size: 13px; }
+.md p { margin: 8px 0; }
+.md ul, .md ol { margin: 8px 0 8px 22px; }
+.md li { margin: 3px 0; }
+.md code { background: var(--bg2); border: 1px solid var(--border-light); border-radius: 4px; padding: 1px 5px; font-size: 12px; }
+.md pre { background: var(--bg2); border: 1px solid var(--border-light); border-radius: 8px; padding: 10px 12px; overflow-x: auto; margin: 10px 0; }
+.md pre code { background: none; border: 0; padding: 0; }
+.md blockquote { border-left: 3px solid var(--border); margin: 10px 0; padding: 2px 12px; color: var(--text-light); }
+.md table { border-collapse: collapse; font-size: 12.5px; margin: 10px 0; }
+.md th, .md td { border: 1px solid var(--border); padding: 5px 10px; } .md th { background: var(--bg2); }
+.md hr { border: 0; border-top: 1px solid var(--border); margin: 16px 0; }
+.md img { max-width: 100%; }
+.nt-raw { white-space: pre-wrap; font-size: 13px; line-height: 1.8; }
+.wlink { color: var(--primary); cursor: pointer; border-bottom: 1px dashed var(--primary); }
+.notice { font-size: 12px; color: var(--text-light); background: var(--bg2); border: 1px dashed var(--border); border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; }
+@media (max-width: 900px) {
+  .nt-wrap { flex-direction: column; } .nt-list { width: auto; } .nt-items { max-height: 180px; flex: none; }
+  .side.open { width: 220px; } .side .inner { width: 220px; }
+}
+</style>
+</head><body><div class="content-pad" id="root">
+  <div class="mod-head">
+    <div><div class="mod-title">지식 노트</div><div class="mod-sub" id="sub">일·사람·노트가 어떻게 이어져 있는지 한 장으로 봅니다 — 노트는 산초가 쓰고, 여기서는 읽습니다</div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-ai" data-a="askGeneral">✳ 산초에게 시키기</button>
+      <button class="btn" data-a="openBrain" title="산초의 뇌 그래프(기억·스킬·대화)는 헤더의 🧠 버튼에 있습니다">🧠 뇌 그래프 안내</button>
+    </div>
+  </div>
+  <div class="tabs"><div class="tab on" data-a="tab" data-v="graph" id="tabGraph">지식 지도</div><div class="tab" data-a="tab" data-v="notes" id="tabNotes">노트</div></div>
+  <div id="pane">
+    <div id="paneGraph" style="flex:1;min-height:0;display:flex;flex-direction:column">
+      <div class="notice" id="gNotice" hidden></div>
+      <div class="k-bar">
+        <select class="fs" id="fProj"><option value="">전체 (뼈대 보기)</option></select>
+        <input class="fi" id="fSearch" placeholder="노드 이름 검색 (Enter)" autocomplete="off">
+        <button class="btn btn-sm" data-a="fit">전체 보기</button>
+        <button class="btn btn-sm" data-a="relayout">다시 배치</button>
+        <span style="flex:1"></span>
+        <span style="font-size:11.5px;color:var(--text-lighter)" id="stat"></span>
+      </div>
+      <div class="legend" id="legend"></div>
+      <div class="gwrap">
+        <div id="graph"></div>
+        <div class="hintbar">노드 클릭 = 상세 + 2단계 이웃 강조 · 빈 곳 클릭 = 해제 · 휠 = 확대/축소</div>
+        <div class="gmsg" id="gmsg">데이터를 불러오는 중입니다…</div>
+        <div class="side" id="side"><div class="inner" id="sideBody"></div></div>
+      </div>
+    </div>
+    <div id="paneNotes" class="nt-wrap" hidden>
+      <div class="nt-list">
+        <div class="nt-top">
+          <input class="fi" id="ntQ" placeholder="노트 검색" autocomplete="off">
+          <button class="btn btn-ai" data-a="askNew" style="justify-content:center">✳ 산초에게: 조사해서 위키에 정리</button>
+        </div>
+        <div class="nt-items" id="ntItems"></div>
+      </div>
+      <div class="nt-body" id="ntBody"></div>
+    </div>
+  </div>
+  <span id="cssProbe" style="display:none"></span>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const { db, doc, collection, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, query, where, orderBy, limit, writeBatch } = window.fb;
+const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const toast = (t, kind = '') => { const el = document.getElementById('toast'); el.textContent = t; el.className = 'toast on ' + kind; clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove('on'), 2200); };
+window.addEventListener('message', (e) => { if (e.data?.sancho && e.data.act === 'theme') { document.documentElement.dataset.theme = e.data.theme || ''; setTimeout(() => { COLORS = {}; graphRefresh(); }, 30); } });
+let me = null;                                  // 주인(단일 사용자): {uid:'owner', name, title, dept, email}
+window.fb.me().then((u) => { me = u; boot(); });
+
+const $ = (s) => document.getElementById(s);
+const WIKI_CAP = 40;                            // 위키 [[링크]] 는 파일을 한 장씩 읽어야 해서 40개까지만 훑는다
+
+// ═══════════════ 상태 ═══════════════
+const S = { projects: [], meetings: [], approvals: [], tasks: [], okrs: [], users: [], depts: [], wiki: [], wbs: [], text: {}, raw: {}, net: null, nodes: null, edges: null, ready: false, sel: null };
+const V = { tab: 'graph', proj: '', note: '', q: '', show: { meeting: true, task: true, approval: true, wbs: true, okr: true, wiki: true } };
+try { const t = localStorage.knowledge_tab; if (t === 'graph' || t === 'notes') V.tab = t; } catch {}
+if (!window.vis) V.tab = 'notes';               // 그래프 라이브러리를 못 받으면 노트 탭으로 연다
+
+const TYPE = {
+  project: { label: '프로젝트', shape: 'dot', size: 22, open: 'projects' },
+  dept: { label: '부서', shape: 'square', size: 15, open: 'org' },
+  user: { label: '사람', shape: 'diamond', size: 12, open: 'org' },
+  okr: { label: '목표', shape: 'star', size: 14, open: 'okr' },
+  wiki: { label: '노트', shape: 'triangle', size: 11, open: '' },
+  wbs: { label: '공정표', shape: 'hexagon', size: 13, open: 'projects' },
+  meeting: { label: '회의', shape: 'dot', size: 10, open: 'meeting' },
+  approval: { label: '결재', shape: 'square', size: 10, open: 'approval' },
+  task: { label: '업무', shape: 'dot', size: 9, open: 'projects' },
+};
+const TOGGLE = ['meeting', 'task', 'approval', 'wbs', 'okr', 'wiki'];      // 프로젝트·부서·사람은 언제나 뼈대
+const P_STATUS = { plan: '계획', active: '진행', hold: '보류', done: '완료' };
+const T_STATUS = { todo: '대기', doing: '진행', review: '검토', done: '완료' };
+const T_PRIO = { high: '높음', mid: '보통', low: '낮음' };
+const A_STATUS = { pending: '결재 대기', approved: '승인', rejected: '반려', withdrawn: '회수' };
+const A_TYPE = { general: '일반', purchase: '구매', quality: '품질', project: '프로젝트', 'schedule-change': '일정변경', 'okr-change': '목표변경', leave: '휴가', expense: '경비' };
+const O_SCOPE = { company: '전사', dept: '부서', personal: '개인' };
+
+// ═══════════════ 조회 도우미 ═══════════════
+const cut = (s, n) => { const t = String(s ?? ''); return t.length > n ? t.slice(0, n) + '…' : t; };
+const user = (id) => S.users.find((u) => u.id === id);
+const uName = (id) => { const u = user(id); return u ? (u.name || '') + (u.title ? ' ' + u.title : '') : ''; };
+const projOf = (id) => S.projects.find((p) => p.id === id);
+const projLabel = (p) => p ? ((p.code ? p.code + ' ' : '') + (p.name || '')) : '';
+const deptOfUser = (u) => S.depts.find((d) => d.id === u.dept || d.name === u.dept);
+const noteName = (f) => String(f || '').replace(/\.md$/, '');
+const arr = (x) => Array.isArray(x) ? x : [];
+const msPct = (m) => m == null ? 0 : (m.pct != null && m.pct !== '') ? Math.max(0, Math.min(100, Math.round(Number(m.pct)) || 0)) : (m.done ? 100 : 0);
+function okrPct(o) { const ms = arr(o.milestones); if (!ms.length) return (o.pctManual != null && o.pctManual !== '') ? Math.max(0, Math.min(100, Math.round(Number(o.pctManual)) || 0)) : 0; return Math.round(ms.reduce((a, m) => a + msPct(m), 0) / ms.length); }
+const wbsOf = (name) => S.wbs.find((w) => w.name === name);
+
+// 색은 범례 조각의 실제 배경색을 읽는다 — var() 가 몇 겹이든, 밝게/어둡게가 바뀌어도 맞는 값이 나온다
+let COLORS = {};
+function cssColor(varName) { const p = $('cssProbe'); p.style.color = `var(${varName})`; return getComputedStyle(p).color; }
+function readColors() { if (COLORS.project) return; Object.keys(TYPE).forEach((t) => { const el = document.querySelector(`.legend .sw[data-t="${t}"]`); COLORS[t] = el ? getComputedStyle(el).backgroundColor : cssColor('--primary'); }); }
+
+// ═══════════════ 위키 본문 (그래프의 [[링크]] 재료 · 노트 탭 본문) ═══════════════
+let wikiJob = null;
+async function loadNote(f) {
+  if (S.text[f] != null) return S.text[f];
+  try { const r = await SANCHO.api('/api/file?path=' + encodeURIComponent('wiki/' + f)); S.text[f] = r.text || ''; } catch (e) { S.text[f] = ''; }
+  return S.text[f];
+}
+function ensureWiki() {                          // 그래프를 만들 때 한 번만, 40개까지 게으르게 읽는다
+  if (wikiJob) return wikiJob;
+  wikiJob = Promise.all(S.wiki.slice(0, WIKI_CAP).map((f) => loadNote(f)));
+  return wikiJob;
+}
+const wikiLinks = (f) => [...String(S.text[f] || '').matchAll(/\[\[([^\]|#]+)/g)].map((m) => m[1].trim() + '.md');
+
+// ═══════════════ 그래프 ═══════════════
+function syncProjOptions() {
+  const sel = $('fProj'), list = S.projects.slice().sort((a, b) => String(a.code || '').localeCompare(String(b.code || '')));
+  const sig = list.map((p) => p.id + ':' + projLabel(p)).join('|');
+  if (sel._sig === sig) return; sel._sig = sig;
+  sel.innerHTML = '<option value="">전체 (뼈대 보기)</option>' + list.map((p) => `<option value="${esc(p.id)}">${esc(projLabel(p))}</option>`).join('');
+  if (!list.some((p) => p.id === V.proj)) V.proj = '';
+  sel.value = V.proj;
+}
+
+function build() {
+  readColors();
+  const sp = V.proj, show = V.show, expand = !!sp;
+  const nodes = new Map(), edges = []; S.raw = {};
+  const add = (id, type, label, rec) => { if (!nodes.has(id)) { nodes.set(id, { id, type, label }); S.raw[id] = { type, rec }; } return id; };
+  const link = (a, b, label) => { if (a && b && nodes.has(a) && nodes.has(b) && !edges.some((e) => e.from === a && e.to === b)) edges.push({ from: a, to: b, label }); };
+
+  // 뼈대 — 프로젝트 · 부서 · 사람
+  S.projects.forEach((p) => {
+    if (sp && p.id !== sp) return;
+    const cnt = expand ? '' : [['회의', S.meetings.filter((m) => m.projectId === p.id).length], ['업무', S.tasks.filter((t) => t.projectId === p.id).length], ['결재', S.approvals.filter((a) => a.projectId === p.id).length]].filter((x) => x[1]).map((x) => x[0] + x[1]).join('·');
+    add('proj:' + p.id, 'project', projLabel(p) + (cnt ? '\n' + cnt : ''), p);
+  });
+  S.depts.forEach((d) => add('dept:' + d.id, 'dept', (d.icon ? d.icon + ' ' : '') + (d.name || d.id), d));
+  S.users.forEach((u) => {
+    add('user:' + u.id, 'user', (u.name || u.id) + (u.title ? ' ' + u.title : ''), u);
+    const d = deptOfUser(u); if (d) link('user:' + u.id, 'dept:' + d.id, '소속');
+  });
+  S.projects.forEach((p) => {
+    if (sp && p.id !== sp) return;
+    if (p.pm) link('proj:' + p.id, 'user:' + p.pm, 'PM');
+    arr(p.members).forEach((m) => { if (m !== p.pm) link('proj:' + p.id, 'user:' + m, '참여'); });
+  });
+
+  // 목표 — 사람(담당)에 붙는다
+  if (show.okr) S.okrs.forEach((o) => {
+    if (sp) return;                              // 프로젝트를 고른 동안엔 목표를 접어 둔다(털뭉치 방지)
+    add('okr:' + o.id, 'okr', cut(o.title || '목표', 22), o);
+    if (o.ownerId) link('okr:' + o.id, 'user:' + o.ownerId, '담당');
+  });
+
+  // 프로젝트를 고르면 그 프로젝트의 회의 · 업무 · 결재 · 공정표가 펼쳐진다
+  if (expand) {
+    if (show.meeting) S.meetings.filter((m) => m.projectId === sp).forEach((m) => {
+      add('mt:' + m.id, 'meeting', cut(m.title || '회의', 20), m); link('proj:' + sp, 'mt:' + m.id, '회의');
+    });
+    if (show.task) S.tasks.filter((t) => t.projectId === sp).forEach((t) => {
+      add('tk:' + t.id, 'task', cut(t.title || '업무', 20), t); link('proj:' + sp, 'tk:' + t.id, '업무');
+    });
+    if (show.approval) S.approvals.filter((a) => a.projectId === sp).forEach((a) => {
+      add('ap:' + a.id, 'approval', cut(a.title || '결재', 20), a); link('proj:' + sp, 'ap:' + a.id, '결재');
+    });
+    if (show.wbs) { const p = projOf(sp), w = p && p.wbs && wbsOf(p.wbs); if (w) { add('wbs:' + w.name, 'wbs', cut(w.title || w.name, 20), w); link('proj:' + sp, 'wbs:' + w.name, '공정표'); } }
+  }
+
+  // 위키 노트 — 자기들끼리 [[링크]] 로 묶인다
+  if (show.wiki) {
+    const files = S.wiki.slice(0, WIKI_CAP);
+    files.forEach((f) => add('wiki:' + f, 'wiki', noteName(f), { file: f }));
+    files.forEach((f) => wikiLinks(f).forEach((t) => { if (t !== f && files.includes(t)) link('wiki:' + f, 'wiki:' + t, ''); }));
+  }
+
+  const ink = cssColor('--text'), ink3 = cssColor('--text-lighter'), line = cssColor('--border'), pri = cssColor('--primary');
+  const vn = [...nodes.values()].map((n) => ({
+    id: n.id, label: n.label, shape: TYPE[n.type].shape, size: TYPE[n.type].size,
+    color: { background: COLORS[n.type], border: COLORS[n.type] },
+    font: { size: n.type === 'project' ? 14 : 11, color: ink, multi: false },
+  }));
+  const ve = edges.map((e, i) => ({ id: 'e' + i, from: e.from, to: e.to, label: e.label || undefined, font: { size: 9, color: ink3, strokeWidth: 0 }, color: { color: line, highlight: pri }, width: 1 }));
+  S.nodes = new vis.DataSet(vn); S.edges = new vis.DataSet(ve);
+  $('stat').textContent = `노드 ${vn.length} · 관계 ${ve.length}`;
+  $('gmsg').hidden = vn.length > 0;
+  if (!vn.length) $('gmsg').innerHTML = '그릴 기록이 아직 없습니다.<br>프로젝트·회의·노트가 쌓이면 여기에 지도가 그려집니다.';
+
+  if (S.net) { S.net.setData({ nodes: S.nodes, edges: S.edges }); return; }
+  S.net = new vis.Network($('graph'), { nodes: S.nodes, edges: S.edges }, {
+    physics: { solver: 'forceAtlas2Based', forceAtlas2Based: { gravitationalConstant: -45, springLength: 100 }, stabilization: { iterations: 140 } },
+    interaction: { hover: true },
+    nodes: { borderWidth: 0 },
+  });
+  S.net.on('click', (p) => { p.nodes.length ? focusNode(p.nodes[0]) : clearFocus(); });
+}
+
+function neighborhood(id, depth) {               // 2단계 이웃 BFS (원본과 같은 규칙)
+  const keep = new Set([id]); let front = [id];
+  for (let d = 0; d < depth; d++) {
+    const next = [];
+    S.edges.forEach((e) => {
+      if (front.includes(e.from) && !keep.has(e.to)) { keep.add(e.to); next.push(e.to); }
+      if (front.includes(e.to) && !keep.has(e.from)) { keep.add(e.from); next.push(e.from); }
+    });
+    front = next;
+  }
+  return keep;
+}
+function focusNode(id) {
+  if (!S.nodes || !S.raw[id]) return;
+  const keep = neighborhood(id, 2);
+  S.nodes.forEach((n) => S.nodes.update({ id: n.id, opacity: keep.has(n.id) ? 1 : 0.12 }));
+  S.sel = id; sidePanel(id, keep);
+}
+function clearFocus() {
+  S.sel = null;
+  if (S.nodes) S.nodes.forEach((n) => S.nodes.update({ id: n.id, opacity: 1 }));
+  $('side').classList.remove('open');
+}
+function jump(id) { if (!S.raw[id]) return; try { S.net.focus(id, { scale: 1.2, animation: true }); } catch {} focusNode(id); }
+
+function detail(t, rec) {                        // 종류별 필드 요약
+  const row = (k, v) => (v || v === 0) ? `<b>${esc(k)}</b> — ${esc(v)}<br>` : '';
+  if (t === 'project') return row('코드', rec.code) + row('고객', rec.client) + row('PM', uName(rec.pm)) + row('참여', arr(rec.members).map(uName).filter(Boolean).join(', '))
+    + row('기간', [rec.start, rec.end].filter(Boolean).join(' ~ ')) + row('상태', P_STATUS[rec.status] || rec.status) + row('진행률', rec.progress != null ? rec.progress + '%' : '') + row('공정표', rec.wbs) + row('메모', cut(rec.memo, 120));
+  if (t === 'meeting') return row('일시', [rec.date, [rec.start, rec.end].filter(Boolean).join('~')].filter(Boolean).join(' ')) + row('주최', uName(rec.organizer))
+    + row('참석', arr(rec.attendees).map((a) => uName(a) || a).filter(Boolean).join(', ')) + row('상태', rec.status) + row('안건', cut(rec.agenda, 120))
+    + row('회의록', rec.minutes && rec.minutes.summary ? cut(rec.minutes.summary, 120) : (rec.transcript ? '전사본 있음(정리 전)' : ''));
+  if (t === 'approval') return row('유형', A_TYPE[rec.type] || rec.type) + row('기안', uName(rec.drafterId)) + row('금액', rec.amount ? Number(rec.amount).toLocaleString() + '원' : '')
+    + row('마감', rec.due) + row('상태', A_STATUS[rec.status] || rec.status) + row('결재선', arr(rec.approvalLine).map((l) => `${l.name || uName(l.userId)}(${l.role || ''})`).join(' → '));
+  if (t === 'task') return row('담당', uName(rec.assignee)) + row('마감', rec.due) + row('우선순위', T_PRIO[rec.priority] || rec.priority) + row('상태', T_STATUS[rec.status] || rec.status) + row('메모', cut(rec.memo, 120));
+  if (t === 'okr') return row('범위', O_SCOPE[rec.scope] || rec.scope) + row('담당', uName(rec.ownerId)) + row('기간', rec.period || [rec.start, rec.end].filter(Boolean).join(' ~ '))
+    + row('진행률', okrPct(rec) + '%') + row('마일스톤', arr(rec.milestones).length ? arr(rec.milestones).length + '개' : '') + row('이유', cut(rec.why, 120));
+  if (t === 'user') return row('직급', rec.title) + row('부서', rec.dept) + row('이메일', rec.email) + row('연락처', rec.phone)
+    + row('맡은 프로젝트', S.projects.filter((p) => p.pm === rec.id).map(projLabel).join(', '));
+  if (t === 'dept') return row('부서장', uName(rec.lead)) + row('인원', S.users.filter((u) => u.dept === rec.name || u.dept === rec.id).length + '명') + row('메모', cut(rec.memo, 120));
+  if (t === 'wbs') return row('항목', rec.items != null ? rec.items + '개' : '') + row('진척률', rec.pct != null ? Math.round(rec.pct) + '%' : '') + row('SPI', rec.spi != null ? Number(rec.spi).toFixed(2) : '') + row('지연 항목', rec.late != null ? rec.late + '건' : '');
+  if (t === 'wiki') { const txt = S.text[rec.file] || ''; const first = txt.split('\n').map((l) => l.replace(/^#+\s*/, '').trim()).filter(Boolean)[0] || ''; return row('파일', rec.file) + row('한 줄', cut(first, 90)) + row('길이', txt ? txt.length + '자' : '아직 읽지 않음') + row('링크', wikiLinks(rec.file).length + '개'); }
+  return row('이름', rec.name || '');
+}
+
+function sidePanel(id, keep) {
+  const info = S.raw[id]; if (!info) return;
+  const t = info.type, rec = info.rec || {};
+  const label = (S.nodes.get(id) || {}).label || id;
+  const rels = [...keep].filter((k) => k !== id && S.raw[k]);
+  rels.sort((a, b) => Object.keys(TYPE).indexOf(S.raw[a].type) - Object.keys(TYPE).indexOf(S.raw[b].type));
+  const relHtml = rels.length ? `<div class="rel"><h3>연결된 항목 ${rels.length}건</h3>${rels.slice(0, 30).map((k) =>
+    `<div class="r"><a data-a="jump" data-v="${esc(k)}">${esc(TYPE[S.raw[k].type].label)} · ${esc(String((S.nodes.get(k) || {}).label || k).split('\n')[0])}</a><span class="go" data-a="goto" data-v="${esc(k)}" title="해당 메뉴에서 열기">↗</span></div>`).join('')}</div>` : '';
+  $('sideBody').innerHTML = `<h2>${esc(String(label).split('\n')[0])}</h2>`
+    + `<span class="tag" style="background:${esc(COLORS[t])}">${esc(TYPE[t].label)}</span>`
+    + `<div class="kv">${detail(t, rec) || '<i>추가 정보 없음</i>'}</div>`
+    + `<div style="margin-top:12px"><button class="btn btn-sm" data-a="goto" data-v="${esc(id)}">${t === 'wiki' ? '노트 열기' : '해당 메뉴에서 열기'} ↗</button></div>`
+    + relHtml;
+  $('side').classList.add('open');
+}
+
+function gotoNode(id) {
+  const info = S.raw[id]; if (!info) return;
+  if (info.type === 'wiki') { V.tab = 'notes'; V.note = info.rec.file; openNote(info.rec.file); render(); return; }
+  const view = TYPE[info.type].open;
+  if (!view) return toast('아직 열 수 있는 메뉴가 없습니다');
+  SANCHO.open(view, id.slice(id.indexOf(':') + 1));
+}
+
+async function graphRefresh() {
+  if (!S.ready || V.tab !== 'graph') return;
+  if (!window.vis) { $('gmsg').hidden = false; $('gmsg').innerHTML = '그래프 라이브러리(vis-network)를 받지 못했습니다.<br>인터넷 연결을 확인해 주세요 — 그동안은 <b>노트</b> 탭에서 위키를 보실 수 있습니다.'; $('stat').textContent = ''; return; }
+  syncProjOptions();
+  if (V.show.wiki && S.wiki.length) await ensureWiki();
+  build();
+}
+
+// ═══════════════ 노트(위키) ═══════════════
+function mdHtml(text) {
+  const safe = esc(text || '');                  // 먼저 이스케이프 → marked 가 날 HTML 을 만들 여지가 없다
+  let html = '';
+  if (window.marked) { try { html = marked.parse(safe, { breaks: true, gfm: true }); } catch { html = ''; } }
+  if (!html) html = `<pre class="nt-raw">${safe}</pre>`;
+  // ponytail: 이미 이스케이프된 HTML 문자열 위에서 [[링크]] 를 치환한다 — 속성값 안에 [[ 가 들어오면 오인식한다(실제 위키에선 없음)
+  return html.replace(/\[\[([^\[\]|#]+)(?:\|[^\[\]]*)?\]\]/g, (m, n) => `<a class="wlink" data-a="openNote" data-v="${n.trim()}">${n.trim()}</a>`);
+}
+function noteFile(name) {
+  const n = String(name || '').trim();
+  return S.wiki.find((f) => f === n || f === n + '.md' || noteName(f) === n || noteName(f).toLowerCase() === n.toLowerCase());
+}
+async function openNote(f) {
+  const file = noteFile(f) || f;
+  if (!S.wiki.includes(file)) return toast(`"${noteName(f)}" 노트가 아직 없습니다 — 산초에게 정리를 시켜 보세요`);
+  V.note = file; renderNotes();
+  if (S.text[file] == null) { await loadNote(file); renderNotes(); }
+}
+function renderNoteList() {
+  const q = V.q.trim().toLowerCase();
+  const list = S.wiki.filter((f) => !q || noteName(f).toLowerCase().includes(q) || String(S.text[f] || '').toLowerCase().includes(q));
+  $('ntItems').innerHTML = list.length ? list.map((f) => {
+    const txt = S.text[f] || '', first = txt.split('\n').map((l) => l.replace(/^#+\s*/, '').trim()).filter(Boolean)[0] || '';
+    return `<div class="nt-item${V.note === f ? ' on' : ''}" data-a="openNote" data-v="${esc(noteName(f))}">${esc(noteName(f))}${first ? `<div class="p">${esc(cut(first, 40))}</div>` : ''}</div>`;
+  }).join('') : `<div style="padding:14px;font-size:12px;color:var(--text-lighter)">${S.wiki.length ? '검색 결과가 없습니다' : '아직 노트가 없습니다'}</div>`;
+}
+function renderNotes() {
+  renderNoteList();
+  const f = V.note && S.wiki.includes(V.note) ? V.note : '';
+  if (!f) {
+    $('ntBody').innerHTML = S.wiki.length
+      ? `<div class="empty"><h3>노트를 선택해 주세요</h3>왼쪽 목록에서 노트를 고르면 본문이 열립니다.<br>본문의 [[링크]] 를 누르면 그 노트로 이동합니다.</div>`
+      : `<div class="empty"><h3>아직 지식 노트가 없습니다</h3>산초가 조사하거나 정리한 내용은 <code>data/wiki/*.md</code> 에 쌓이고, 여기서 읽을 수 있습니다.
+        <div style="margin-top:14px"><button class="btn btn-ai" data-a="askNew">✳ 산초에게: 조사해서 위키에 정리 시키기</button></div></div>`;
+    return;
+  }
+  const txt = S.text[f];
+  const links = txt == null ? [] : wikiLinks(f);
+  $('ntBody').innerHTML = `<div class="nt-head">
+      <div><div class="t">${esc(noteName(f))}</div><div class="s">${esc(f)}${txt == null ? '' : ` · ${txt.length}자 · 링크 ${links.length}개`}</div></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-ai" data-a="askNote" data-v="${esc(f)}">✳ 산초에게</button>
+        <button class="btn btn-sm" data-a="toGraph" data-v="${esc(f)}">지도에서 보기</button>
+      </div></div>
+    <div class="md">${txt == null ? '<div style="color:var(--text-lighter);font-size:12px">불러오는 중…</div>' : (txt.trim() ? mdHtml(txt) : '<div style="color:var(--text-lighter);font-size:12px">빈 노트입니다</div>')}</div>`;
+}
+
+// ═══════════════ 산초에게 ═══════════════
+const ASK = {
+  general: () => SANCHO.ask(`data/wiki 폴더를 지식 노트로 정리해줘: data/db/projects.json · meetings.json · approvals.json · tasks.json · okrs.json 을 읽고, 아직 위키에 없는 주제(진행 중인 프로젝트 · 고객사 · 자주 나오는 기술 용어)를 골라 wiki/<주제>.md 로 새로 만들어줘. 각 노트는 첫 줄에 한 줄 요약, 그다음에 근거가 된 문서 id 와 날짜, 마지막에 관련 노트를 [[노트이름]] 형식으로 연결해줘. 이미 있는 노트는 지우지 말고 새로 알게 된 내용만 덧붙여줘. 만든 노트를 한 줄씩 보고해줘.`),
+  new: () => SANCHO.ask(`「여기에 주제를 적어주세요」 에 대해 조사해서 위키에 정리해줘: 내 데이터(data/db/*.json · data/wiki/*.md)를 먼저 찾아보고 모자라면 웹도 확인해서 wiki/<주제>.md 로 저장해줘. 첫 줄은 한 줄 요약, 본문은 개요 · 핵심 내용 · 출처 순으로 쓰고, 관련된 기존 노트는 [[노트이름]] 으로 연결해줘.`),
+  note: (f) => SANCHO.ask(`위키 ${noteName(f)} 을 최신 내용으로 갱신해줘: data/wiki/${f} 을 읽고 낡았거나 빠진 부분을 찾아 고쳐줘. 근거는 data/db/*.json 과 최근 대화 · 일지에서 찾고, 필요하면 웹도 확인해줘. 문서 구조(첫 줄 한 줄 요약 → 본문 → 관련 노트 [[링크]])는 그대로 두고, 바꾼 곳을 한 줄씩 보고해줘.`),
+};
+
+// ═══════════════ 화면 ═══════════════
+function renderLegend() {
+  if ($('legend').childElementCount) return;
+  $('legend').innerHTML = Object.entries(TYPE).map(([t, d]) => {
+    const tog = TOGGLE.includes(t);
+    return `<span class="lg${tog ? ' tog' : ''}${tog && !V.show[t] ? ' off' : ''}"${tog ? ` data-a="tog" data-v="${t}"` : ''}><i class="sw ${d.shape}" data-t="${t}" style="background:var(--k-${t})"></i>${esc(d.label)}<span class="cnt" data-c="${t}"></span></span>`;
+  }).join('') + '<span style="color:var(--text-lighter)">— 회의·업무·결재·공정표는 프로젝트를 고르면 펼쳐집니다</span>';
+}
+function paintLegend() {
+  const n = { project: S.projects.length, dept: S.depts.length, user: S.users.length, okr: S.okrs.length, wiki: S.wiki.length, wbs: S.wbs.length, meeting: S.meetings.length, approval: S.approvals.length, task: S.tasks.length };
+  document.querySelectorAll('.legend [data-c]').forEach((el) => { el.textContent = n[el.dataset.c] ? ' ' + n[el.dataset.c] : ''; });
+  document.querySelectorAll('.legend .lg.tog').forEach((el) => el.classList.toggle('off', !V.show[el.dataset.v]));
+}
+function render() {
+  if (!S.ready) return;
+  renderLegend(); paintLegend();
+  $('tabGraph').classList.toggle('on', V.tab === 'graph');
+  $('tabNotes').classList.toggle('on', V.tab === 'notes');
+  $('paneGraph').hidden = V.tab !== 'graph';
+  $('paneNotes').hidden = V.tab !== 'notes';
+  $('gNotice').hidden = !!window.vis;
+  if (!window.vis) $('gNotice').innerHTML = '그래프 라이브러리(vis-network)를 받지 못해 <b>지식 지도</b>를 그릴 수 없습니다 — 인터넷 연결을 확인해 주세요. 노트 탭은 그대로 쓰실 수 있습니다.';
+  $('sub').textContent = `프로젝트 ${S.projects.length} · 회의 ${S.meetings.length} · 결재 ${S.approvals.length} · 업무 ${S.tasks.length} · 목표 ${S.okrs.length} · 노트 ${S.wiki.length} · 공정표 ${S.wbs.length} — 노트는 산초가 쓰고, 여기서는 읽습니다`;
+  renderNotes();
+  graphRefresh();
+}
+let rt = null;
+const rerender = () => { clearTimeout(rt); rt = setTimeout(render, 60); };
+
+// ═══════════════ 동작 ═══════════════
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-a]'); if (!el) return;
+  const a = el.dataset.a, v = el.dataset.v;
+  switch (a) {
+    case 'tab': V.tab = v; try { localStorage.knowledge_tab = v; } catch {} render(); break;
+    case 'tog': V.show[v] = !V.show[v]; paintLegend(); clearFocus(); graphRefresh(); break;
+    case 'fit': clearFocus(); if (S.net) S.net.fit({ animation: true }); break;
+    case 'relayout': clearFocus(); if (S.net) { S.net.stabilize(160); S.net.fit({ animation: true }); toast('다시 배치했습니다'); } break;
+    case 'jump': jump(v); break;
+    case 'goto': gotoNode(v); break;
+    case 'openNote': V.tab = 'notes'; try { localStorage.knowledge_tab = 'notes'; } catch {} render(); openNote(v); break;
+    case 'toGraph': V.tab = 'graph'; try { localStorage.knowledge_tab = 'graph'; } catch {} render(); setTimeout(() => jump('wiki:' + v), 400); break;
+    case 'askGeneral': ASK.general(); toast('산초 채팅창에 지시를 채웠습니다'); break;
+    case 'askNew': ASK.new(); toast('주제를 적고 보내시면 됩니다'); break;
+    case 'askNote': ASK.note(v); toast('산초 채팅창에 지시를 채웠습니다'); break;
+    case 'openBrain': toast('산초의 뇌 그래프(기억·스킬·대화)는 헤더의 🧠 버튼에 있습니다'); break;
+  }
+});
+document.addEventListener('change', (e) => { if (e.target.id === 'fProj') { V.proj = e.target.value; clearFocus(); graphRefresh(); } });
+document.addEventListener('input', (e) => { if (e.target.id === 'ntQ') { V.q = e.target.value; renderNoteList(); } });
+document.addEventListener('keydown', (e) => {
+  if (e.target.id !== 'fSearch' || e.key !== 'Enter' || e.isComposing) return;
+  const q = e.target.value.trim().toLowerCase(); if (!q || !S.nodes) return;
+  let hit = null; S.nodes.forEach((n) => { if (!hit && String(n.label || '').toLowerCase().includes(q)) hit = n.id; });
+  if (hit) { try { S.net.focus(hit, { scale: 1.3, animation: true }); } catch {} focusNode(hit); }
+  else toast(`"${e.target.value}" 노드를 찾지 못했습니다`);
+});
+
+// ═══════════════ 시작 ═══════════════
+async function boot() {
+  const docs = (s) => s.docs.map((d) => ({ id: d.id, ...d.data() }));
+  try {                                          // 산초 고유 데이터 — 위키 목록 · 공정표 목록
+    const st = await SANCHO.api('/api/state'); S.wiki = arr(st.wiki);
+    S.wbs = arr(st.wbs);
+  } catch (e) { console.warn('[지식노트] /api/state 실패:', e.message); }
+  if (!S.wbs.length) { try { S.wbs = arr(await SANCHO.api('/api/wbs')); } catch {} }
+  if (!V.note && S.wiki.length) V.note = S.wiki[0];
+  S.ready = true;
+  ['projects', 'meetings', 'approvals', 'tasks', 'okrs', 'users', 'depts'].forEach((c) => {
+    onSnapshot(collection(db, c), (s) => { S[c] = docs(s); rerender(); }, (err) => toast(c + ' 읽기 실패: ' + err.message, 'err'));
+  });
+  render();
+  if (V.note) loadNote(V.note).then(renderNotes);
+}
+</script></body></html>
