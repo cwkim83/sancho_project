@@ -9,18 +9,19 @@
     :root {
       --primary: #2563eb;
       --primary-hover: #1d4ed8;
-      --primary-glow: rgba(37, 99, 235, 0.45);
-      --accent-sky: #7dd3fc;
+      --primary-glow: rgba(37, 99, 235, 0.5);
+      --accent-cyan: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.4);
       --text-main: #ffffff;
-      --text-muted: rgba(255, 255, 255, 0.72);
-      --mono-font: ui-monospace, "Cascadia Mono", Consolas, monospace;
+      --text-muted: rgba(255, 255, 255, 0.76);
+      --mono-font: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
       --sans-font: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "맑은 고딕", sans-serif;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; width: 100%; overflow: hidden; background: #061233; font-family: var(--sans-font); }
+    html, body { height: 100%; width: 100%; overflow: hidden; background: #03091f; font-family: var(--sans-font); }
 
-    /* 전체 래퍼 */
+    /* 전체 화면 래퍼 */
     .login-wrap {
       position: absolute;
       inset: 0;
@@ -48,21 +49,22 @@
       inset: 0;
       z-index: 0;
       overflow: hidden;
-      background-color: #061233;
+      background-color: #03091f;
       background-image:
-        radial-gradient(70% 55% at 78% 8%, rgba(37,99,235,.45) 0%, rgba(37,99,235,0) 70%),
-        radial-gradient(55% 28% at 50% 102%, rgba(255,166,64,.25) 0%, rgba(255,166,64,0) 72%),
-        radial-gradient(40% 40% at 12% 78%, rgba(125,211,252,.15) 0%, rgba(125,211,252,0) 65%),
-        linear-gradient(165deg, #0b2a7a 0%, #071a4f 40%, #061233 70%, #03091f 100%);
+        radial-gradient(70% 55% at 75% 10%, rgba(37,99,235,.4) 0%, rgba(37,99,235,0) 70%),
+        radial-gradient(55% 28% at 50% 100%, rgba(245,158,11,.2) 0%, rgba(245,158,11,0) 72%),
+        radial-gradient(40% 40% at 15% 75%, rgba(56,189,248,.15) 0%, rgba(56,189,248,0) 65%),
+        linear-gradient(165deg, #0b2566 0%, #061540 40%, #040d2b 70%, #020617 100%);
     }
 
+    /* 생성된 AI + 인간 융합 8K 배경 이미지 (28초 켄번스 & 크로스페이드) */
     .login-shot {
       position: absolute;
       inset: -4%;
       width: 108%;
       height: 108%;
       object-fit: cover;
-      object-position: center 40%;
+      object-position: center 38%;
       opacity: 0;
       will-change: opacity, transform;
       animation-duration: 28s, 28s;
@@ -79,49 +81,58 @@
 
     @keyframes lgFadeA {
       0%, 42% { opacity: 1; }
-      52%, 92% { opacity: 0; }
+      50%, 92% { opacity: 0; }
       100% { opacity: 1; }
     }
     @keyframes lgFadeB {
       0%, 42% { opacity: 0; }
-      52%, 92% { opacity: 1; }
+      50%, 92% { opacity: 1; }
       100% { opacity: 0; }
     }
     @keyframes lgKbA {
       0% { transform: scale(1) translate(0, 0); }
-      50% { transform: scale(1.08) translate(-1.5%, -1%); }
+      50% { transform: scale(1.09) translate(-1.8%, -1.2%); }
       100% { transform: scale(1) translate(0, 0); }
     }
     @keyframes lgKbB {
-      0% { transform: scale(1.08) translate(1.5%, 0.8%); }
-      50% { transform: scale(1) translate(0, -0.6%); }
-      100% { transform: scale(1.08) translate(1.5%, 0.8%); }
+      0% { transform: scale(1.09) translate(1.6%, 1%); }
+      50% { transform: scale(1) translate(0, -0.8%); }
+      100% { transform: scale(1.09) translate(1.6%, 1%); }
     }
 
-    /* 명도 보정 스크림(Scrim) */
-    .login-scrim {
+    /* 반응형 실시간 인터랙티브 신경망(Neural Network) 캔버스 */
+    #neuralCanvas {
       position: absolute;
       inset: 0;
       z-index: 1;
       pointer-events: none;
-      background:
-        linear-gradient(215deg, rgba(3,9,31,.2) 0%, rgba(3,9,31,.45) 45%, rgba(3,9,31,.82) 75%, rgba(3,9,31,.95) 100%),
-        linear-gradient(90deg, rgba(3,9,31,.55) 0%, rgba(3,9,31,0) 50%),
-        linear-gradient(180deg, rgba(3,9,31,.6) 0%, rgba(3,9,31,0) 30%);
+      opacity: 0.65;
     }
 
-    /* 12컬럼 레이아웃 그리드 */
+    /* 가독성 보호 다층 스크림(Scrim) */
+    .login-scrim {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+      background:
+        linear-gradient(215deg, rgba(2,6,23,.18) 0%, rgba(2,6,23,.42) 42%, rgba(2,6,23,.82) 74%, rgba(2,6,23,.95) 100%),
+        linear-gradient(90deg, rgba(2,6,23,.6) 0%, rgba(2,6,23,0) 52%),
+        linear-gradient(180deg, rgba(2,6,23,.65) 0%, rgba(2,6,23,0) 28%);
+    }
+
+    /* 12컬럼 메인 그리드 */
     .login-grid {
       position: relative;
-      z-index: 2;
+      z-index: 3;
       flex: 1;
       display: grid;
       grid-template-columns: repeat(12, minmax(0, 1fr));
       grid-template-rows: auto 1fr auto;
-      column-gap: 32px;
+      column-gap: 36px;
       row-gap: 28px;
-      padding: 40px 56px calc(32px + env(safe-area-inset-bottom, 0px)) 56px;
-      max-width: 1600px;
+      padding: 42px 64px calc(32px + env(safe-area-inset-bottom, 0px)) 64px;
+      max-width: 1640px;
       margin: 0 auto;
       width: 100%;
     }
@@ -134,7 +145,7 @@
       align-items: center;
       gap: 16px;
       font-family: var(--mono-font);
-      font-size: 13px;
+      font-size: 12.5px;
       letter-spacing: .18em;
       text-transform: uppercase;
       color: rgba(255,255,255,.9);
@@ -143,13 +154,13 @@
     .brand-badge {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      padding: 6px 14px;
+      gap: 10px;
+      padding: 7px 16px;
       border-radius: 999px;
-      background: rgba(255, 255, 255, 0.12);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      backdrop-filter: blur(8px);
-      box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
     }
 
     .brand-dot {
@@ -157,34 +168,40 @@
       height: 10px;
       border-radius: 50%;
       background: linear-gradient(135deg, #38bdf8, #2563eb);
-      box-shadow: 0 0 10px #38bdf8;
+      box-shadow: 0 0 12px #38bdf8;
+      animation: pulseDot 2.4s infinite ease-in-out;
+    }
+
+    @keyframes pulseDot {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.3); opacity: 0.75; }
     }
 
     .brand-title {
       font-weight: 800;
       color: #fff;
-      letter-spacing: .15em;
+      letter-spacing: .2em;
     }
 
     .login-head .divider {
-      width: 32px;
+      width: 36px;
       height: 1px;
-      background: rgba(255,255,255,0.3);
+      background: rgba(255,255,255,0.35);
     }
 
     .head-subtitle {
-      font-size: 12px;
-      color: rgba(255,255,255,0.65);
+      font-size: 11.5px;
+      color: rgba(255,255,255,0.7);
       font-weight: 500;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.1em;
     }
 
-    /* 좌측 히어로 텍스트 */
+    /* 좌측 히어로 메인 */
     .login-hero {
       grid-column: 1 / 8;
       grid-row: 2;
       align-self: center;
-      max-width: 680px;
+      max-width: 720px;
       padding-bottom: 24px;
     }
 
@@ -192,47 +209,48 @@
       display: inline-flex;
       align-items: center;
       gap: 12px;
-      margin-bottom: 22px;
-      font-size: 13px;
+      margin-bottom: 24px;
+      font-size: 12.5px;
       font-weight: 700;
-      letter-spacing: .24em;
+      letter-spacing: .26em;
       text-transform: uppercase;
-      color: var(--accent-sky);
-      text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+      color: var(--accent-cyan);
+      text-shadow: 0 2px 10px rgba(56, 189, 248, 0.4);
     }
 
     .hero-eyebrow::before {
       content: "";
-      width: 32px;
+      width: 36px;
       height: 2px;
       border-radius: 2px;
-      background: var(--accent-sky);
-      box-shadow: 0 0 8px var(--accent-sky);
+      background: var(--accent-cyan);
+      box-shadow: 0 0 10px var(--accent-cyan);
     }
 
     .login-hero h1 {
-      font-size: clamp(38px, 4vw, 56px);
-      font-weight: 800;
-      line-height: 1.18;
-      letter-spacing: -0.025em;
+      font-size: clamp(40px, 4.2vw, 62px);
+      font-weight: 900;
+      line-height: 1.15;
+      letter-spacing: -0.03em;
       color: #fff;
       word-break: keep-all;
-      text-shadow: 0 4px 20px rgba(0,0,0,0.45);
+      text-shadow: 0 4px 24px rgba(0,0,0,0.5);
     }
 
     .login-hero h1 em {
       font-style: normal;
-      background: linear-gradient(135deg, #7dd3fc 0%, #60a5fa 100%);
+      background: linear-gradient(135deg, #7dd3fc 0%, #38bdf8 50%, #60a5fa 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
+      text-shadow: 0 0 30px rgba(56, 189, 248, 0.35);
     }
 
     .hero-desc {
-      margin-top: 24px;
-      font-size: 16px;
-      line-height: 1.75;
-      color: rgba(255, 255, 255, 0.88);
-      text-shadow: 0 2px 6px rgba(0,0,0,0.5);
+      margin-top: 26px;
+      font-size: 16.5px;
+      line-height: 1.8;
+      color: rgba(255, 255, 255, 0.9);
+      text-shadow: 0 2px 8px rgba(0,0,0,0.6);
       word-break: keep-all;
     }
 
@@ -244,45 +262,47 @@
     .feature-pills {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 28px;
+      gap: 10px;
+      margin-top: 32px;
     }
 
     .pill {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 6px 14px;
-      border-radius: 8px;
+      gap: 7px;
+      padding: 7px 15px;
+      border-radius: 9px;
       background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.16);
-      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      backdrop-filter: blur(10px);
       font-size: 13px;
-      font-weight: 500;
-      color: rgba(255, 255, 255, 0.9);
-      transition: all 0.2s;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.95);
+      transition: all 0.25s ease;
     }
 
     .pill:hover {
-      background: rgba(255, 255, 255, 0.15);
-      border-color: rgba(125, 211, 252, 0.4);
-      transform: translateY(-1px);
+      background: rgba(56, 189, 248, 0.18);
+      border-color: rgba(56, 189, 248, 0.5);
+      color: #fff;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(56, 189, 248, 0.25);
     }
 
-    /* 우측 로그인 패널 (Glassmorphism) */
+    /* 우측 글래스모피즘 로그인 카드 */
     .login-panel {
       grid-column: 8 / 13;
       grid-row: 1 / 3;
       align-self: center;
       justify-self: end;
       width: 100%;
-      max-width: 420px;
+      max-width: 430px;
       position: relative;
-      background: rgba(10, 22, 54, 0.78);
-      border: 1px solid rgba(255, 255, 255, 0.16);
-      border-radius: 20px;
-      padding: 36px 36px 32px;
-      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255,255,255,0.05) inset;
+      background: rgba(8, 18, 48, 0.82);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 22px;
+      padding: 38px 36px 32px;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255,255,255,0.06) inset;
       backdrop-filter: blur(24px) saturate(1.4);
       -webkit-backdrop-filter: blur(24px) saturate(1.4);
     }
@@ -291,7 +311,7 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 20px;
+      margin-bottom: 22px;
       font-family: var(--mono-font);
       font-size: 11.5px;
       letter-spacing: .18em;
@@ -300,43 +320,45 @@
     }
 
     .panel-cap .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 4px;
-      background: rgba(56, 189, 248, 0.15);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 9px;
+      border-radius: 5px;
+      background: rgba(56, 189, 248, 0.16);
       color: #7dd3fc;
-      border: 1px solid rgba(56, 189, 248, 0.3);
-      font-size: 10px;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      font-size: 10.5px;
       font-weight: 700;
     }
 
     .login-panel h2 {
       color: #fff;
-      font-size: 26px;
+      font-size: 28px;
       font-weight: 800;
       letter-spacing: -0.02em;
     }
 
     .panel-sub {
-      color: rgba(255, 255, 255, 0.72);
-      font-size: 13.5px;
+      color: rgba(255, 255, 255, 0.75);
+      font-size: 14px;
       line-height: 1.55;
-      margin: 8px 0 24px;
+      margin: 8px 0 26px;
     }
 
-    /* 폼 입력창 스타일 */
+    /* 폼 입력 필드 */
     .form-group {
-      margin-bottom: 18px;
+      margin-bottom: 20px;
     }
 
     .form-label {
       display: flex;
       justify-content: space-between;
-      font-size: 12px;
+      font-size: 12.5px;
       font-weight: 600;
       letter-spacing: 0.04em;
-      color: rgba(255, 255, 255, 0.85);
-      margin-bottom: 7px;
+      color: rgba(255, 255, 255, 0.88);
+      margin-bottom: 8px;
     }
 
     .input-wrapper {
@@ -347,9 +369,9 @@
 
     .input-icon {
       position: absolute;
-      left: 14px;
-      width: 18px;
-      height: 18px;
+      left: 15px;
+      width: 19px;
+      height: 19px;
       color: rgba(255, 255, 255, 0.45);
       pointer-events: none;
       transition: color 0.2s;
@@ -357,60 +379,65 @@
 
     .form-input {
       width: 100%;
-      height: 48px;
-      padding: 0 16px 0 44px;
-      border-radius: 10px;
-      background: rgba(255, 255, 255, 0.07);
-      border: 1px solid rgba(255, 255, 255, 0.18);
+      height: 50px;
+      padding: 0 16px 0 46px;
+      border-radius: 11px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.2);
       color: #fff;
       font-family: inherit;
-      font-size: 14.5px;
+      font-size: 15px;
       outline: none;
       transition: all 0.2s ease;
     }
 
     .form-input::placeholder {
-      color: rgba(255, 255, 255, 0.35);
+      color: rgba(255, 255, 255, 0.38);
     }
 
     .form-input:focus {
-      background: rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.13);
       border-color: #38bdf8;
-      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25), 0 4px 16px rgba(0,0,0,0.3);
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.28), 0 4px 18px rgba(0,0,0,0.35);
     }
 
-    .form-input:focus + .input-icon,
     .input-wrapper:focus-within .input-icon {
       color: #38bdf8;
     }
 
-    /* 에러 메시지 */
+    /* 에러 알림 박스 */
     .error-box {
       display: none;
-      background: rgba(239, 68, 68, 0.18);
-      border: 1px solid rgba(239, 68, 68, 0.4);
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid rgba(239, 68, 68, 0.45);
       color: #fca5a5;
-      padding: 10px 14px;
-      border-radius: 8px;
-      font-size: 13px;
+      padding: 11px 15px;
+      border-radius: 9px;
+      font-size: 13.5px;
       line-height: 1.4;
-      margin-bottom: 18px;
-      display: none;
+      margin-bottom: 20px;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
+      animation: shake 0.3s ease;
     }
 
-    /* 로그인 액션 버튼 */
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-4px); }
+      75% { transform: translateX(4px); }
+    }
+
+    /* 로그인 제출 버튼 */
     .btn-submit {
       width: 100%;
-      height: 50px;
-      margin-top: 6px;
+      height: 52px;
+      margin-top: 8px;
       border: none;
-      border-radius: 10px;
+      border-radius: 11px;
       background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
       color: #fff;
       font-family: inherit;
-      font-size: 15.5px;
+      font-size: 16px;
       font-weight: 700;
       letter-spacing: -0.01em;
       cursor: pointer;
@@ -418,14 +445,14 @@
       align-items: center;
       justify-content: center;
       gap: 8px;
-      box-shadow: 0 4px 20px rgba(37, 99, 235, 0.4), 0 1px 0 rgba(255,255,255,0.2) inset;
+      box-shadow: 0 4px 22px rgba(37, 99, 235, 0.45), 0 1px 0 rgba(255,255,255,0.25) inset;
       transition: all 0.2s ease;
     }
 
     .btn-submit:hover {
       background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-      box-shadow: 0 6px 26px rgba(37, 99, 235, 0.55);
-      transform: translateY(-1px);
+      box-shadow: 0 6px 28px rgba(37, 99, 235, 0.6);
+      transform: translateY(-1.5px);
     }
 
     .btn-submit:active {
@@ -440,17 +467,17 @@
     }
 
     .panel-quick {
-      margin-top: 22px;
-      font-size: 12px;
-      line-height: 1.6;
+      margin-top: 24px;
+      font-size: 12.5px;
+      line-height: 1.65;
       text-align: center;
-      color: rgba(255, 255, 255, 0.6);
-      border-top: 1px solid rgba(255, 255, 255, 0.1);
-      padding-top: 18px;
+      color: rgba(255, 255, 255, 0.65);
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+      padding-top: 20px;
     }
 
     .panel-quick b {
-      color: rgba(255, 255, 255, 0.88);
+      color: rgba(255, 255, 255, 0.95);
     }
 
     /* 하단 푸터 */
@@ -462,29 +489,29 @@
       align-items: flex-end;
       flex-wrap: wrap;
       gap: 12px 24px;
-      padding-top: 18px;
-      border-top: 1px solid rgba(255, 255, 255, 0.14);
+      padding-top: 20px;
+      border-top: 1px solid rgba(255, 255, 255, 0.15);
       font-size: 12px;
       font-weight: 500;
-      color: rgba(255, 255, 255, 0.6);
+      color: rgba(255, 255, 255, 0.65);
       text-shadow: 0 1px 2px rgba(0,0,0,0.5);
     }
 
     .login-foot-mono {
       font-family: var(--mono-font);
       font-size: 11px;
-      letter-spacing: .12em;
+      letter-spacing: .14em;
       text-transform: uppercase;
-      color: rgba(255, 255, 255, 0.5);
+      color: rgba(255, 255, 255, 0.55);
     }
 
-    /* 반응형 레이아웃 (태블릿 & 모바일) */
+    /* 반응형 레이아웃 */
     @media (max-width: 1080px) {
       .login-grid {
         grid-template-columns: 1fr;
         grid-template-rows: auto auto auto auto;
-        padding: 32px 24px;
-        row-gap: 32px;
+        padding: 36px 28px;
+        row-gap: 36px;
       }
       .login-head {
         grid-column: 1;
@@ -509,7 +536,7 @@
         grid-column: 1;
         grid-row: 3;
         justify-self: center;
-        max-width: 440px;
+        max-width: 450px;
       }
       .login-foot {
         grid-column: 1;
@@ -521,14 +548,14 @@
 
     @media (max-width: 480px) {
       .login-grid {
-        padding: 24px 16px;
+        padding: 24px 18px;
       }
       .login-panel {
-        padding: 28px 20px 24px;
-        border-radius: 16px;
+        padding: 28px 22px 24px;
+        border-radius: 18px;
       }
       .login-hero h1 {
-        font-size: 32px;
+        font-size: 33px;
       }
       .hero-desc {
         font-size: 14.5px;
@@ -539,11 +566,14 @@
 <body>
   <div class="login-wrap">
     <div class="login-stage">
-      <!-- 배경 고화질 이미지 & 켄 번스 효과 -->
+      <!-- 8K AI + 인간 융합 배경 미디어 (28초 켄번스 & 크로스페이드) -->
       <div class="login-media" aria-hidden="true">
-        <img class="login-shot is-a" alt="" decoding="async" fetchpriority="high" src="/m/assets/login/hero-1.jpg">
-        <img class="login-shot is-b" alt="" decoding="async" loading="lazy" src="/m/assets/login/hero-2.jpg">
+        <img class="login-shot is-a" alt="AI Assistant Synergy" decoding="async" fetchpriority="high" src="/m/assets/login/ai-hero-1.jpg">
+        <img class="login-shot is-b" alt="Future AI Collaboration Hub" decoding="async" loading="lazy" src="/m/assets/login/ai-hero-2.jpg">
       </div>
+
+      <!-- 실시간 신경망 인터랙티브 캔버스 (움직이는 디지털 파티클) -->
+      <canvas id="neuralCanvas"></canvas>
 
       <!-- 명도 대비 스크림 오버레이 -->
       <div class="login-scrim" aria-hidden="true"></div>
@@ -557,24 +587,24 @@
             <span class="brand-title">SANCHO</span>
           </div>
           <span class="divider"></span>
-          <span class="head-subtitle">AI Assistant & Workflow System</span>
+          <span class="head-subtitle">Autonomous AI Assistant & Enterprise Workspace</span>
         </header>
 
         <!-- 좌측 메인 히어로 섹션 -->
         <section class="login-hero">
-          <p class="hero-eyebrow">Next-Gen Autonomous Workspace</p>
-          <h1>산초(Sancho) <em>AI 업무 비서</em><br>통합 협업 플랫폼</h1>
+          <p class="hero-eyebrow">Human & AI Cognitive Synergy</p>
+          <h1>산초(Sancho) <em>AI 업무 비서</em><br>차세대 통합 플랫폼</h1>
           <p class="hero-desc">
-            <b>WBS 공정표 · 일정 · 메신저 · 회의록 · OKR · 결재 · 지식노트.</b><br>
-            이 컴퓨터의 로컬 Claude AI 두뇌와 함께 사내 모든 업무를 실시간으로 조율하고 처리합니다.
+            <b>WBS 공정표 · 일정 · 팀 메신저 · 회의록 · OKR · 결재 · 지식노트.</b><br>
+            인간의 직관과 인공지능 두뇌가 실시간으로 융합하여 사내 모든 업무를 유기적으로 조율합니다.
           </p>
           <div class="feature-pills">
-            <span class="pill">📊 WBS 공정표</span>
-            <span class="pill">📅 통합 캘린더</span>
-            <span class="pill">💬 팀 메신저</span>
-            <span class="pill">🎙 AI 회의록</span>
-            <span class="pill">🎯 목표 관리(OKR)</span>
-            <span class="pill">🕸 지식노트</span>
+            <span class="pill">🧠 Claude AI 인지 두뇌</span>
+            <span class="pill">📊 실시간 WBS 공정표</span>
+            <span class="pill">🎙 자동 요약 AI 회의록</span>
+            <span class="pill">🕸 지식 노드 네트워크</span>
+            <span class="pill">🎯 전략 목표 OKR</span>
+            <span class="pill">📝 전자결재 워크플로우</span>
           </div>
         </section>
 
@@ -585,7 +615,7 @@
             <span class="badge">SECURED</span>
           </div>
           <h2 id="loginTitle">로그인</h2>
-          <p class="panel-sub">업무 플랫폼 이용을 위해 계정 정보를 입력하세요.</p>
+          <p class="panel-sub">업무 플랫폼 이용을 위해 사내 계정 정보를 입력하세요.</p>
 
           <div id="errorMsg" class="error-box" role="alert">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
@@ -622,8 +652,8 @@
           </form>
 
           <div class="panel-quick">
-            초기 기본 관리자 계정: <b>admin</b> / <b>admin</b><br>
-            조직/권한 관리에서 사내 구성원을 등록할 수 있습니다.
+            초기 관리자 계정: <b>admin</b> / <b>admin</b><br>
+            조직/권한 관리에서 구성원 계정을 생성 및 관리할 수 있습니다.
           </div>
         </main>
 
@@ -637,6 +667,93 @@
   </div>
 
   <script>
+    // 인터랙티브 신경망 파티클 캔버스 (움직이는 디지털 AI 노드)
+    (function initNeuralCanvas() {
+      const canvas = document.getElementById('neuralCanvas');
+      const ctx = canvas.getContext('2d');
+      let width, height;
+      let particles = [];
+      let mouse = { x: -1000, y: -1000, radius: 140 };
+
+      function resize() {
+        width = canvas.width = window.innerWidth;
+        height = canvas.height = window.innerHeight;
+      }
+      window.addEventListener('resize', resize);
+      resize();
+
+      window.addEventListener('mousemove', (e) => {
+        mouse.x = e.clientX;
+        mouse.y = e.clientY;
+      });
+      window.addEventListener('mouseleave', () => {
+        mouse.x = -1000;
+        mouse.y = -1000;
+      });
+
+      const count = Math.floor(Math.min(width, height) / 18);
+      for (let i = 0; i < count; i++) {
+        particles.push({
+          x: Math.random() * width,
+          y: Math.random() * height,
+          vx: (Math.random() - 0.5) * 0.45,
+          vy: (Math.random() - 0.5) * 0.45,
+          radius: Math.random() * 1.8 + 1.2,
+          alpha: Math.random() * 0.5 + 0.3
+        });
+      }
+
+      function render() {
+        ctx.clearRect(0, 0, width, height);
+
+        for (let i = 0; i < particles.length; i++) {
+          const p = particles[i];
+          p.x += p.vx;
+          p.y += p.vy;
+
+          if (p.x < 0) p.x = width;
+          else if (p.x > width) p.x = 0;
+          if (p.y < 0) p.y = height;
+          else if (p.y > height) p.y = 0;
+
+          // 마우스 반응
+          const dx = mouse.x - p.x;
+          const dy = mouse.y - p.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < mouse.radius) {
+            const force = (1 - dist / mouse.radius) * 1.8;
+            p.x -= (dx / dist) * force;
+            p.y -= (dy / dist) * force;
+          }
+
+          // 파티클 점 그리기
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(56, 189, 248, ${p.alpha})`;
+          ctx.fill();
+
+          // 근처 파티클 연결선
+          for (let j = i + 1; j < particles.length; j++) {
+            const p2 = particles[j];
+            const d = Math.hypot(p.x - p2.x, p.y - p2.y);
+            if (d < 110) {
+              const lineAlpha = (1 - d / 110) * 0.22;
+              ctx.beginPath();
+              ctx.moveTo(p.x, p.y);
+              ctx.lineTo(p2.x, p2.y);
+              ctx.strokeStyle = `rgba(125, 211, 252, ${lineAlpha})`;
+              ctx.lineWidth = 0.8;
+              ctx.stroke();
+            }
+          }
+        }
+
+        requestAnimationFrame(render);
+      }
+      render();
+    })();
+
+    // 로그인 폼 처리
     const form = document.getElementById('loginForm');
     const submitBtn = document.getElementById('submitBtn');
     const errorBox = document.getElementById('errorMsg');
