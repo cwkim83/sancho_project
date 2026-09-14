@@ -10,93 +10,169 @@
 <script src="https://cdn.jsdelivr.net/npm/lucide@0.454.0/dist/umd/lucide.min.js" defer onload="try{lucide.createIcons()}catch(e){}"></script>
 <link rel="stylesheet" href="/m/platform.css">
 <style>
-  /* ── 산초 플랫폼 껍데기 = 세종 플랫폼 v2 의 사이드바·헤더·본문 뼈대(platform.css) + 대시보드 자리의 산초 채팅(PAIS) ── */
+  /* ── 산초 플랫폼 코어 테마 & 모던 AI 엔터프라이즈 디자인 ── */
   i[data-lucide]{font-size:0;color:transparent;display:inline-flex;align-items:center} i[data-lucide]>svg{color:inherit}
-  .nav-icon i[data-lucide]>svg{color:#7C8594} .nav-item.active .nav-icon i[data-lucide]>svg,.tool-item.active .nav-icon i[data-lucide]>svg{color:var(--primary)}
-  .hstat{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);background:var(--white);border-radius:999px;padding:4px 11px;font-size:12px;color:var(--text-light);white-space:nowrap}
-  .led{display:inline-block;width:7px;height:7px;border-radius:50%;background:#1F9D63} .led.busy{background:var(--primary);animation:blink 1s infinite} @keyframes blink{50%{opacity:.25}}
-  .spin{display:inline-block;animation:spin 2s linear infinite;color:var(--primary)} @keyframes spin{to{transform:rotate(360deg)}}
-  .running{font-size:12px;color:var(--text-light);white-space:nowrap}
-  #searchPop{left:0;right:auto;top:42px;min-width:100%;width:520px;max-height:60vh;overflow:auto;padding:4px}
-  .srow{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;cursor:pointer;font-size:13px} .srow:hover{background:var(--bg2)}
-  .srow .st{font-size:10px;font-weight:700;color:var(--primary);background:var(--primary-light);border-radius:4px;padding:1px 6px;flex:none;min-width:44px;text-align:center} .srow .ss{color:var(--text-light);font-size:11.5px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;flex:1}
+  .nav-icon i[data-lucide]>svg{color:#7C8594;transition:color .2s,transform .2s} 
+  .nav-item:hover .nav-icon i[data-lucide]>svg{color:var(--primary);transform:scale(1.08)}
+  .nav-item.active .nav-icon i[data-lucide]>svg,.tool-item.active .nav-icon i[data-lucide]>svg{color:var(--primary)}
+  
+  /* 헤더 뱃지 & 실시간 AI 브레인 상태 칩 */
+  .hstat{display:inline-flex;align-items:center;gap:7px;border:1px solid rgba(226,232,240,0.8);background:rgba(255,255,255,0.85);backdrop-filter:blur(8px);border-radius:999px;padding:4px 13px;font-size:12px;font-weight:600;color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,0.03);white-space:nowrap}
+  .led{display:inline-block;width:8px;height:8px;border-radius:50%;background:#10B981;box-shadow:0 0 8px #10B981} 
+  .led.busy{background:var(--primary);box-shadow:0 0 10px var(--primary);animation:blink 1s infinite} @keyframes blink{50%{opacity:.3}}
+  .spin{display:inline-block;animation:spin 1.8s linear infinite;color:var(--primary)} @keyframes spin{to{transform:rotate(360deg)}}
+  .running{font-size:12px;color:var(--primary);font-weight:600;white-space:nowrap;display:inline-flex;align-items:center;gap:5px;background:var(--primary-light);padding:4px 10px;border-radius:999px}
+  
+  #searchPop{left:0;right:auto;top:44px;min-width:100%;width:520px;max-height:60vh;overflow:auto;padding:6px;border-radius:14px;box-shadow:var(--shadow-md)}
+  .srow{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;cursor:pointer;font-size:13px;transition:background .15s} .srow:hover{background:var(--bg2)}
+  .srow .st{font-size:10.5px;font-weight:700;color:var(--primary);background:var(--primary-light);border-radius:5px;padding:2px 7px;flex:none;min-width:46px;text-align:center} .srow .ss{color:var(--text-light);font-size:12px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;flex:1}
   .srow .sm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:48%}
-  #notifPanel{width:380px;max-height:70vh;overflow:auto} .nrow{display:flex;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border-light);cursor:pointer;font-size:13px;align-items:flex-start} .nrow:hover{background:var(--bg2)} .nrow .ni{font-size:16px;flex:none} .nrow .nt{flex:1;min-width:0} .nrow .nw{font-size:11px;color:var(--text-lighter)} .nrow b{font-weight:600}
-  #userMenu{min-width:280px} #userMenu .fi{margin:4px 0}
-  #gearMenu{min-width:340px;max-height:78vh;overflow:auto;padding:6px}
-  .menu label,.menu button.mi,.menu select,.menu input.set{display:flex;justify-content:space-between;gap:10px;padding:7px 10px;border-radius:8px;border:0;background:transparent;font:inherit;font-size:13px;text-align:left;cursor:pointer;align-items:center;color:var(--text);width:100%}
-  .menu label:hover,.menu button.mi:hover{background:var(--bg2)} .menu .sub{font-size:11px;color:var(--text-lighter);margin:8px 10px 2px;font-weight:700;letter-spacing:.06em}
-  .menu input.set,.menu select{border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:12.5px;background:var(--white);margin:2px 0;cursor:text;display:block}
+  
+  #notifPanel{width:380px;max-height:70vh;overflow:auto;border-radius:14px} .nrow{display:flex;gap:10px;padding:11px 15px;border-bottom:1px solid var(--border-light);cursor:pointer;font-size:13px;align-items:flex-start} .nrow:hover{background:var(--bg2)} .nrow .ni{font-size:16px;flex:none} .nrow .nt{flex:1;min-width:0} .nrow .nw{font-size:11px;color:var(--text-lighter)} .nrow b{font-weight:600}
+  #userMenu{min-width:280px;border-radius:14px} #userMenu .fi{margin:4px 0}
+  #gearMenu{min-width:340px;max-height:78vh;overflow:auto;padding:8px;border-radius:14px}
+  .menu label,.menu button.mi,.menu select,.menu input.set{display:flex;justify-content:space-between;gap:10px;padding:8px 11px;border-radius:8px;border:0;background:transparent;font:inherit;font-size:13px;text-align:left;cursor:pointer;align-items:center;color:var(--text);width:100%;transition:background .12s}
+  .menu label:hover,.menu button.mi:hover{background:var(--bg2)} .menu .sub{font-size:11px;color:var(--text-lighter);margin:10px 10px 4px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+  .menu input.set,.menu select{border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12.5px;background:var(--white);margin:3px 0;cursor:text;display:block}
   .menu .hint{font-size:12px;color:var(--text-light)} .menu[hidden]{display:none}
-  /* ── 대시보드 = 산초 채팅 (Claude 앱 느낌) ── */
-  #dash{position:absolute;inset:0;display:flex} #dash[hidden]{display:none}
-  .chatside{width:250px;flex:none;border-right:1px solid var(--border);background:var(--bg2);display:flex;flex-direction:column;min-height:0}
-  .chatside .newbtn{margin:12px 12px 6px;padding:8px 12px;border:1px solid var(--border);background:var(--white);color:var(--text);border-radius:9px;text-align:left;cursor:pointer;font:inherit;font-size:13px;box-shadow:var(--shadow)} .chatside .newbtn:hover{border-color:var(--primary);color:var(--primary)}
-  .sbody{flex:1;overflow:auto;padding:0 10px 10px}
-  .sec h4{margin:12px 6px 4px;font-size:11px;color:var(--text-lighter);font-weight:700;letter-spacing:.06em}
-  .sub{font-size:11px;color:var(--text-lighter);margin:6px 8px 2px} .hint{font-size:12px;color:var(--text-light)}
-  .item{padding:6px 8px;border-radius:8px;cursor:pointer;font-size:13px;display:flex;justify-content:space-between;gap:8px;align-items:center;color:var(--text)}
-  .item>span:first-child{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-  .item:hover{background:var(--white)} .item.active{background:var(--white);box-shadow:0 0 0 1px var(--border);color:var(--primary);font-weight:600}
+
+  /* ── 대시보드 = 산초 인텔리전스 워크스페이스 ── */
+  #dash{position:absolute;inset:0;display:flex;background:var(--bg)} #dash[hidden]{display:none}
+  
+  /* 좌측 대화 사이드바 */
+  .chatside{width:260px;flex:none;border-right:1px solid var(--border);background:linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%);display:flex;flex-direction:column;min-height:0}
+  .chatside .newbtn{margin:14px 14px 8px;padding:10px 14px;border:1px solid rgba(37,99,235,0.2);background:linear-gradient(135deg,#FFFFFF 0%,#F8FAFC 100%);color:var(--primary);font-weight:700;border-radius:11px;text-align:center;cursor:pointer;font:inherit;font-size:13.5px;box-shadow:0 2px 8px rgba(37,99,235,0.08);display:flex;align-items:center;justify-content:center;gap:6px;transition:all .2s ease} 
+  .chatside .newbtn:hover{background:var(--primary);color:#fff;border-color:var(--primary);box-shadow:0 4px 14px rgba(37,99,235,0.25);transform:translateY(-1px)}
+  .sbody{flex:1;overflow:auto;padding:4px 12px 12px}
+  .sec h4{margin:14px 6px 6px;font-size:11px;color:var(--text-lighter);font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+  .sub{font-size:11px;color:var(--text-lighter);margin:8px 8px 3px;font-weight:700;text-transform:uppercase;letter-spacing:.06em} .hint{font-size:12px;color:var(--text-light)}
+  
+  .item{padding:7px 10px;border-radius:9px;cursor:pointer;font-size:13px;display:flex;justify-content:space-between;gap:8px;align-items:center;color:var(--text);margin-bottom:2px;transition:all .15s}
+  .item>span:first-child{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:500}
+  .item:hover{background:rgba(255,255,255,0.9);box-shadow:0 1px 4px rgba(0,0,0,0.04);transform:translateX(2px)} 
+  .item.active{background:#FFFFFF;box-shadow:0 2px 8px rgba(37,99,235,0.12);color:var(--primary);font-weight:700;border-left:3px solid var(--primary)}
   .item .t{font-size:11px;color:var(--text-lighter);flex:none}
-  .item .acts{display:none;gap:2px;flex:none} .item:hover .acts{display:flex} .item:hover .t{display:none}
-  .item .acts button{border:0;background:transparent;cursor:pointer;font-size:12px;color:var(--text-light);padding:0 4px}
-  details.grp>summary{cursor:pointer;font-size:11px;color:var(--text-lighter);font-weight:700;letter-spacing:.06em;margin:12px 6px 4px;list-style:none;display:flex;justify-content:space-between} details.grp>summary::after{content:'▸';font-weight:400} details.grp[open]>summary::after{content:'▾'}
-  details.f summary{cursor:pointer;font-size:12.5px;padding:4px 8px;border-radius:8px;list-style:none;overflow:hidden;white-space:nowrap;text-overflow:ellipsis} details.f summary:hover{background:var(--white)}
-  details.f .body{font-size:12px;padding:2px 8px 8px 14px;color:var(--text);opacity:.9} details.f .body.pre{white-space:pre-wrap} details.f .body p{margin:.3em 0} details.f .body pre{white-space:pre-wrap;font-size:11.5px}
-  .chatmain{flex:1;display:flex;flex-direction:column;min-width:0;position:relative;background:var(--bg)}
-  #log{flex:1;overflow:auto} #col{max-width:840px;margin:0 auto;padding:24px 24px 16px}
-  .greet h2{font-size:24px;font-weight:800;letter-spacing:-.02em;margin:6px 0 2px} .greet .gd{color:var(--text-light);font-size:13px;margin-bottom:16px}
-  .greet .gk{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px} .greet .gk .kpi{padding:12px 14px;cursor:pointer} .greet .gk .kpi:hover{border-color:var(--primary)} .greet .gk .kpi-value{font-size:22px}
-  .greet .gs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px} .greet .gs button{border:1px solid var(--border);background:var(--white);border-radius:999px;padding:5px 12px;font:inherit;font-size:12.5px;cursor:pointer;color:var(--text)} .greet .gs button:hover{border-color:var(--primary);color:var(--primary)}
-  .user{background:var(--bg2);border:1px solid var(--border-light);border-radius:14px;padding:10px 14px;margin:18px 0 14px;white-space:pre-wrap;word-break:break-word}
-  .attach{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;white-space:normal}
-  .thumb{width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:zoom-in;background:var(--white)}
-  .bot{margin:6px 0 10px;word-break:break-word;line-height:1.65}
-  .bot p{margin:.5em 0} .bot h1,.bot h2,.bot h3{font-size:1.05em;margin:1em 0 .4em} .bot ul,.bot ol{padding-left:1.4em;margin:.4em 0} .bot li{margin:.15em 0}
-  .bot code{background:var(--bg2);color:#B91C1C;padding:1px 5px;border-radius:5px;font:.9em ui-monospace,Consolas,monospace;border:1px solid var(--border-light)}
-  .bot pre{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;overflow:auto} .bot pre code{background:none;color:inherit;padding:0;border:0}
-  .bot table{border-collapse:collapse;margin:.6em 0;font-size:.95em;display:block;overflow-x:auto} .bot th,.bot td{border:1px solid var(--border);padding:6px 10px;text-align:left;vertical-align:top} .bot th{background:var(--bg2)}
-  .bot blockquote{border-left:3px solid var(--border);margin:.5em 0;padding:0 .8em;color:var(--text-light)}
-  .tool{font:12.5px ui-monospace,Consolas,monospace;color:var(--text-light);padding:1px 0 1px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .tool::before{content:'⏺ ';color:var(--primary)}
-  .think{color:var(--text-light);font-size:13px;margin:8px 0}
-  .ccard{border:1px solid var(--border);border-radius:12px;background:var(--card);padding:10px 14px;margin:10px 0;font-size:13.5px;box-shadow:var(--shadow)}
-  .ccard h5{margin:0 0 4px;font-size:13px} .ccard .f{padding:4px 0;border-top:1px dashed var(--border);font:12.5px ui-monospace,Consolas,monospace;white-space:pre-wrap}
-  .ccard.err{border-color:#F5C2C4;background:#FEF2F2}
-  .frow{display:flex;align-items:center;gap:10px;font-family:inherit} .frow .fname{flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis} .frow .ico{font-size:20px;width:24px;text-align:center}
-  .facts{display:flex;gap:4px;flex:none} .facts button,.facts .btn2{border:1px solid var(--border);background:var(--white);border-radius:6px;padding:2px 8px;font:12px system-ui;cursor:pointer;color:var(--text);text-decoration:none} .facts button:hover,.facts .btn2:hover{background:var(--bg2)}
-  .note{font-size:12px;color:var(--text-light);margin:4px 0 8px}
-  #composerWrap{flex:none;padding:8px 24px 12px}
-  #composer{max-width:840px;margin:0 auto;background:var(--white);border:1px solid var(--border);border-radius:16px;box-shadow:0 2px 12px rgba(16,24,40,.06);padding:10px 12px 8px}
-  #composer:focus-within{border-color:var(--primary);box-shadow:0 0 0 3px rgba(30,111,217,.10)} #composer.drag{border-color:var(--primary);background:var(--primary-lighter)}
-  .files{display:flex;flex-wrap:wrap;gap:6px;padding:0 4px 6px} .files:empty{display:none}
-  .fchip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:8px;padding:2px 8px;font-size:12.5px;background:var(--bg2);max-width:280px}
+  .item .acts{display:none;gap:4px;flex:none} .item:hover .acts{display:flex} .item:hover .t{display:none}
+  .item .acts button{border:0;background:transparent;cursor:pointer;font-size:12px;color:var(--text-light);padding:2px 4px;border-radius:4px}
+  .item .acts button:hover{background:var(--bg2);color:var(--text)}
+
+  details.grp>summary{cursor:pointer;font-size:11px;color:var(--text-lighter);font-weight:800;letter-spacing:.08em;margin:14px 6px 6px;list-style:none;display:flex;justify-content:space-between;text-transform:uppercase} details.grp>summary::after{content:'▸';font-weight:400} details.grp[open]>summary::after{content:'▾'}
+  details.f summary{cursor:pointer;font-size:12.5px;padding:5px 8px;border-radius:8px;list-style:none;overflow:hidden;white-space:nowrap;text-overflow:ellipsis} details.f summary:hover{background:var(--white)}
+  details.f .body{font-size:12px;padding:4px 8px 8px 14px;color:var(--text);opacity:.9} details.f .body.pre{white-space:pre-wrap} details.f .body p{margin:.3em 0} details.f .body pre{white-space:pre-wrap;font-size:11.5px}
+
+  /* 메인 챗 & 인텔리전스 워크스페이스 */
+  .chatmain{flex:1;display:flex;flex-direction:column;min-width:0;position:relative;background:radial-gradient(ellipse 80% 50% at 50% -10%, rgba(37,99,235,0.06), transparent 70%), radial-gradient(ellipse 60% 40% at 100% 100%, rgba(56,189,248,0.04), transparent 60%), #F8FAFC}
+  #log{flex:1;overflow:auto} #col{max-width:920px;margin:0 auto;padding:28px 24px 20px}
+
+  /* 상단 인사말 및 익스큐티브 AI 콕핏 대시보드 카드 */
+  .greet{background:linear-gradient(135deg, rgba(255,255,255,0.96) 0%, rgba(248,250,252,0.92) 100%);border:1px solid rgba(226,232,240,0.85);box-shadow:0 10px 36px rgba(15,23,42,0.05), 0 1px 3px rgba(0,0,0,0.02);border-radius:22px;padding:26px 28px 22px;margin-bottom:28px;backdrop-filter:blur(16px);position:relative;overflow:hidden}
+  .greet::after{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg, #1E40AF 0%, #2563EB 35%, #38BDF8 70%, #10B981 100%)}
+  .greet-badge-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .greet-sys-badge{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:800;letter-spacing:.08em;color:#1E40AF;background:rgba(37,99,235,0.08);padding:4px 11px;border-radius:999px;border:1px solid rgba(37,99,235,0.2)}
+  .pulse-spark{width:7px;height:7px;border-radius:50%;background:#10B981;box-shadow:0 0 8px #10B981;animation:pulseDot 1.6s infinite}
+  @keyframes pulseDot{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.3);opacity:.6}}
+  .greet-status-text{font-size:11.5px;font-weight:700;color:var(--text-lighter);letter-spacing:.05em}
+  .greet h2{font-size:25px;font-weight:900;letter-spacing:-.025em;margin:0 0 6px;color:#0F172A;display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+  .greet-name{color:#1E40AF}
+  .greet-company{font-size:12px;font-weight:700;color:#2563EB;background:rgba(37,99,235,0.08);border:1px solid rgba(37,99,235,0.18);padding:3px 10px;border-radius:999px;letter-spacing:0}
+  .greet .gd{color:var(--text-light);font-size:13.5px;line-height:1.6;margin-bottom:20px}
+  
+  /* KPI 메트릭 그리드 */
+  .greet .gk{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px} 
+  .greet .gk .kpi{padding:14px 16px;cursor:pointer;border-radius:15px;background:#FFFFFF;border:1px solid rgba(226,232,240,0.85);box-shadow:0 2px 8px rgba(0,0,0,0.02);transition:all .22s cubic-bezier(0.16,1,0.3,1)} 
+  .greet .gk .kpi:hover{border-color:#3B82F6;box-shadow:0 8px 24px rgba(37,99,235,0.12);transform:translateY(-3px)} 
+  .kpi-top{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+  .kpi-icon{font-size:14px}
+  .kpi-label{font-size:12px;font-weight:700;color:var(--text-light)}
+  .greet .gk .kpi-value{font-size:28px;font-weight:900;color:#0F172A;line-height:1;letter-spacing:-.02em}
+  .greet .gk .kpi-value.orange{color:#F59E0B}
+  .greet .gk .kpi-value.red{color:#EF4444}
+  .kpi-foot{font-size:11px;color:var(--text-lighter);margin-top:8px;font-weight:500}
+
+  /* 퀵 액션 명령어 버튼 */
+  .gs-title{font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--text-lighter);text-transform:uppercase;margin:0 0 10px 2px}
+  .greet .gs{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:14px}
+  @media (max-width:768px){.greet .gs{grid-template-columns:1fr}}
+  .greet .gs button{border:1px solid rgba(226,232,240,0.9);background:#FFFFFF;border-radius:12px;padding:10px 14px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,0.03);transition:all .2s ease;display:flex;align-items:center;gap:8px;text-align:left} 
+  .greet .gs button:hover{border-color:#3B82F6;color:#1E40AF;background:linear-gradient(135deg,#FFFFFF 0%,#EFF6FF 100%);box-shadow:0 4px 14px rgba(37,99,235,0.12);transform:translateY(-1px)}
+  .btn-glow{font-size:14px;flex-shrink:0}
+  
+  .cockpit-bar{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:12px;background:rgba(241,245,249,0.7);border:1px dashed rgba(203,213,225,0.8);font-size:12px;color:var(--text-light);margin-top:6px}
+  .cockpit-prompt{display:flex;align-items:center;gap:8px}
+  .blink-dot{width:6px;height:6px;border-radius:50%;background:#2563EB;animation:blink 1.2s infinite}
+
+  /* 사용자 말풍선 (하이엔드 로열 블루 그라디언트) */
+  .user{background:linear-gradient(135deg, #1E3A8A 0%, #1E40AF 45%, #2563EB 100%);color:#FFFFFF;border:none;border-radius:18px 18px 4px 18px;padding:14px 20px;margin:24px 0 16px auto;max-width:82%;box-shadow:0 6px 20px rgba(30,58,138,0.22);font-size:14.5px;line-height:1.65;white-space:pre-wrap;word-break:break-word;position:relative}
+  .attach{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;white-space:normal}
+  .thumb{width:64px;height:64px;object-fit:cover;border-radius:10px;border:1px solid rgba(255,255,255,0.3);cursor:zoom-in;background:var(--white);box-shadow:0 2px 8px rgba(0,0,0,0.1)}
+
+  /* 봇 답변 메시지 (엔터프라이즈 AI 어시스턴트 카드화) */
+  .bot{margin:18px 0 22px;word-break:break-word;line-height:1.75;font-size:14.5px;color:#1E293B;background:#FFFFFF;border:1px solid rgba(226,232,240,0.9);border-left:4px solid #2563EB;border-radius:16px;padding:20px 24px;box-shadow:0 4px 20px rgba(15,23,42,0.035);position:relative}
+  .bot::before{content:'✳ SANCHO AI';display:inline-flex;align-items:center;font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#1D4ED8;background:rgba(37,99,235,0.08);padding:3px 9px;border-radius:6px;margin-bottom:14px;border:1px solid rgba(37,99,235,0.15)}
+  .bot p{margin:.6em 0} 
+  .bot h1,.bot h2,.bot h3{font-size:1.18em;font-weight:800;margin:1.2em 0 .5em;color:#0F172A;letter-spacing:-.015em} 
+  .bot ul,.bot ol{padding-left:1.5em;margin:.5em 0} .bot li{margin:.25em 0}
+  .bot code{background:rgba(241,245,249,0.9);color:#0369A1;padding:2px 6px;border-radius:6px;font:.9em ui-monospace,Consolas,monospace;border:1px solid rgba(226,232,240,0.9);font-weight:600}
+  .bot pre{background:#0A0F1D;color:#E2E8F0;border:1px solid #1E293B;border-radius:12px;padding:16px 18px;overflow:auto;box-shadow:0 6px 24px rgba(0,0,0,0.18);margin:14px 0} .bot pre code{background:none;color:inherit;padding:0;border:0;font-weight:400}
+  .bot table{border-collapse:collapse;margin:.9em 0;font-size:.92em;display:block;overflow-x:auto;border-radius:10px;border:1px solid var(--border)} .bot th,.bot td{border:1px solid var(--border-light);padding:9px 13px;text-align:left;vertical-align:top} .bot th{background:#F1F5F9;font-weight:700;color:#0F172A}
+  .bot blockquote{border-left:4px solid #3B82F6;background:#EFF6FF;margin:.9em 0;padding:10px 16px;color:#1E3A8A;border-radius:0 10px 10px 0}
+
+  .tool{font:12px ui-monospace,Consolas,monospace;color:#0284C7;padding:4px 10px;background:rgba(2,132,199,0.07);border:1px solid rgba(2,132,199,0.18);border-radius:7px;margin:4px 0;display:inline-block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%} 
+  .tool::before{content:'⚙ ';color:#0284C7;font-weight:700}
+  .think{color:var(--text-light);font-size:13px;margin:12px 0;display:flex;align-items:center;gap:8px;font-style:italic}
+  
+  .ccard{border:1px solid var(--border);border-radius:14px;background:#FFFFFF;padding:12px 16px;margin:12px 0;font-size:13.5px;box-shadow:0 4px 16px rgba(0,0,0,0.04)}
+  .ccard h5{margin:0 0 6px;font-size:13.5px;font-weight:700;display:flex;align-items:center;gap:6px} 
+  .ccard .f{padding:6px 0;border-top:1px dashed var(--border);font:12.5px ui-monospace,Consolas,monospace;white-space:pre-wrap}
+  .ccard.err{border-color:#FCA5A5;background:#FEF2F2}
+  .frow{display:flex;align-items:center;gap:12px;font-family:inherit} .frow .fname{flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:600} .frow .ico{font-size:22px;width:26px;text-align:center}
+  .facts{display:flex;gap:6px;flex:none} .facts button,.facts .btn2{border:1px solid var(--border);background:var(--white);border-radius:7px;padding:3px 10px;font:12px system-ui;font-weight:600;cursor:pointer;color:var(--text);text-decoration:none;transition:all .15s} .facts button:hover,.facts .btn2:hover{background:var(--primary);color:#fff;border-color:var(--primary)}
+
+  /* 작문기(Composer) - 플로팅 글래스모피즘 입력창 */
+  #composerWrap{flex:none;padding:10px 28px 18px}
+  #composer{max-width:880px;margin:0 auto;background:#FFFFFF;border:1px solid rgba(226,232,240,0.9);border-radius:18px;box-shadow:0 6px 24px rgba(16,24,40,0.08);padding:12px 16px 10px;transition:all .2s ease}
+  #composer:focus-within{border-color:var(--primary);box-shadow:0 8px 32px rgba(37,99,235,0.16), 0 0 0 3px rgba(37,99,235,0.12)} 
+  #composer.drag{border-color:var(--primary);background:var(--primary-lighter)}
+  
+  .files{display:flex;flex-wrap:wrap;gap:8px;padding:0 4px 8px} .files:empty{display:none}
+  .fchip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:8px;padding:3px 10px;font-size:12.5px;background:var(--bg2);max-width:280px}
   .fchip span{overflow:hidden;white-space:nowrap;text-overflow:ellipsis} .fchip button{border:0;background:transparent;cursor:pointer;color:var(--text-light);padding:0}
   .fchip img{width:40px;height:40px;object-fit:cover;border-radius:6px;cursor:zoom-in}
-  textarea#in{width:100%;border:0;outline:0;resize:none;font:inherit;font-size:14.5px;color:var(--text);background:transparent;max-height:220px;line-height:1.5;padding:4px 4px 8px;display:block}
-  .crow{display:flex;align-items:center;justify-content:space-between;gap:8px} .left,.right{display:flex;align-items:center;gap:6px;position:relative}
-  .chip{border:1px solid var(--border);background:var(--white);border-radius:999px;padding:4px 10px;font:inherit;font-size:12.5px;color:var(--text);cursor:pointer;white-space:nowrap} .chip:hover{border-color:var(--primary)} .chip:disabled{opacity:.4;cursor:default}
-  #micBtn.on{background:var(--primary);color:#fff;border-color:var(--primary)}
-  .send{width:34px;height:34px;border-radius:50%;border:0;background:var(--primary);color:#fff;font-size:16px;cursor:pointer;display:grid;place-items:center}
-  .send:disabled{opacity:.3;cursor:default} .send.stop{background:var(--danger);opacity:1}
-  .menu{position:absolute;z-index:40;background:var(--white);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-md);padding:6px;min-width:240px;display:flex;flex-direction:column;gap:2px;font-size:13.5px}
-  .menu.up{bottom:calc(100% + 6px);right:0} .menu.upleft{bottom:calc(100% + 6px);left:0}
-  .menu button.mm{display:flex;justify-content:space-between;gap:10px;padding:7px 10px;border-radius:8px;border:0;background:transparent;font:inherit;text-align:left;cursor:pointer;align-items:center;color:var(--text)} .menu button.mm:hover{background:var(--bg2)}
-  .eff{padding:8px 10px;min-width:260px} .eff .row{display:flex;justify-content:space-between;align-items:center;gap:10px} .eff .row.hint{padding:0}
+  
+  textarea#in{width:100%;border:0;outline:0;resize:none;font:inherit;font-size:15px;color:var(--text);background:transparent;max-height:220px;line-height:1.55;padding:4px 4px 10px;display:block}
+  textarea#in::placeholder{color:#94A3B8}
+  
+  .crow{display:flex;align-items:center;justify-content:space-between;gap:10px} .left,.right{display:flex;align-items:center;gap:7px;position:relative}
+  .chip{border:1px solid rgba(226,232,240,0.85);background:var(--white);border-radius:999px;padding:5px 12px;font:inherit;font-size:12px;font-weight:600;color:var(--text);cursor:pointer;white-space:nowrap;transition:all .15s ease} 
+  .chip:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-lighter)} .chip:disabled{opacity:.4;cursor:default}
+  #micBtn.on{background:var(--danger);color:#fff;border-color:var(--danger);animation:pulseMic 1.5s infinite}
+  @keyframes pulseMic{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+  
+  .send{width:36px;height:36px;border-radius:50%;border:0;background:linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);color:#fff;font-size:16px;font-weight:700;cursor:pointer;display:grid;place-items:center;box-shadow:0 3px 10px rgba(37,99,235,0.3);transition:all .18s ease}
+  .send:hover:not(:disabled){transform:scale(1.05);box-shadow:0 4px 14px rgba(37,99,235,0.4)}
+  .send:disabled{opacity:.25;cursor:default;box-shadow:none} .send.stop{background:var(--danger);opacity:1;box-shadow:0 3px 10px rgba(239,68,68,0.35)}
+
+  .menu{position:absolute;z-index:40;background:var(--white);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow-md);padding:8px;min-width:240px;display:flex;flex-direction:column;gap:3px;font-size:13.5px}
+  .menu.up{bottom:calc(100% + 8px);right:0} .menu.upleft{bottom:calc(100% + 8px);left:0}
+  .menu button.mm{display:flex;justify-content:space-between;gap:10px;padding:8px 12px;border-radius:9px;border:0;background:transparent;font:inherit;text-align:left;cursor:pointer;align-items:center;color:var(--text);transition:background .12s} .menu button.mm:hover{background:var(--bg2)}
+  .eff{padding:10px 12px;min-width:260px} .eff .row{display:flex;justify-content:space-between;align-items:center;gap:10px} .eff .row.hint{padding:0}
   input[type=range]{width:100%;accent-color:var(--primary);margin:10px 0 4px}
-  .center{text-align:center;max-width:840px;margin:6px auto 0}
-  #lightbox{position:fixed;inset:0;background:rgba(0,0,0,.82);display:grid;place-items:center;z-index:2000;cursor:zoom-out} #lightbox[hidden]{display:none}
-  #lightbox img{max-width:92vw;max-height:92vh;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
-  #meet{position:fixed;right:20px;bottom:130px;width:380px;background:var(--white);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow-md);padding:12px;z-index:60} #meet[hidden]{display:none}
-  #meet .mhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:13.5px} #meet textarea{width:100%;height:170px;font:12.5px/1.5 inherit;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--bg2);resize:none} #meet .mbtns{display:flex;gap:6px;justify-content:flex-end;margin-top:8px}
+  .center{text-align:center;max-width:880px;margin:8px auto 0;font-size:12px;color:var(--text-lighter)}
+  
+  #lightbox{position:fixed;inset:0;background:rgba(0,0,0,.85);display:grid;place-items:center;z-index:2000;cursor:zoom-out;backdrop-filter:blur(6px)} #lightbox[hidden]{display:none}
+  #lightbox img{max-width:92vw;max-height:92vh;border-radius:12px;box-shadow:0 12px 48px rgba(0,0,0,.6)}
+  
+  #meet{position:fixed;right:24px;bottom:130px;width:390px;background:var(--white);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow-md);padding:14px;z-index:60} #meet[hidden]{display:none}
+  #meet .mhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:14px;font-weight:700} #meet textarea{width:100%;height:180px;font:12.5px/1.5 inherit;border:1px solid var(--border);border-radius:10px;padding:10px;background:var(--bg2);resize:none} #meet .mbtns{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
+
   /* 뇌 그래프(파이스 코어) — 본문 전체를 덮는 층 */
-  #hud{position:absolute;inset:0;background:var(--bg);z-index:5} #hud[hidden]{display:none}
+  #hud{position:absolute;inset:0;background:#03091F;z-index:5} #hud[hidden]{display:none}
   #neural{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
-  .hudbar{position:absolute;top:10px;left:16px;right:16px;display:flex;gap:8px;align-items:center;pointer-events:none} .hudbar *{pointer-events:auto}
-  .mono{font:11px ui-monospace,Consolas,monospace;letter-spacing:.12em;color:var(--text-light);margin-right:auto;pointer-events:none}
-  .ninfo{position:absolute;z-index:8;width:min(320px,72vw);padding:12px 14px;border-radius:12px;background:var(--white);border:1px solid var(--border);box-shadow:var(--shadow-md)} .ninfo.hidden{display:none}
-  .ninfo b{display:block;font-size:14px;margin-bottom:4px;word-break:break-all} .ninfo .ni-meta{font:10px ui-monospace,Consolas,monospace;color:var(--text-light);letter-spacing:.04em}
-  .ninfo .ni-body{margin-top:8px;font-size:12px;line-height:1.6;white-space:pre-wrap;word-break:break-word;max-height:170px;overflow:auto}
+  .hudbar{position:absolute;top:12px;left:18px;right:18px;display:flex;gap:10px;align-items:center;pointer-events:none} .hudbar *{pointer-events:auto}
+  .mono{font:12px ui-monospace,Consolas,monospace;letter-spacing:.15em;color:rgba(255,255,255,0.7);margin-right:auto;pointer-events:none;font-weight:700}
+  .ninfo{position:absolute;z-index:8;width:min(340px,75vw);padding:14px 16px;border-radius:14px;background:rgba(15,23,42,0.9);border:1px solid rgba(255,255,255,0.15);box-shadow:var(--shadow-md);backdrop-filter:blur(16px);color:#fff} .ninfo.hidden{display:none}
+  .ninfo b{display:block;font-size:15px;margin-bottom:6px;word-break:break-all;color:#38BDF8} .ninfo .ni-meta{font:11px ui-monospace,Consolas,monospace;color:rgba(255,255,255,0.6);letter-spacing:.05em}
+  .ninfo .ni-body{margin-top:10px;font-size:12.5px;line-height:1.65;white-space:pre-wrap;word-break:break-word;max-height:180px;overflow:auto}
   .frame[hidden]{display:none}
   @media (max-width:900px){.chatside{display:none} .greet .gk{grid-template-columns:repeat(2,1fr)} .hstat.model{display:none}}
 </style>
@@ -616,7 +692,7 @@ async function 배지갱신() {   // 20초마다: 플랫폼 데이터로 메뉴 
   } catch {}
   const s = lastState; const today = new Date().toLocaleDateString('sv-SE');
   if (s?.pendingRestart) 알림들.push({ ico: '🔁', text: '<b>재시작 대기</b> — 지금 하는 일이 끝나면 다시 켜져요' });
-  if (s && !s.claude?.ok) 알림들.push({ ico: '⚠️', text: '<b>Claude Code 를 찾지 못했어요</b> — README 설치 순서를 보세요', go: 'admin' });
+  if (s && !s.claude?.ok) 알림들.push({ ico: '⚠️', text: '<b>산초 AI 엔진 연결 확인 필요</b> — 엔진 설정을 확인하세요', go: 'admin' });
   for (const e of 알림항목(s).filter((x) => x.date === today).slice(0, 8)) 알림들.push({ ico: '⏰', text: `<b>${esc(e.head)}</b> ${esc(e.body.slice(0, 90))}`, when: e.date, go: 'dashboard' });
   const n = 알림들.length; $('#notifBadge').textContent = n > 99 ? '99+' : n; $('#notifBadge').hidden = !n;
   if (!$('#notifPanel').hidden) 알림그리기();
@@ -679,11 +755,49 @@ async function 인사말() {
   const g = document.getElementById('greet') || (() => { const d = document.createElement('div'); d.id = 'greet'; d.className = 'greet'; col.prepend(d); return d; })();
   const k = 요약캐시 || { 일정: '–', 결재: '–', 메일: '–', 프로젝트: '–' }, d = new Date();
   const h = d.getHours(), 때 = h < 6 ? '늦은 밤이네요' : h < 12 ? '좋은 아침입니다' : h < 18 ? '좋은 오후입니다' : '수고 많으셨습니다';
-  g.innerHTML = `<h2>안녕하세요, ${esc(me.name || '주인')}${me.title ? ' ' + esc(me.title) : ''}님 👋 <span class="b-pill blue" style="vertical-align:middle;font-size:11px">${esc(me.company || '나의 플랫폼')}</span></h2>
-    <div class="gd">${d.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })} · ${때}. 산초가 일정·메일·결재·프로젝트를 정리해 드립니다.</div>
-    <div class="gk"><div class="kpi" data-go="calendar"><div class="kpi-label">📅 오늘 일정</div><div class="kpi-value">${k.일정}</div></div><div class="kpi" data-go="approval"><div class="kpi-label">📝 결재 대기</div><div class="kpi-value ${k.결재 ? 'orange' : ''}">${k.결재}</div></div><div class="kpi" data-go="mail"><div class="kpi-label">📧 긴급 답변</div><div class="kpi-value ${k.메일 ? 'red' : ''}">${k.메일}</div></div><div class="kpi" data-go="projects"><div class="kpi-label">📊 진행 프로젝트</div><div class="kpi-value">${k.프로젝트}</div></div></div>
-    <div class="gs"><button data-fill="오늘 일정과 대기 중인 결재·긴급 메일을 한눈에 브리핑해줘.">☀️ 오늘 브리핑</button><button data-fill="메일 정리해줘. Gmail 에서 오늘 받은 메일을 읽고 업무/개인/뉴스레터/광고로 분류해 db/mail.json 에 platform 스킬 형식으로 저장해줘.">📧 메일 정리</button><button data-fill="내일 오후 3시에 주간 회의 일정을 잡아줘. 회의실 A 로.">📅 일정 잡기</button><button data-fill="WBS 만들어줘. 프로젝트 이름은 '새 프로젝트', 대단락 3개(설계·제작·검사)로 이번 달부터 3개월.">📊 WBS 짜기</button><button data-fill="기안서 써줘: ">📝 기안서</button><button data-fill="이번 주 OKR 진척을 점검해서 마일스톤을 갱신하고 요약해줘.">🎯 OKR 점검</button></div>`;
-  g.insertAdjacentHTML('beforeend', '<div class="note" id="empty">무엇을 도와드릴까요? 아래에 말씀하세요.</div>');
+  g.innerHTML = `
+    <div class="greet-badge-row">
+      <span class="greet-sys-badge"><span class="pulse-spark"></span> SANCHO INTELLIGENCE SUITE</span>
+      <span class="greet-status-text">NEURAL ENGINE ACTIVE · 100% HEALTH</span>
+    </div>
+    <div class="greet-header">
+      <h2>안녕하세요, <span class="greet-name">${esc(me.name || '주인')}</span>${me.title ? ' ' + esc(me.title) : ''}님 <span class="greet-company">${esc(me.company || '세종기술 AI 통합관제')}</span></h2>
+      <div class="gd">${d.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })} · ${때}. 산초가 일정·메일·결재·프로젝트 공정을 실시간 통합 지원합니다.</div>
+    </div>
+    <div class="gk">
+      <div class="kpi" data-go="calendar">
+        <div class="kpi-top"><span class="kpi-icon">📅</span><span class="kpi-label">오늘 일정</span></div>
+        <div class="kpi-value">${k.일정}</div>
+        <div class="kpi-foot">스마트 캘린더 동기화</div>
+      </div>
+      <div class="kpi" data-go="approval">
+        <div class="kpi-top"><span class="kpi-icon">📝</span><span class="kpi-label">결재 대기</span></div>
+        <div class="kpi-value ${k.결재 ? 'orange' : ''}">${k.결재}</div>
+        <div class="kpi-foot">${k.결재 ? '신속 검토 필요' : '대기 문서 없음'}</div>
+      </div>
+      <div class="kpi" data-go="mail">
+        <div class="kpi-top"><span class="kpi-icon">📧</span><span class="kpi-label">긴급 메일</span></div>
+        <div class="kpi-value ${k.메일 ? 'red' : ''}">${k.메일}</div>
+        <div class="kpi-foot">${k.메일 ? '즉시 회신 요망' : '긴급 처리 완료'}</div>
+      </div>
+      <div class="kpi" data-go="projects">
+        <div class="kpi-top"><span class="kpi-icon">📊</span><span class="kpi-label">가동 프로젝트</span></div>
+        <div class="kpi-value">${k.프로젝트}</div>
+        <div class="kpi-foot">WBS 실시간 공정 관리</div>
+      </div>
+    </div>
+    <div class="gs-title">AI QUICK COMMANDS</div>
+    <div class="gs">
+      <button data-fill="오늘 일정과 대기 중인 결재·긴급 메일을 한눈에 브리핑해줘."><span class="btn-glow">⚡</span> 오늘 업무 총괄 브리핑</button>
+      <button data-fill="메일 정리해줘. Gmail 에서 오늘 받은 메일을 읽고 업무/개인/뉴스레터/광고로 분류해 db/mail.json 에 platform 스킬 형식으로 저장해줘."><span class="btn-glow">📧</span> 스마트 메일 분석 & 분류</button>
+      <button data-fill="WBS 만들어줘. 프로젝트 이름은 '새 프로젝트', 대단락 3개(설계·제작·검사)로 이번 달부터 3개월."><span class="btn-glow">📊</span> WBS 공정표 설계</button>
+      <button data-fill="내일 오후 3시에 주간 회의 일정을 잡아줘. 회의실 A 로."><span class="btn-glow">📅</span> 회의실 예약 & 일정 등록</button>
+      <button data-fill="기안서 써줘: "><span class="btn-glow">📝</span> 기안서 자동 작성</button>
+      <button data-fill="이번 주 OKR 진척을 점검해서 마일스톤을 갱신하고 요약해줘."><span class="btn-glow">🎯</span> OKR 전략 진척 점검</button>
+    </div>
+    <div class="cockpit-bar">
+      <div class="cockpit-prompt"><span class="blink-dot"></span> 무엇을 지시하시겠습니까? 자연어로 명령을 입력하세요.</div>
+    </div>`;
 }
 
 const empty = (t) => `<div class="hint" style="padding:4px 8px">${t}</div>`;
@@ -704,7 +818,7 @@ async function refresh() {
   for (const inp of document.querySelectorAll('input.set')) if (document.activeElement !== inp) inp.value = s.settings[inp.dataset.key] || '';
   const perms = [s.settings.allowShell && '명령', s.settings.allowHome && '홈 폴더', s.settings.allowApps && '앱', s.settings.allowSelfEdit && '자기 수정'].filter(Boolean);
   $('#permBtn').textContent = (perms.length ? '권한: ' + perms.join(' · ') : '권한: 기본') + ' ▾';
-  $('#status').innerHTML = `<span class="led" style="background:${s.claude.ok ? '#1F9D63' : '#c33'}"></span> ${s.claude.ok ? 'Claude Code ' + esc(s.claude.version.replace(' (Claude Code)', '')) : 'Claude Code 없음 — README 참고'} <span style="margin-left:auto">Sancho</span>`;
+  $('#status').innerHTML = `<span class="led" style="background:${s.claude.ok ? '#10B981' : '#EF4444'}"></span> ${s.claude.ok ? 'Sancho Quantum AI' : 'AI 엔진 대기'} <span style="margin-left:auto;font-weight:700;color:var(--primary)">v2.5</span>`;
   const run = $('#running'); run.hidden = !s.busy && !s.pendingRestart;
   run.innerHTML = (s.busy ? `<span class="spin">✳</span> 실행 중 · ${esc(s.busy)}` : '') + (s.pendingRestart ? ' · 일이 끝나면 재시작' : '');
   if (!busy) brain(!!s.busy);

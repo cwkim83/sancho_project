@@ -1,3 +1,7 @@
 data/
 .claude/
 node_modules/
+*.log
+log.txt
+log_err.txt
+run_bg.bat
