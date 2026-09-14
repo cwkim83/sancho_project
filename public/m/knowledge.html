@@ -196,6 +196,7 @@ function ensureWiki() {                          // 그래프를 만들 때 한 
   return wikiJob;
 }
 const wikiLinks = (f) => [...String(S.text[f] || '').matchAll(/\[\[([^\]|#]+)/g)].map((m) => m[1].trim() + '.md');
+const firstLine = (txt) => String(txt || '').split('\n').map((l) => l.replace(/^#+\s*/, '').trim()).filter(Boolean)[0] || '';
 
 // ═══════════════ 그래프 ═══════════════
 function syncProjOptions() {
@@ -321,7 +322,7 @@ function detail(t, rec) {                        // 종류별 필드 요약
     + row('맡은 프로젝트', S.projects.filter((p) => p.pm === rec.id).map(projLabel).join(', '));
   if (t === 'dept') return row('부서장', uName(rec.lead)) + row('인원', S.users.filter((u) => u.dept === rec.name || u.dept === rec.id).length + '명') + row('메모', cut(rec.memo, 120));
   if (t === 'wbs') return row('항목', rec.items != null ? rec.items + '개' : '') + row('진척률', rec.pct != null ? Math.round(rec.pct) + '%' : '') + row('SPI', rec.spi != null ? Number(rec.spi).toFixed(2) : '') + row('지연 항목', rec.late != null ? rec.late + '건' : '');
-  if (t === 'wiki') { const txt = S.text[rec.file] || ''; const first = txt.split('\n').map((l) => l.replace(/^#+\s*/, '').trim()).filter(Boolean)[0] || ''; return row('파일', rec.file) + row('한 줄', cut(first, 90)) + row('길이', txt ? txt.length + '자' : '아직 읽지 않음') + row('링크', wikiLinks(rec.file).length + '개'); }
+  if (t === 'wiki') { const txt = S.text[rec.file] || ''; return row('파일', rec.file) + row('한 줄', cut(firstLine(txt), 90)) + row('길이', txt ? txt.length + '자' : '아직 읽지 않음') + row('링크', wikiLinks(rec.file).length + '개'); }
   return row('이름', rec.name || '');
 }
 
@@ -380,7 +381,8 @@ function renderNoteList() {
   const q = V.q.trim().toLowerCase();
   const list = S.wiki.filter((f) => !q || noteName(f).toLowerCase().includes(q) || String(S.text[f] || '').toLowerCase().includes(q));
   $('ntItems').innerHTML = list.length ? list.map((f) => {
-    const txt = S.text[f] || '', first = txt.split('\n').map((l) => l.replace(/^#+\s*/, '').trim()).filter(Boolean)[0] || '';
+    const key = (s) => String(s).replace(/[\s\-_]/g, '').toLowerCase();
+    let first = firstLine(S.text[f]); if (key(first) === key(noteName(f))) first = '';   // 제목을 두 번 보여주지 않는다
     return `<div class="nt-item${V.note === f ? ' on' : ''}" data-a="openNote" data-v="${esc(noteName(f))}">${esc(noteName(f))}${first ? `<div class="p">${esc(cut(first, 40))}</div>` : ''}</div>`;
   }).join('') : `<div style="padding:14px;font-size:12px;color:var(--text-lighter)">${S.wiki.length ? '검색 결과가 없습니다' : '아직 노트가 없습니다'}</div>`;
 }
@@ -473,11 +475,9 @@ document.addEventListener('keydown', (e) => {
 // ═══════════════ 시작 ═══════════════
 async function boot() {
   const docs = (s) => s.docs.map((d) => ({ id: d.id, ...d.data() }));
-  try {                                          // 산초 고유 데이터 — 위키 목록 · 공정표 목록
-    const st = await SANCHO.api('/api/state'); S.wiki = arr(st.wiki);
-    S.wbs = arr(st.wbs);
-  } catch (e) { console.warn('[지식노트] /api/state 실패:', e.message); }
-  if (!S.wbs.length) { try { S.wbs = arr(await SANCHO.api('/api/wbs')); } catch {} }
+  let st = null;                                 // 산초 고유 데이터 — 위키 목록 · 공정표 목록
+  try { st = await SANCHO.api('/api/state'); S.wiki = arr(st.wiki); } catch (e) { console.warn('[지식노트] /api/state 실패:', e.message); }
+  try { S.wbs = arr(await SANCHO.api('/api/wbs')); } catch { S.wbs = arr(st && st.wbs); }   // /api/wbs 쪽이 항목 수까지 준다
   if (!V.note && S.wiki.length) V.note = S.wiki[0];
   S.ready = true;
   ['projects', 'meetings', 'approvals', 'tasks', 'okrs', 'users', 'depts'].forEach((c) => {

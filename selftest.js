@@ -58,11 +58,11 @@ async function 시험() {
 
     // 1) 채팅: init → tool → text → done 이 SSE 로 오고, 대화 id 와 기록이 남는다
     const ev = await 채팅(BASE, '안녕');
-    assert.deepEqual(ev.map((e) => e.t), ['init', 'tool', 'delta', 'delta', 'delta', 'done'], 'SSE 이벤트 순서(글자 스트림, 통문장 중복 없음)');
+    assert.deepEqual(ev.map((e) => e.t).filter(t => t !== 'files'), ['init', 'tool', 'delta', 'delta', 'delta', 'done'], 'SSE 이벤트 순서(글자 스트림, 통문장 중복 없음)');
     assert.equal(ev.filter((e) => e.t === 'delta').map((e) => e.text).join(''), '가짜 답: 안녕', '글자 스트림을 이으면 답 전체');
     assert.ok(ev.at(-1).ok, '완료');
-    assert.equal(JSON.parse(readFileSync(join(data, 'state.json'), 'utf8')).session, 'fake-session-1', '대화 id 저장');
-    const hist = readFileSync(join(data, 'history.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    assert.equal(JSON.parse(readFileSync(join(data, 'users', 'owner', 'state.json'), 'utf8')).session, 'fake-session-1', '대화 id 저장');
+    const hist = readFileSync(join(data, 'users', 'owner', 'history.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
     assert.equal(hist.length, 2, '기록 2줄(질문·답)'); assert.equal(hist[1].text, '가짜 답: 안녕', '기록된 답 = 글자 스트림 합');
 
     // 1b) 첨부: 올리면 uploads/ 에 저장되고, 채팅에 붙이면 지시문 끝에 [첨부 파일] 목록이 붙는다
@@ -82,11 +82,11 @@ async function 시험() {
     assert.equal((await fetch(`${BASE}/api/open`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: '../server.js' }) })).status, 404, '밖의 파일 열기도 막는다');
 
     // 1d) 대화 목록: 고정·해제·삭제
-    const sid0 = JSON.parse(readFileSync(join(data, 'state.json'), 'utf8')).session;
+    const sid0 = JSON.parse(readFileSync(join(data, 'users', 'owner', 'state.json'), 'utf8')).session;
     assert.equal((await fetch(`${BASE}/api/session/pin`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: sid0, pinned: true }) })).status, 200, '고정');
-    assert.equal(JSON.parse(readFileSync(join(data, 'state.json'), 'utf8')).sessions[0].pinned, true, '고정 표시 저장');
+    assert.equal(JSON.parse(readFileSync(join(data, 'users', 'owner', 'state.json'), 'utf8')).sessions[0].pinned, true, '고정 표시 저장');
     await fetch(`${BASE}/api/session/remove`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: sid0 }) });
-    const st0 = JSON.parse(readFileSync(join(data, 'state.json'), 'utf8'));
+    const st0 = JSON.parse(readFileSync(join(data, 'users', 'owner', 'state.json'), 'utf8'));
     assert.ok(st0.sessions.length === 0 && st0.session === null, '삭제하면 목록에서 빠지고 현재 대화도 비운다');
 
     // 1c) 위키·스킬 목록과 파일 읽기(그 두 폴더만)
@@ -133,7 +133,7 @@ async function 시험() {
     assert.equal((await (await db('/_batch', { method: 'POST', headers: J, body: JSON.stringify({ ops: [{ op: 'set', col: 'projects', id: 'p1', data: { name: '탱크' } }, { op: 'delete', col: 'events', id: 'e1' }] }) })).json()).n, 2, 'db 일괄 쓰기');
     assert.equal((await (await db('/events')).json()).length, 1, 'db 삭제 반영');
     assert.ok((await (await fetch(`${BASE}/api/search?q=${encodeURIComponent('탱크')}`)).json()).some((r) => r.type === 'projects'), '검색이 플랫폼 데이터를 찾는다');
-    assert.equal((await (await fetch(`${BASE}/api/me`)).json()).uid, 'owner', '/api/me');
+    assert.equal((await (await fetch(`${BASE}/api/auth/me`)).json()).uid, 'owner', '/api/auth/me');
     // 실시간 알림(SSE): 구독한 뒤 쓰면 그 컬렉션 이름이 흘러온다 — 화면(onSnapshot)이 이걸로 다시 그린다
     const ac = new AbortController();
     const sse = await fetch(`${BASE}/api/db/_events`, { signal: ac.signal });
@@ -152,12 +152,12 @@ async function 시험() {
     assert.ok(Array.isArray(st2.modules) && Array.isArray(st2.tools), '/api/state 가 만들어진 화면 목록을 준다');
 
     // 1e) 접속 토큰: 설정에 있으면 API 는 토큰 없이 401, 토큰 있으면 200 (화면과 /health 는 그대로)
-    writeFileSync(join(data, 'settings.json'), JSON.stringify({ token: 't1' }));
+    writeFileSync(join(data, 'users', 'owner', 'settings.json'), JSON.stringify({ token: 't1' }));
     assert.equal((await fetch(`${BASE}/api/state`)).status, 401, '토큰 없으면 401');
     assert.equal((await fetch(`${BASE}/api/state`, { headers: { 'x-token': 't1' } })).status, 200, '토큰 있으면 200');
     assert.equal((await fetch(`${BASE}/api/state?token=t1`)).status, 200, '쿼리 토큰도 된다');
     assert.equal((await fetch(`${BASE}/health`)).status, 200, '/health 는 열려 있다');
-    writeFileSync(join(data, 'settings.json'), '{}');
+    writeFileSync(join(data, 'users', 'owner', 'settings.json'), '{}');
 
     // 2) 예약: 첫 tick 에 돌아 journal 에 쌓이고 오늘 실행으로 기록된다
     const 일지 = join(data, 'journal', `${today()}.md`);

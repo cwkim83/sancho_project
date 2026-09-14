@@ -517,62 +517,28 @@ const NAV = [
   { id: 'approval', icon: '📝', li: 'file-check-2', label: '결재' },
   { id: 'roadmap', icon: '🗺', li: 'route', label: '로드맵·진척' },
   { id: 'knowledge', icon: '🕸', li: 'waypoints', label: '지식노트', sub: '뇌' },
+  { id: 'help', icon: '❔', li: 'circle-help', label: '도움말' },
 ];
-const TOOLS = {   // 부서 도구함 — 세종 플랫폼의 도구 목록. 파일(/m/tools/<id>.html)이 있으면 live, 없으면 Soon
-  deptsch: { name: '부서 스케줄', icon: '📅', li: 'calendar-range', ver: 'v1.0', view: 'projects', desc: '부서별 프로젝트 일정·진척(WBS)' },
-  itp: { name: 'ITP Builder', icon: '📋', li: 'clipboard-list', ver: 'v1.4', desc: 'ASME·TEMA ITP 자동 생성' },
-  itpview: { name: 'ITP 조회', icon: '📚', li: 'library', ver: 'v1.0', parent: 'itp', desc: '생성된 ITP 를 프로젝트·아이템별로 조회' },
-  qa: { name: 'QA Doc Generator', icon: '📄', li: 'file-text', ver: 'v1.4', desc: '8가지 QA/QC 문서 자동 생성' },
-  qaview: { name: 'QA Doc 조회', icon: '📚', li: 'book-open', ver: 'v1.0', parent: 'qa', desc: '생성된 QA/QC 문서 조회' },
-  ncr: { name: 'NCR 관리', icon: '⚠️', li: 'triangle-alert', ver: 'v1.0', desc: '부적합 보고서 발행·추적·종결' },
-  car: { name: 'CAR 관리', icon: '🔧', li: 'wrench', ver: 'v1.0', desc: '시정조치 요청·회신·완료' },
-  qadash: { name: '품질종합분석표', icon: '📊', li: 'chart-column', ver: 'v1.0', desc: '프로젝트·연도·분기별 부적합/CAR 종합분석' },
-  mobile: { name: 'Mobile Inspection', icon: '📱', li: 'smartphone', ver: 'v1.0', desc: '현장 검사 모바일 앱' },
-  mtools: { name: '측정기구 반입출', icon: '🔬', li: 'microscope', ver: 'v1.0', desc: 'QR 스캔 반출·반입 · 등록/검교정' },
-  asset: { name: '자산 관리 대장', icon: '🖥️', li: 'monitor', ver: 'v1.0', desc: 'PC·노트북·라이선스 통합 대장' },
-  agitator: { name: '교반기 선정·설계', icon: '🌀', li: 'fan', ver: 'v1.0', desc: '점도·비중·탱크 제원 → 임펠러·동력·모터·축 산출' },
-  pvcalc: { name: '압력용기 계산 도구', icon: '⚙️', li: 'cylinder', ver: 'v1.1', desc: 'ASME VIII-1 셸·경판·외압·노즐보강·플랜지·새들' },
-  purchase: { name: '구매부 업무일지', icon: '🛒', li: 'shopping-cart', ver: 'v1.0', desc: '프로젝트별 업무 현황 + 발주(PO) 목록' },
-};
 const DEPTS기본 = [   // 첫 실행 때 db/depts.json 에 심는다(조직/권한 화면에서 고칠 수 있다)
-  { id: 'sales', name: '영업부', icon: '💼', li: 'briefcase', tools: ['deptsch'] }, { id: 'design', name: '기술부', icon: '📐', li: 'pencil-ruler', tools: ['deptsch', 'agitator', 'pvcalc'] },
-  { id: 'purchase', name: '구매부', icon: '🛒', li: 'shopping-cart', tools: ['deptsch', 'purchase'] }, { id: 'production', name: '생산부', icon: '🏭', li: 'factory', tools: ['deptsch'] },
-  { id: 'quality', name: '품질관리부', icon: '📦', li: 'package-check', tools: ['deptsch', 'itp', 'itpview', 'qa', 'qaview', 'ncr', 'car', 'qadash', 'mobile', 'mtools'] },
-  { id: 'construction', name: '현장시공', icon: '🏗️', li: 'hard-hat', tools: ['deptsch'] }, { id: 'safety', name: '안전관리부', icon: '🦺', li: 'shield-alert', tools: ['deptsch'] },
-  { id: 'general', name: '총무부', icon: '👔', li: 'building-2', tools: ['deptsch', 'asset'] }, { id: 'finance', name: '재무부', icon: '💲', li: 'circle-dollar-sign', tools: ['deptsch'] },
-  { id: 'nuclear', name: '원자력사업부', icon: '☢️', li: 'radiation', tools: ['deptsch'] }, { id: 'overseas', name: '해외사업부', icon: '🌏', li: 'globe', tools: ['deptsch'] },
+  { id: 'sales', name: '영업부', icon: '💼', li: 'briefcase' }, { id: 'design', name: '기술개발부', icon: '📐', li: 'pencil-ruler' },
+  { id: 'purchase', name: '구매부', icon: '🛒', li: 'shopping-cart' }, { id: 'production', name: '생산부', icon: '🏭', li: 'factory' },
+  { id: 'quality', name: '품질관리부', icon: '📦', li: 'package-check' }, { id: 'general', name: '경영지원부', icon: '👔', li: 'building-2' },
+  { id: 'safety', name: '안전관리부', icon: '🦺', li: 'shield-alert' }, { id: 'finance', name: '재무회계부', icon: '💲', li: 'circle-dollar-sign' },
 ];
-let me = { name: '주인', title: '', dept: '', company: '' }, depts = [], 있는모듈 = [], 있는도구 = [], 배지 = {}, 현재뷰 = 'dashboard', 현재도구 = null, lastState = null;
-const frames = {};   // view/tool 별 iframe — 한 번 만들면 숨겨 두고 재사용(메신저 스크롤·구독이 유지된다)
-const expanded = new Set(JSON.parse(localStorage.sancho_depts_open || '["quality"]'));
+let me = { name: '주인', title: '', dept: '', company: '' }, depts = [], 있는모듈 = [], 배지 = {}, 현재뷰 = 'dashboard', lastState = null;
+const frames = {};   // view 별 iframe — 한 번 만들면 숨겨 두고 재사용(메신저 스크롤·구독이 유지된다)
 
 function renderNav() {
   const h = ['<div class="sb-section-title">MENU</div>'];
   for (const n of NAV) {
-    const on = 현재뷰 === n.id && !현재도구, b = 배지[n.id], 준비중 = n.id !== 'dashboard' && 있는모듈.length && !있는모듈.includes(n.id);
+    const on = 현재뷰 === n.id, b = 배지[n.id], 준비중 = n.id !== 'dashboard' && 있는모듈.length && !있는모듈.includes(n.id);
     h.push(`<div class="nav-item${on ? ' active' : ''}${준비중 ? ' nav-wip-item' : ''}" data-nav="${n.id}"><span class="nav-icon">${LI(n.li, n.icon)}</span><span class="nav-label">${n.label}${n.sub && !준비중 ? `<span class="nav-sub">${n.sub}</span>` : ''}${준비중 ? '<span class="nav-wip">준비중</span>' : ''}${b ? `<span class="nav-badge">${b > 99 ? '99+' : b}</span>` : ''}</span></div>`);
   }
-  h.push('<div class="dept-group"><div class="sb-section-title">부서 도구함</div>');
-  for (const d of depts) {
-    const open = expanded.has(d.id), tools = (d.tools || []).filter((t) => TOOLS[t]);
-    h.push(`<div class="dept-head" data-dept="${esc(d.id)}"><span class="dept-caret${open ? ' open' : ''}">▶</span><span class="nav-icon">${LI(d.li, d.icon)}</span><span>${esc(d.name)}</span></div>`);
-    if (open) {
-      h.push('<div class="dept-tools">');
-      for (const tid of tools) { const t = TOOLS[tid], live = !!t.view || 있는도구.includes(tid), sub = !!t.parent, on = 현재도구 === tid && 현재도구부서 === d.name;
-        h.push(`<div class="tool-item${on ? ' active' : ''}${live ? '' : ' pending'}" data-tool="${tid}" data-deptname="${esc(d.name)}" title="${esc(t.desc)}" style="${sub ? 'padding-left:48px;font-size:11.5px' : ''}">${sub ? '<span style="color:var(--text-lighter);font-size:10px;margin-right:-2px">└</span>' : ''}<span class="nav-icon">${LI(t.li, t.icon)}</span><span>${t.name}</span><span class="tool-pill ${live ? 'live' : 'soon'}">${live ? t.ver : 'Soon'}</span></div>`); }
-      if (!tools.length) h.push('<div style="padding:6px 16px 6px 36px;font-size:11px;color:var(--text-lighter);font-style:italic">도구 없음</div>');
-      h.push('</div>');
-    }
-  }
-  h.push('</div>');
   $('#sbScroll').innerHTML = h.join(''); icons();
 }
-let 현재도구부서 = '';
 $('#sbScroll').addEventListener('click', (e) => {
-  const nav = e.target.closest('[data-nav]'), dh = e.target.closest('[data-dept]'), tl = e.target.closest('[data-tool]');
+  const nav = e.target.closest('[data-nav]');
   if (nav) return switchMod(nav.dataset.nav);
-  if (dh) { const id = dh.dataset.dept; expanded.has(id) ? expanded.delete(id) : expanded.add(id); localStorage.sancho_depts_open = JSON.stringify([...expanded]); return renderNav(); }
-  if (tl) return openTool(tl.dataset.tool, tl.dataset.deptname);
 });
 $('#sbTog').onclick = () => { const c = $('#sb').classList.toggle('collapsed'); $('#sbTog').textContent = c ? '▶' : '◀'; localStorage.sancho_sb = c ? '1' : '0'; };
 if (localStorage.sancho_sb === '1') { $('#sb').classList.add('collapsed'); $('#sbTog').textContent = '▶'; }
@@ -589,14 +555,14 @@ function showOnly(key) {   // 대시보드(채팅) · 준비 중 안내 · ifram
 }
 function 준비중화면(n) {   // 아직 안 만든 화면 — 빈 404 대신 안내와 "산초에게 시키기"
   $('#wip').innerHTML = `<div class="content-pad"><div class="empty" style="max-width:680px;margin:40px auto"><div style="font-size:44px;margin-bottom:10px">${n.icon}</div><h3>${esc(n.label)} 화면을 준비하고 있습니다</h3>
-    <p style="margin:8px 0 16px">세종 플랫폼의 ${esc(n.label)} 기능을 산초로 옮기는 중이에요. 지금도 산초에게 말로 시키면 데이터는 만들어 둘 수 있습니다.</p>
+    <p style="margin:8px 0 16px">${esc(n.label)} 기능을 준비하는 중이에요. 산초에게 말로 시키면 데이터는 미리 만들어 둘 수 있습니다.</p>
     <button class="btn btn-ai" data-fill="${esc(n.label)} 관련해서 도와줘: ">✳ 산초에게 시키기</button></div></div>`;
 }
 $('#wip').addEventListener('click', (e) => { const f = e.target.closest('[data-fill]'); if (f) 지시넣기(f.dataset.fill); });
 function setTitle(html) { $('#hTitle').innerHTML = html; icons(); }
 function switchMod(id, param) {
   const n = NAV.find((x) => x.id === id); if (!n) return;
-  현재뷰 = id; 현재도구 = null; $('#sb').classList.remove('mobile-open'); closeMenus();
+  현재뷰 = id; $('#sb').classList.remove('mobile-open'); closeMenus();
   setTitle(`<span class="nav-icon">${LI(n.li, n.icon)}</span> ${n.label}`);
   if (id === 'dashboard') showOnly('dashboard');
   else if (있는모듈.length && !있는모듈.includes(id)) { 준비중화면(n); showOnly('wip'); }
@@ -604,20 +570,12 @@ function switchMod(id, param) {
   if (location.hash !== '#' + id) history.replaceState(null, '', '#' + id + (param ? '/' + encodeURIComponent(param) : ''));
   renderNav();
 }
-function openTool(tid, deptName) {
-  const t = TOOLS[tid]; if (!t) return;
-  if (t.view) return switchMod(t.view, deptName ? 'dept=' + encodeURIComponent(deptName) : '');
-  if (!있는도구.includes(tid)) return toast(`${t.name} 은 아직 준비 중이에요 — 세종 플랫폼 도구를 옮기는 중입니다`);
-  현재도구 = tid; 현재도구부서 = deptName || ''; 현재뷰 = ''; closeMenus();
-  setTitle(`<span class="crumb">부서 도구함 / ${esc(deptName || '')}</span><span class="crumb-sep">›</span><span class="nav-icon">${LI(t.li, t.icon)}</span> ${t.name} <span class="ver">${t.ver}</span>`);
-  frameFor('tool:' + tid, `/m/tools/${tid}.html`); showOnly('tool:' + tid); history.replaceState(null, '', '#tool/' + tid); renderNav();
-}
 
 // 모듈(iframe) → 껍데기: 산초에게 시키기 · 메뉴 이동 · 제목 · 토스트 (sdb.js 의 window.SANCHO)
 window.addEventListener('message', (e) => {
   const m = e.data; if (!m || !m.sancho) return;
   if (m.act === 'ask') { 지시넣기(String(m.text || '')); if (m.send) send(); }
-  else if (m.act === 'open') { if (String(m.view).startsWith('tool:')) openTool(String(m.view).slice(5)); else switchMod(m.view, m.param); }
+  else if (m.act === 'open') { switchMod(m.view, m.param); }
   else if (m.act === 'title') setTitle(esc(m.text));
   else if (m.act === 'toast') toast(String(m.text || ''), m.kind || '');
 });
@@ -698,13 +656,13 @@ async function 씨앗() {   // 첫 실행: users/owner 와 depts 를 심는다(�
   try {
     const [users, ds] = await Promise.all([dbList('users'), dbList('depts')]);
     if (!users.some((u) => u.id === 'owner')) await dbPut('users', 'owner', { name: me.name || '주인', title: me.title || '', dept: me.dept || '', email: me.email || '', role: 'super', active: true, color: '#1E6FD9' });
-    if (!ds.length) { await fetch('/api/db/_batch', { method: 'POST', headers: hdr(), body: JSON.stringify({ ops: DEPTS기본.map((d, i) => ({ op: 'set', col: 'depts', id: d.id, data: { name: d.name, icon: d.icon, li: d.li, order: i + 1, tools: d.tools } })) }) }); }
+    if (!ds.length) { await fetch('/api/db/_batch', { method: 'POST', headers: hdr(), body: JSON.stringify({ ops: DEPTS기본.map((d, i) => ({ op: 'set', col: 'depts', id: d.id, data: { name: d.name, icon: d.icon, li: d.li, order: i + 1 } })) }) }); }
   } catch {}
   await 부서읽기();
 }
 async function 부서읽기() {
   const ds = await dbList('depts');
-  depts = ds.map((d) => ({ id: d.id, name: d.data?.name || d.id, icon: d.data?.icon || '🏢', li: d.data?.li || 'building-2', order: Number(d.data?.order) || 99, tools: Array.isArray(d.data?.tools) ? d.data.tools : ['deptsch'] })).sort((a, b) => a.order - b.order);
+  depts = ds.map((d) => ({ id: d.id, name: d.data?.name || d.id, icon: d.data?.icon || '🏢', li: d.data?.li || 'building-2', order: Number(d.data?.order) || 99 })).sort((a, b) => a.order - b.order);
   renderNav();
 }
 // 저장소가 바뀌면(모듈·산초가 db 파일을 고치면) 부서·배지를 다시 읽는다
@@ -735,8 +693,8 @@ async function refresh() {
   try { s = await api('/api/state'); if (s.error) throw new Error(s.error); } catch { $('#status').innerHTML = '<span class="led" style="background:#c33"></span> 서버 응답 없음 — 재시작 중이면 곧 돌아와요'; return; }
   lastState = s;
   if (s.settings?.owner) { me = { ...me, ...s.settings.owner }; ownerUI(); }
-  if (JSON.stringify([s.modules, s.tools]) !== JSON.stringify([있는모듈, 있는도구])) {   // 새 화면이 생기면(자기 수정·업데이트) 메뉴가 바로 켜진다
-    있는모듈 = s.modules || []; 있는도구 = s.tools || []; renderNav();
+  if (JSON.stringify(s.modules) !== JSON.stringify(있는모듈)) {   // 새 화면이 생기면(자기 수정·업데이트) 메뉴가 바로 켜진다
+    있는모듈 = s.modules || []; renderNav();
     if (현재뷰 && 현재뷰 !== 'dashboard' && 있는모듈.includes(현재뷰) && !frames[현재뷰]) switchMod(현재뷰);
   }
   const model = 모델명[s.settings.model] || s.settings.model, ei = Math.max(0, 노력값.indexOf(s.settings.effort));
