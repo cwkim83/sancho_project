@@ -647,6 +647,12 @@
           </div>
 
           <form id="loginForm" autocomplete="on">
+            <div class="form-group" id="nameGroup" style="display:none">
+              <label class="form-label" for="uname">이름</label>
+              <div class="input-wrapper">
+                <input type="text" id="uname" class="form-input" placeholder="예: 김철우" autocomplete="name">
+              </div>
+            </div>
             <div class="form-group">
               <label class="form-label" for="loginId">아이디 (ID)</label>
               <div class="input-wrapper">
@@ -676,8 +682,7 @@
           </form>
 
           <div class="panel-quick">
-            초기 관리자 계정: <b>admin</b> / <b>admin</b><br>
-            조직/권한 관리에서 구성원 계정을 생성 및 관리할 수 있습니다.
+            <span id="quickText">조직/권한 화면에서 구성원 계정을 만들고 관리할 수 있습니다.</span>
           </div>
         </main>
 
@@ -727,20 +732,42 @@
     const errorBox = document.getElementById('errorMsg');
     const errorText = document.getElementById('errorText');
 
+    // 처음 켰는가? (비밀번호 있는 계정이 하나도 없으면 "관리자 계정 만들기" 모드)
+    let setupMode = false;
+    (async () => {
+      try {
+        const st = await (await fetch('/api/auth/status')).json();
+        setupMode = !!st.setup;
+        if (setupMode) {
+          document.getElementById('loginTitle').textContent = '처음 오셨군요 — 관리자 계정 만들기';
+          document.querySelector('.panel-sub').textContent = '이 컴퓨터의 산초를 쓸 계정을 하나 만드세요. 비밀번호는 8자 이상으로.';
+          document.getElementById('nameGroup').style.display = '';
+          document.getElementById('password').setAttribute('autocomplete', 'new-password');
+          document.getElementById('password').placeholder = '새 비밀번호 (8자 이상)';
+          submitBtn.querySelector('span').textContent = '계정 만들고 시작하기';
+          document.getElementById('quickText').innerHTML = '만든 계정으로만 들어올 수 있습니다. 기본 비밀번호는 없습니다.';
+        }
+        if (st.host && st.host !== '127.0.0.1' && st.host !== 'localhost') {
+          document.getElementById('quickText').innerHTML += '<br><b style="color:#ffb4b4">⚠ 이 산초는 네트워크에 열려 있습니다 — 강한 비밀번호를 쓰세요.</b>';
+        }
+      } catch (e) {}
+    })();
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const loginId = document.getElementById('loginId').value.trim();
       const password = document.getElementById('password').value;
+      const name = (document.getElementById('uname') || {}).value || '';
 
       errorBox.style.display = 'none';
       submitBtn.disabled = true;
-      submitBtn.querySelector('span').textContent = '로그인 중...';
+      submitBtn.querySelector('span').textContent = setupMode ? '만드는 중...' : '로그인 중...';
 
       try {
-        const res = await fetch('/api/auth/login', {
+        const res = await fetch(setupMode ? '/api/auth/setup' : '/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ loginId, password })
+          body: JSON.stringify({ loginId, password, name })
         });
         const json = await res.json();
         if (res.ok && json.ok) {
@@ -749,7 +776,7 @@
           errorText.textContent = json.error || '아이디 또는 비밀번호가 올바르지 않습니다.';
           errorBox.style.display = 'flex';
           submitBtn.disabled = false;
-          submitBtn.querySelector('span').textContent = '로그인';
+          submitBtn.querySelector('span').textContent = setupMode ? '계정 만들고 시작하기' : '로그인';
         }
       } catch (err) {
         errorText.textContent = '서버 연결에 실패했습니다. (네트워크 확인)';

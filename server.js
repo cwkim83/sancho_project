@@ -14,13 +14,20 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const DATA = process.env.SANCHO_DATA || join(ROOT, 'data');   // 산초의 모든 상태는 이 폴더 안 텍스트 파일이다. 지우면 초기화. (SANCHO_DATA 로 위치 변경)
 const JOURNAL = join(DATA, 'journal');
+// 예약 실행 결과(일지)도 사용자별로 — 로그인한 사람의 일만 그 사람 알림에 쌓인다
+const 일지폴더 = () => { const uid = sessionContext.getStore(); if (!uid) return JOURNAL; const d = join(DATA, 'users', uid, 'journal'); try { mkdirSync(d, { recursive: true }); } catch {} return d; };
 const DB = join(DATA, 'db');   // 플랫폼 저장소: 컬렉션 하나 = db/<이름>.json 한 파일 (세종 플랫폼의 Firestore 컬렉션에 해당). 산초(두뇌)도 이 파일을 직접 고친다.
 for (const d of [JOURNAL, DB, join(DATA, 'uploads'), join(DATA, 'wiki'), join(DATA, 'wbs'), join(DATA, '.claude', 'skills')]) mkdirSync(d, { recursive: true });   // 첨부 · 위키 · 스킬(Claude Code 가 cwd/.claude/skills 를 읽는다)
 const PORT = Number(process.env.SANCHO_PORT || 8790);
 
 // ---------- 파일 도우미 ----------
 const sessionContext = new AsyncLocalStorage();
-const SESSIONS = new Map();
+// 로그인 세션: 껐다 켜도(자기 수정 뒤 재시작이 잦다) 로그인이 풀리지 않게 파일에 남긴다. 30일 지난 것은 버린다.
+const 세션파일 = () => join(DATA, 'sessions.json');
+const 세션만료 = 30 * 24 * 3600 * 1000;
+const SESSIONS = new Map(Object.entries(readJson0(세션파일(), {})).filter(([, v]) => Date.now() - (v?.at || 0) < 세션만료).map(([k, v]) => [k, v.uid]));
+function readJson0(file, fallback) { try { return JSON.parse(readFileSync(file, 'utf8')); } catch { return fallback; } }   // 파일 도우미보다 먼저 필요해서 따로
+function 세션저장() { try { const now = Date.now(); writeFileSync(세션파일(), JSON.stringify(Object.fromEntries([...SESSIONS].map(([k, uid]) => [k, { uid, at: now }])), null, 2)); } catch {} }
 const p = (name) => {
   const uid = sessionContext.getStore();
   if (uid && ['settings.json', 'state.json', 'memory.md', 'schedule.json', 'history.jsonl', '.system.md'].includes(name)) {
@@ -225,7 +232,7 @@ function 예약실행(j) {
         // 일지엔 마지막 답(final)만 남긴다 — 중간 혼잣말("I'll check…")까지 쌓이면 읽기 어렵다(2026-09-12 실측)
         const 결과 = e.ok ? (e.final || out) : `⚠️ 실패: ${e.text}`;
         const 조용 = j.repeat === 'every' && /^\s*변화 없음/.test(결과);   // 감시 결과가 "변화 없음" 이면 일지·배달 생략
-        if (!조용) { appendFileSync(join(JOURNAL, `${today}.md`), `## ${hhmm(new Date())} · ${j.id}\n${결과}\n\n`); 텔레그램(`[${설정().name} · ${j.id}]\n${결과}`); }
+        if (!조용) { appendFileSync(join(일지폴더(), `${today}.md`), `## ${hhmm(new Date())} · ${j.id}\n${결과}\n\n`); 텔레그램(`[${설정().name} · ${j.id}]\n${결과}`); }
         const st = 상태(); if (j.repeat === 'every') st.lastAt = { ...(st.lastAt || {}), [j.id]: Date.now() }; else st.runs[j.id] = today; 상태저장(st);
         if (j.repeat === 'once') writeJson(p('schedule.json'), 예약목록().filter((x) => x.id !== j.id));
       }
@@ -249,8 +256,15 @@ function tick() {
     return 예약실행(j);                                              // 한 번에 하나
   }
 }
-setInterval(tick, 30_000);
-setTimeout(tick, 5_000);
+// 사용자별로 한 번씩 — 세션 컨텍스트를 씌워야 그 사람의 schedule.json·state.json·일지를 읽고 쓴다.
+function tick모두() {
+  if (현재) return;
+  const uids = ls(join(DATA, 'users'), (n) => { try { return statSync(join(DATA, 'users', n)).isDirectory(); } catch { return false; } });
+  if (!uids.length) return tick();                                  // 아직 로그인 계정이 없으면 옛 방식(공용 파일)
+  for (const uid of uids) { if (현재) return; sessionContext.run(uid, tick); }
+}
+setInterval(tick모두, 30_000);
+setTimeout(tick모두, 5_000);
 
 // ---------- 자가 업그레이드 ----------
 // 갱신(git pull)도 자기 수정도 재시작 전에 같은 관문을 지난다: 문법 + 자가시험.
@@ -375,8 +389,7 @@ function 허용경로(q) {   // 데이터 폴더 안, (허용했을 때) 홈 폴
   try { return ok && statSync(abs).isFile() ? abs : null; } catch { return null; }
 }
 const 첨부이름 = (f) => basename(f).replace(/^[a-z0-9]{6,9}-/, '');   // uploads/mtytchox-회의메모.txt → 회의메모.txt
-const 일지 = (n = 2) => readdirSync(JOURNAL).filter((f) => f.endsWith('.md')).sort().slice(-n)
-  .map((f) => ({ date: f.slice(0, -3), text: readText(join(JOURNAL, f)) }));
+const 일지 = (n = 2) => { const dir = 일지폴더(); return ls(dir, (f) => f.endsWith('.md')).sort().slice(-n).map((f) => ({ date: f.slice(0, -3), text: readText(join(dir, f)) })); };
 
 // ---------- 플랫폼 저장소(/api/db) — Firestore 흉내. 컬렉션 = db/<이름>.json 한 파일 = { id: 문서 } ----------
 // 화면(public/m/*.html)은 sdb.js 로 Firestore 함수 이름 그대로 쓰고, 두뇌(Claude)는 파일을 Edit 한다. 둘 다 같은 파일이라 서로 곧바로 보인다.
@@ -420,6 +433,28 @@ function 검색(q) {   // 헤더 검색: 플랫폼 데이터 · 공정표 · 위
   for (const h of hist) out.push({ type: 'chat', id: h.sid || '', title: String(h.text).replace(/\s+/g, ' ').slice(0, 70), sub: `${h.role === 'user' ? '나' : 설정().name} · ${String(h.ts).slice(0, 10)}` });
   return out.slice(0, 80);
 }
+
+// 옛 단일 사용자 데이터(data/settings.json · memory.md · schedule.json · state.json · history.jsonl · journal/)를
+// 첫 로그인 계정 폴더로 한 번만 옮긴다 — 로그인 기능이 붙으면서 부장님 기억·예약·설정이 사라진 것처럼 보이던 문제.
+const 이사한 = new Set();
+function 이사(uid) {
+  if (!uid) return;
+  const dir = join(DATA, 'users', uid);
+  try {
+    mkdirSync(dir, { recursive: true });
+    if (existsSync(join(dir, '.migrated'))) return;
+    for (const n of ['settings.json', 'state.json', 'memory.md', 'schedule.json', 'history.jsonl']) {
+      const 옛 = join(DATA, n), 새 = join(dir, n);
+      if (!existsSync(옛)) continue;
+      if (!existsSync(새) || statSync(새).size <= 3) cpSync(옛, 새);   // 새 폴더가 비어 있을 때만(덮어쓰지 않는다)
+    }
+    const 옛일지 = join(DATA, 'journal'), 새일지 = join(dir, 'journal');
+    if (existsSync(옛일지) && !existsSync(새일지)) cpSync(옛일지, 새일지, { recursive: true });
+    writeFileSync(join(dir, '.migrated'), new Date().toISOString());
+  } catch {}
+}
+
+const 계정있음 = () => { try { return Object.values(readJson(join(DB, 'users.json'), {})).some((u) => u && u.passwordHash); } catch { return false; } };
 
 const hashPassword = (password, salt = randomBytes(16).toString('hex')) => {
   return { salt, hash: scryptSync(password, salt, 64).toString('hex') };
@@ -486,54 +521,80 @@ async function 채팅(req, res) {
 createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const route = `${req.method} ${url.pathname}`;
-  const token = (req.headers.cookie || '').split(';').find(c => c.trim().startsWith('sancho_session='))?.split('=')[1] || req.headers['x-session'];
+  const token = (req.headers.cookie || '').split(';').find(c => c.trim().startsWith('sancho_session='))?.split('=').slice(1).join('=') || req.headers['x-session'];
   let uid = SESSIONS.get(token);
-  if (process.env.SANCHO_SKIP_SELFTEST) uid = 'owner';
+  if (process.env.SANCHO_TEST_USER) uid = process.env.SANCHO_TEST_USER;   // 자가시험 전용 — 실제 실행에서는 절대 설정하지 않는다
+  // 아직 계정을 하나도 만들지 않은 산초(옛 단일 사용자 판)는 그대로 열어 둔다 — 계정을 만드는 순간부터 로그인이 필요해진다
+  if (!uid && !계정있음()) uid = 'owner';
+  if (uid && !이사한.has(uid)) { 이사한.add(uid); 이사(uid); }   // 그 사람 폴더가 비어 있으면 옛 데이터를 한 번 옮겨 준다
 
   sessionContext.run(uid, async () => {
     try {
       if (route === 'GET /api/auth/me') {
         if (!uid) return send(res, 401, { error: 'Not logged in' });
         const u = readJson(join(DB, 'users.json'), {})[uid];
-        if (!u) {
-          if (process.env.SANCHO_SKIP_SELFTEST) return send(res, 200, { uid: 'owner', name: '주인' });
-          return send(res, 401, { error: 'User deleted' });
-        }
-        const { passwordHash, salt, ...safeUser } = u;
-        return send(res, 200, { uid, ...safeUser });
+        if (!u && 계정있음()) return send(res, 401, { error: 'User deleted' });   // 지워진 계정
+        const { passwordHash, salt, ...safeUser } = u || {};
+        const s2 = 설정();
+        return send(res, 200, { uid, name: s2.owner?.name || '주인', ...safeUser, company: s2.owner?.company || '', sancho: s2.name });
+      }
+      // 처음 켰을 때: 비밀번호가 있는 사용자가 하나도 없으면 로그인 화면이 "관리자 계정 만들기"를 보여준다.
+      // 기본 비밀번호(admin123 같은 것)는 절대 심지 않는다 — 그 판이 밖으로 열리면 이 컴퓨터가 통째로 남의 것이 된다.
+      if (route === 'GET /api/auth/status') {
+        const users = readJson(join(DB, 'users.json'), {});
+        return send(res, 200, { setup: !Object.values(users).some((u) => u && u.passwordHash), loggedIn: !!uid, host: process.env.SANCHO_HOST || '127.0.0.1' });
+      }
+      if (route === 'POST /api/auth/setup') {
+        const users = readJson(join(DB, 'users.json'), {});
+        if (Object.values(users).some((u) => u && u.passwordHash)) return send(res, 409, { error: '이미 계정이 있어요. 로그인해 주세요.' });
+        const { name, loginId, password } = await readBody(req);
+        const 아이디 = String(loginId || '').trim();
+        if (!/^[A-Za-z0-9._-]{3,32}$/.test(아이디)) return send(res, 400, { error: '아이디는 영문·숫자 3~32자로 지어 주세요' });
+        if (String(password || '').length < 8) return send(res, 400, { error: '비밀번호는 8자 이상으로 해 주세요' });
+        const h = hashPassword(String(password));
+        const id = users.owner ? 아이디.toLowerCase().replace(/[^a-z0-9_-]/g, '') || 'admin' : 'owner';   // 첫 계정은 기존 주인 문서(owner)에 붙인다
+        users[id] = { ...(users[id] || {}), name: String(name || '관리자').trim(), loginId: 아이디, role: 'super', active: true, salt: h.salt, passwordHash: h.hash, createdAt: new Date().toISOString() };
+        writeJson(join(DB, 'users.json'), users);
+        이사(id);   // 옛 단일 사용자 데이터(설정·기억·예약·대화)를 이 계정 폴더로 옮긴다
+        const newToken = randomUUID(); SESSIONS.set(newToken, id); 세션저장();
+        res.setHeader('Set-Cookie', `sancho_session=${newToken}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${세션만료 / 1000}`);
+        return send(res, 200, { ok: true, uid: id });
       }
       if (route === 'POST /api/auth/login') {
         const { loginId, password } = await readBody(req);
         const users = readJson(join(DB, 'users.json'), {});
-        let userEntry = Object.entries(users).find(([k, v]) => v.loginId === loginId);
-        
-        // Auto-seed
-        if (!userEntry && !users['admin'] && loginId === 'admin' && password === 'admin123') {
-          const h = hashPassword(password);
-          users['admin'] = { name: '관리자', loginId: 'admin', role: 'super', salt: h.salt, passwordHash: h.hash, createdAt: new Date().toISOString() };
-          writeJson(join(DB, 'users.json'), users);
-          userEntry = ['admin', users['admin']];
-        }
-        
+        const userEntry = Object.entries(users).find(([, v]) => v && v.loginId === loginId);
         if (!userEntry) return send(res, 401, { error: '아이디 또는 비밀번호가 틀렸습니다.' });
         const [id, u] = userEntry;
-        
+        if (u.active === false) return send(res, 401, { error: '사용이 중지된 계정이에요.' });
         if (!u.passwordHash || !verifyPassword(password, u.salt, u.passwordHash)) return send(res, 401, { error: '아이디 또는 비밀번호가 틀렸습니다.' });
-        
         const newToken = randomUUID();
-        SESSIONS.set(newToken, id);
-        res.setHeader('Set-Cookie', `sancho_session=${newToken}; Path=/; HttpOnly; SameSite=Strict`);
+        SESSIONS.set(newToken, id); 세션저장();
+        이사(id);
+        res.setHeader('Set-Cookie', `sancho_session=${newToken}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${세션만료 / 1000}`);
         return send(res, 200, { ok: true, uid: id });
       }
+      if (route === 'POST /api/auth/password') {   // 비밀번호 바꾸기(본인)
+        if (!uid) return send(res, 401, { error: '로그인이 필요합니다.' });
+        const { oldPassword, password } = await readBody(req);
+        const users = readJson(join(DB, 'users.json'), {}); const u = users[uid];
+        if (!u || !verifyPassword(oldPassword, u.salt, u.passwordHash)) return send(res, 401, { error: '지금 비밀번호가 틀렸어요' });
+        if (String(password || '').length < 8) return send(res, 400, { error: '비밀번호는 8자 이상으로 해 주세요' });
+        const h = hashPassword(String(password)); users[uid] = { ...u, salt: h.salt, passwordHash: h.hash };
+        writeJson(join(DB, 'users.json'), users); return send(res, 200, { ok: true });
+      }
       if (route === 'POST /api/auth/logout') {
-        if (token) SESSIONS.delete(token);
+        if (token) { SESSIONS.delete(token); 세션저장(); }
         res.setHeader('Set-Cookie', 'sancho_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT');
         return send(res, 200, { ok: true });
       }
-      
-      // Auth Guard
+
+      // 로그인 문지기: API 는 401, 화면은 로그인 화면으로 보낸다(화면 소스도 로그인 전에는 안 보여 준다)
       if (url.pathname.startsWith('/api/') && !url.pathname.startsWith('/api/auth/')) {
         if (!uid) return send(res, 401, { error: '로그인이 필요합니다.' });
+      }
+      if (!uid && (route === 'GET /' || url.pathname.endsWith('.html') || url.pathname.startsWith('/m/')) && route !== 'GET /login.html') {
+        res.writeHead(302, { location: '/login.html' }); return res.end();
       }
 
       if (route === 'GET /login.html') return send(res, 200, readFileSync(join(ROOT, 'public', 'login.html')), 'text/html; charset=utf-8');
@@ -711,8 +772,13 @@ createServer(async (req, res) => {
   if (e.code !== 'EADDRINUSE') throw e;
   console.log(`산초가 이미 켜져 있어요 → 브라우저에서 http://127.0.0.1:${PORT} 를 여세요`);   // sancho.bat 을 두 번 눌러도 놀라지 않게
   process.exit(0);
-}).listen(PORT, process.env.SANCHO_HOST || '0.0.0.0', () => {   // SANCHO_HOST=0.0.0.0 으로 열 때는 반드시 접속 토큰을 설정한다
-  console.log(`산초 → http://${process.env.SANCHO_HOST || '0.0.0.0'}:${PORT}   두뇌: ${CLAUDE ? CLAUDE_VERSION : 'Claude Code 를 찾지 못했어요 (README 참고)'}`);
+}).listen(PORT, process.env.SANCHO_HOST || '127.0.0.1', () => {   // 기본은 이 컴퓨터에서만. 밖으로 열려면 SANCHO_HOST 를 일부러 준다(아래 경고 참고)
+  const HOST = process.env.SANCHO_HOST || '127.0.0.1';
+  console.log(`산초 → http://${HOST === '0.0.0.0' ? '127.0.0.1' : HOST}:${PORT}   두뇌: ${CLAUDE ? CLAUDE_VERSION : 'Claude Code 를 찾지 못했어요 (README 참고)'}`);
+  if (HOST !== '127.0.0.1' && HOST !== 'localhost') {
+    console.log('⚠️  밖(네트워크)으로 열려 있습니다. 산초는 이 컴퓨터의 Claude Code 로 명령을 실행할 수 있으니,');
+    console.log('    반드시 ① 강한 비밀번호 ② ⚙ 설정의 접속 토큰 ③ 믿는 망에서만 — 셋을 확인하세요.');
+  }
   // 잘 켜진 코드를 "마지막 정상판"으로 표시한다 — 작업 폴더가 깨끗할 때만(커밋 안 된 코드가 돌고 있으면 표시를 옮기지 않는다).
   // sancho.bat 이 비정상 종료 뒤 이 표시로 복구한다. git 이 없거나 저장소가 아니면 조용히 건너뛴다.
   git('status', '--porcelain').then((dirty) => dirty ? null : git('tag', '-f', 'last-good')).catch(() => {});

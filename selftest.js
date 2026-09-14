@@ -50,7 +50,7 @@ async function 시험() {
   // 실행 시각이 이미 지난 예약 하나 — 서버의 첫 tick(5초 뒤)에 돌아야 한다
   writeFileSync(join(data, 'schedule.json'), JSON.stringify([{ id: 'test', time: '00:00', repeat: 'daily', prompt: '보고서를 써라' }]));
   const server = spawn(process.execPath, [join(dirname(HERE), 'server.js')], {
-    env: { ...process.env, SANCHO_PORT: String(PORT), SANCHO_DATA: data, SANCHO_CLAUDE: HERE, SANCHO_SKIP_SELFTEST: '1' }, stdio: ['ignore', 'ignore', 'inherit'],
+    env: { ...process.env, SANCHO_PORT: String(PORT), SANCHO_DATA: data, SANCHO_CLAUDE: HERE, SANCHO_SKIP_SELFTEST: '1', SANCHO_TEST_USER: 'owner' }, stdio: ['ignore', 'ignore', 'inherit'],
   });
   try {
     await 기다림(async () => (await fetch(`${BASE}/api/state`)).ok, 5000, '서버 기동');
@@ -151,6 +151,20 @@ async function 시험() {
     const st2 = await (await fetch(`${BASE}/api/state`)).json();
     assert.ok(Array.isArray(st2.modules) && Array.isArray(st2.tools), '/api/state 가 만들어진 화면 목록을 준다');
 
+    // 1d3) 로그인: 계정이 없으면 setup 모드, 기본 비밀번호는 없다. 짧은 비밀번호는 거절. 만든 뒤엔 로그인된다.
+    {
+      const A = (p2, b) => fetch(`${BASE}/api/auth${p2}`, b ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) } : undefined);
+      assert.equal((await (await A('/status')).json()).setup, true, '계정이 없으면 setup 모드');
+      assert.equal((await A('/login', { loginId: 'admin', password: 'admin123' })).status, 401, '기본 비밀번호(admin123)로는 절대 못 들어온다');
+      assert.equal((await A('/setup', { name: '주인', loginId: 'boss', password: 'short' })).status, 400, '짧은 비밀번호 거절');
+      const r1 = await A('/setup', { name: '주인', loginId: 'boss', password: 'longenough1' });
+      assert.equal(r1.status, 200, '첫 계정 만들기');
+      assert.ok(String(r1.headers.get('set-cookie') || '').includes('HttpOnly'), '세션 쿠키는 HttpOnly');
+      assert.equal((await A('/setup', { name: '또', loginId: 'boss2', password: 'longenough1' })).status, 409, '계정이 생긴 뒤엔 setup 막힘');
+      assert.equal((await A('/login', { loginId: 'boss', password: 'wrongpass1' })).status, 401, '틀린 비밀번호');
+      assert.equal((await A('/login', { loginId: 'boss', password: 'longenough1' })).status, 200, '맞는 비밀번호');
+    }
+
     // 1e) 접속 토큰: 설정에 있으면 API 는 토큰 없이 401, 토큰 있으면 200 (화면과 /health 는 그대로)
     writeFileSync(join(data, 'users', 'owner', 'settings.json'), JSON.stringify({ token: 't1' }));
     assert.equal((await fetch(`${BASE}/api/state`)).status, 401, '토큰 없으면 401');
@@ -160,10 +174,10 @@ async function 시험() {
     writeFileSync(join(data, 'users', 'owner', 'settings.json'), '{}');
 
     // 2) 예약: 첫 tick 에 돌아 journal 에 쌓이고 오늘 실행으로 기록된다
-    const 일지 = join(data, 'journal', `${today()}.md`);
+    const 일지 = join(data, 'users', 'owner', 'journal', `${today()}.md`);   // 예약·일지는 사용자별 폴더
     await 기다림(() => existsSync(일지), 12_000, '예약 실행');
     assert.ok(readFileSync(일지, 'utf8').includes('· test') && readFileSync(일지, 'utf8').includes('가짜 답'), '일지 내용');
-    assert.equal(JSON.parse(readFileSync(join(data, 'state.json'), 'utf8')).runs.test, today(), '오늘 실행 기록');
+    assert.equal(JSON.parse(readFileSync(join(data, 'users', 'owner', 'state.json'), 'utf8')).runs.test, today(), '오늘 실행 기록');
     await 기다림(async () => (await (await fetch(`${BASE}/api/state`)).json()).busy === null, 3000, '예약 뒤 한가함');
 
     // 3) 재시작 예약 + ■ 중지: 일하는 중에 재시작을 요청하면 관문을 지나 "끝나면" 으로 예약되고,

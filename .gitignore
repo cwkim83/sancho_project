@@ -5,3 +5,9 @@ node_modules/
 log.txt
 log_err.txt
 run_bg.bat
+
+# 임시·패치 스크립트(도구가 만든 것)
+update_*.cjs
+patch_*.cjs
+fix_*.cjs
+temp*.html
