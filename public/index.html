@@ -752,8 +752,37 @@ async function 부서읽기() {
   depts = ds.map((d) => ({ id: d.id, name: d.data?.name || d.id, icon: d.data?.icon || '🏢', li: d.data?.li || 'building-2', order: Number(d.data?.order) || 99 })).sort((a, b) => a.order - b.order);
   renderNav();
 }
-// 저장소가 바뀌면(모듈·산초가 db 파일을 고치면) 부서·배지를 다시 읽는다
-try { const es = new EventSource('/api/db/_events' + (tok() ? '?token=' + encodeURIComponent(tok()) : '')); let t = 0; es.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } if (m.col === 'depts') 부서읽기(); if (['messages', 'channels', 'mail', 'approvals'].includes(m.col)) { clearTimeout(t); t = setTimeout(배지갱신, 400); } }; } catch {}
+// 전역 단일 SSE 허브: 모든 모듈(iframe)과 부모 창이 단 1개의 SSE 연결을 공유한다.
+// (브라우저의 호스트당 최대 6개 동시 HTTP 연결 제한으로 각 iframe 이 SSE 를 열면 7번째 메뉴부터 화면이 영구 정지되는 문제 원천 차단)
+window.__sancho_sse_subscribers = window.__sancho_sse_subscribers || new Set();
+window.__sancho_sub_events = function(fn) {
+  window.__sancho_sse_subscribers.add(fn);
+  return () => window.__sancho_sse_subscribers.delete(fn);
+};
+let sharedES = null;
+function initSharedES() {
+  if (sharedES) return;
+  try {
+    sharedES = new EventSource('/api/db/_events' + (tok() ? '?token=' + encodeURIComponent(tok()) : ''));
+    let t = 0;
+    sharedES.onmessage = (e) => {
+      let m; try { m = JSON.parse(e.data); } catch { return; }
+      if (m.col === 'depts') 부서읽기();
+      if (['messages', 'channels', 'mail', 'approvals'].includes(m.col)) {
+        clearTimeout(t); t = setTimeout(배지갱신, 400);
+      }
+      for (const fn of window.__sancho_sse_subscribers) {
+        try { fn(m); } catch {}
+      }
+    };
+    sharedES.onerror = () => {
+      try { sharedES.close(); } catch {}
+      sharedES = null;
+      setTimeout(initSharedES, 3000);
+    };
+  } catch {}
+}
+initSharedES();
 
 // ---- 대시보드 인사말(플랫폼 대시보드 헤더) — 대화가 비어 있을 때 채팅 위에 ----
 let 요약캐시 = null, 요약시각 = 0;
@@ -854,7 +883,13 @@ async function refresh() {
     if (!s.history.length) 인사말();
   }
 }
-window.onerror = (msg, src, line) => { try { fetch('/api/db/errorlog', { method: 'POST', headers: hdr(), body: JSON.stringify({ data: { at: new Date().toISOString(), msg: String(msg).slice(0, 300), src: String(src || '').split('/').pop() + ':' + line, view: 현재뷰 || 현재도구 } }) }); } catch {} };
+window.onerror = (msg, src, line) => { try { fetch('/api/db/errorlog', { method: 'POST', headers: hdr(), body: JSON.stringify({ data: { at: new Date().toISOString(), msg: String(msg).slice(0, 300), src: String(src || '').split('/').pop() + ':' + line, view: 현재뷰 || '' } }) }); } catch {} };
+
+window.addEventListener('hashchange', () => {
+  const h = location.hash.slice(1);
+  if (h && NAV.some((n) => n.id === h.split('/')[0])) switchMod(h.split('/')[0], decodeURIComponent(h.split('/')[1] || ''));
+  else if (!h) switchMod('dashboard');
+});
 
 // ---- 시작 ----
 (async () => {
@@ -863,7 +898,7 @@ window.onerror = (msg, src, line) => { try { fetch('/api/db/errorlog', { method:
   renderNav();
   await refresh();   // 있는 화면 목록을 먼저 받는다(없는 메뉴는 "준비중")
   const h = location.hash.slice(1);
-  if (h.startsWith('tool/')) openTool(h.slice(5)); else if (h && NAV.some((n) => n.id === h.split('/')[0])) switchMod(h.split('/')[0], decodeURIComponent(h.split('/')[1] || '')); else switchMod('dashboard');
+  if (h && NAV.some((n) => n.id === h.split('/')[0])) switchMod(h.split('/')[0], decodeURIComponent(h.split('/')[1] || '')); else switchMod('dashboard');
   씨앗(); 배지갱신();
   setInterval(refresh, 10000); setInterval(배지갱신, 20000);
   wakeUI(); if (prefs.wake) 호출대기시작();

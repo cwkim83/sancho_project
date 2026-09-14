@@ -73,9 +73,21 @@
   const Timestamp = { now: () => tsOf(new Date()), fromDate: (d) => tsOf(d), fromMillis: (ms) => tsOf(new Date(ms)) };
   const tsOf = (d) => ({ seconds: Math.floor(d.getTime() / 1000), nanoseconds: 0, toDate: () => new Date(d), toMillis: () => d.getTime(), toJSON: () => d.toISOString() });
 
-  // ---- 실시간(onSnapshot): 서버 SSE 로 "어느 컬렉션이 바뀌었다" 만 받고, 그 컬렉션을 다시 읽어 콜백한다 ----
-  const subs = new Set(); let es = null;
+  // ---- 실시간(onSnapshot): 부모 창이 있으면 부모의 단일 SSE 를 공유하고, 단독 실행일 때만 자체 SSE 를 연다 ----
+  const subs = new Set(); let es = null, unsubParent = null;
   function ensureES() {
+    try {
+      if (window.parent && window.parent !== window && typeof window.parent.__sancho_sub_events === 'function') {
+        if (!unsubParent) {
+          unsubParent = window.parent.__sancho_sub_events((m) => {
+            for (const s of subs) if (!m.col || s.col === m.col) s.run();
+          });
+          window.addEventListener('unload', () => { if (unsubParent) { unsubParent(); unsubParent = null; } });
+        }
+        return;
+      }
+    } catch {}
+
     if (es) return;
     try { es = new EventSource(withTok('/api/db/_events')); } catch { return; }
     es.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } for (const s of subs) if (!m.col || s.col === m.col) s.run(); };
@@ -91,7 +103,11 @@
   // ---- 로그인 흉내: 주인 한 사람 (/api/me) ----
   const auth = { currentUser: { uid: 'owner', email: '', displayName: '주인', photoURL: '' }, app: {} };
   const authCbs = [];
-  const me = api('/api/auth/me').then((u) => { auth.currentUser = { uid: u.uid || 'owner', email: u.email || '', displayName: u.name || '주인', photoURL: '', ...u }; return auth.currentUser; }).catch(() => auth.currentUser);
+  let parentMe = null;
+  try { if (window.parent && window.parent !== window && window.parent.me && window.parent.me.name) parentMe = window.parent.me; } catch {}
+  const me = (parentMe ? Promise.resolve(parentMe) : api('/api/auth/me'))
+    .then((u) => { auth.currentUser = { uid: u.uid || 'owner', email: u.email || '', displayName: u.name || '주인', photoURL: '', ...u }; return auth.currentUser; })
+    .catch(() => auth.currentUser);
   function onAuthStateChanged(_auth, cb) { me.then((u) => cb(u)); authCbs.push(cb); return () => {}; }
   class GoogleAuthProvider { setCustomParameters() {} addScope() {} }
   const signIn = async () => ({ user: await me });

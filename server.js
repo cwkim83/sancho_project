@@ -784,7 +784,11 @@ createServer(async (req, res) => {
       if (!seg.length) return send(res, 200, 컬렉션목록().map((n) => ({ name: n, count: Object.keys(컬렉션(n)).length })));
       if (c === '_events') {   // SSE: 어느 컬렉션이 바뀌었는지
         res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache', connection: 'keep-alive' });
-        res.write('data: {"hello":true}\n\n'); 구독자.add(res); req.on('close', () => 구독자.delete(res)); return;
+        res.write('data: {"hello":true}\n\n');
+        구독자.add(res);
+        const del = () => 구독자.delete(res);
+        req.on('close', del); req.on('error', del); res.on('close', del); res.on('error', del);
+        return;
       }
       if (c === '_batch' && req.method === 'POST') {
         const { ops } = await readBody(req); let n = 0;
