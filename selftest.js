@@ -149,7 +149,7 @@ async function 시험() {
     assert.equal((await fetch(`${BASE}/m/sdb.js`)).status, 200, 'sdb.js 제공');
     assert.equal((await fetch(`${BASE}/m/../server.js`)).status, 404, '/m 밖은 못 읽는다');
     const st2 = await (await fetch(`${BASE}/api/state`)).json();
-    assert.ok(Array.isArray(st2.modules) && Array.isArray(st2.tools), '/api/state 가 만들어진 화면 목록을 준다');
+    assert.ok(Array.isArray(st2.modules) && st2.modules.includes('workflow'), '/api/state 가 만들어진 화면 목록을 준다');
 
     // 1d3) 로그인: 계정이 없으면 setup 모드, 기본 비밀번호는 없다. 짧은 비밀번호는 거절. 만든 뒤엔 로그인된다.
     {

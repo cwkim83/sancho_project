@@ -578,7 +578,7 @@ $('#restart').onclick = () => 업그레이드('/api/restart', '재시작');
 $('#backup').onclick = async () => { $('#upmsg').textContent = '백업 중…'; const r = await api('/api/backup', {}); if (r.error) { $('#upmsg').textContent = '⚠️ ' + r.error; return; } $('#upmsg').textContent = '백업 완료 — 채팅 창에 카드가 떴어요'; closeMenus(); switchMod('dashboard'); fileCard('백업', [r]); };
 $('#quit').onclick = async () => { if (!confirm('산초를 완전히 끌까요? 다시 켤 때는 sancho.bat 을 실행하거나 컴퓨터를 다시 켜야 합니다.')) return; const r = await api('/api/quit', {}); $('#upmsg').textContent = r.note || r.error || ''; };
 
-// ═══ 플랫폼 껍데기 — 세종 플랫폼 v2 의 NAV/DEPTS/TOOLS 를 산초 메뉴로 ═══
+// ═══ 플랫폼 껍데기 — 왼쪽 메뉴(NAV) → 본문 iframe(/m/<id>.html) ═══
 const NAV = [
   { id: 'dashboard', icon: '🏠', li: 'layout-dashboard', label: '대시보드', sub: '산초' },
   { id: 'calendar', icon: '📅', li: 'calendar-days', label: '일정' },

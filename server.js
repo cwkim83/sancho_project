@@ -759,7 +759,7 @@ createServer(async (req, res) => {
 
       if (route === 'GET /login.html') return send(res, 200, readFileSync(join(ROOT, 'public', 'login.html')), 'text/html; charset=utf-8');
       if (route === 'GET /') return send(res, 200, readFileSync(join(ROOT, 'public', 'index.html')), 'text/html; charset=utf-8');
-    if ((req.method === 'GET' || req.method === 'HEAD') && url.pathname.startsWith('/m/')) {   // 플랫폼 모듈 화면(public/m/**) — iframe 으로 껍데기 안에 뜬다. HEAD 는 "있나" 확인용(부서 도구함 배지)
+    if ((req.method === 'GET' || req.method === 'HEAD') && url.pathname.startsWith('/m/')) {   // 플랫폼 모듈 화면(public/m/**) — iframe 으로 껍데기 안에 뜬다
       const abs = resolve(join(ROOT, 'public', 'm', decodeURIComponent(url.pathname.slice(3))));
       if (!안에(abs, join(ROOT, 'public', 'm')) || !existsSync(abs) || !statSync(abs).isFile()) return send(res, 404, '없는 화면이에요', 'text/plain; charset=utf-8');
       res.writeHead(200, { 'content-type': { ...MIME, '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.mjs': 'application/javascript; charset=utf-8', '.woff2': 'font/woff2', '.ico': 'image/x-icon' }[extname(abs).toLowerCase()] || 'application/octet-stream', 'cache-control': 'no-cache' });
@@ -809,7 +809,6 @@ createServer(async (req, res) => {
         canAutostart: !!시작바로가기, autostart: !!(시작바로가기 && existsSync(시작바로가기)),
         // 만들어져 있는 플랫폼 화면 — 껍데기가 이걸 보고 메뉴를 켠다
         modules: ls(join(ROOT, 'public', 'm'), (f) => f.endsWith('.html')).map((f) => f.slice(0, -5)),
-        tools: ls(join(ROOT, 'public', 'm', 'tools'), (f) => f.endsWith('.html')).map((f) => f.slice(0, -5)),
         wbs: ls(join(DATA, 'wbs'), (f) => f.endsWith('.json')).map((f) => { const d = readJson(join(DATA, 'wbs', f), {}); const c = wbs계산(d); return { name: f.slice(0, -5), title: d.name || f.slice(0, -5), pct: c.ev, spi: c.spi, late: c.late }; }),
       });
     }
