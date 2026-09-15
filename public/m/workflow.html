@@ -36,6 +36,9 @@
   .node .h{display:flex;align-items:center;gap:7px;padding:9px 10px;border-bottom:1px solid var(--border-light);font-weight:600}
   .node .h .ic{width:24px;height:24px;border-radius:7px;display:grid;place-items:center;font-size:13px;flex:none;background:var(--primary-light);color:var(--primary)}
   .node .h .tx{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .node .h .btn-del-node{width:18px;height:18px;border-radius:4px;border:none;background:transparent;color:var(--text-lighter);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;margin-left:auto;transition:all .12s;opacity:0;flex:none}
+  .node:hover .h .btn-del-node, .node.sel .h .btn-del-node{opacity:1}
+  .node .h .btn-del-node:hover{background:#FEE2E2;color:var(--danger)}
   .node .b{padding:7px 10px;color:var(--text-light);font-size:11.5px;line-height:1.5;max-height:44px;overflow:hidden}
   .port{position:absolute;width:13px;height:13px;border-radius:50%;background:var(--white);border:2px solid var(--text-lighter);cursor:crosshair}
   .port:hover{border-color:var(--primary);background:var(--primary-light)}
@@ -77,8 +80,10 @@
       <span class="b-pill gray" id="trigPill">트리거: 수동</span>
       <span class="sp"></span>
       <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" id="wfEnabled"> 자동 실행 켬</label>
-      <button class="btn btn-sm" id="addNode">＋ 노드</button>
-      <button class="btn btn-sm" id="delWf">🗑 삭제</button>
+      <button class="btn btn-sm" id="addNode">＋ 노드 추가</button>
+      <button class="btn btn-sm" id="delNodeTop" disabled title="선택한 노드 삭제 (Del 키)">🗑 노드 삭제</button>
+      <span style="border-left:1px solid var(--border);height:18px;margin:0 4px"></span>
+      <button class="btn btn-sm btn-ghost" id="delWf" style="color:var(--danger)" title="현재 워크플로 전체 삭제">🗑 워크플로 삭제</button>
       <button class="btn btn-primary btn-sm" id="runWf">▶ 실행</button>
     </div>
     <div class="stage" id="stage">
@@ -88,6 +93,7 @@
         <div id="nodes"></div>
       </div>
       <div class="zoom"><button id="zIn">＋</button><button id="zOut">－</button><button id="zFit">⤢</button></div>
+      <div class="hintbar" style="position:absolute;left:14px;bottom:14px;font-size:11px;color:var(--text-light);background:var(--card);border:1px solid var(--border-light);padding:4px 10px;border-radius:8px;pointer-events:none;opacity:.92">노드 삭제: [🗑 노드 삭제] 버튼 · Del 키 · 노드 위 ✕ 버튼</div>
     </div>
     <div class="runs">
       <div class="rh"><span>실행 기록</span><span id="runMeta" class="hint"></span><span class="sp" style="flex:1"></span><select class="fs" id="runPick" style="width:210px;padding:3px 6px;font-size:11.5px"></select></div>
@@ -95,7 +101,7 @@
     </div>
   </div>
   <aside class="side">
-    <div class="sh"><span id="sideTitle">노드 설정</span><button class="btn btn-sm" id="delNode" hidden>삭제</button></div>
+    <div class="sh"><span id="sideTitle">노드 설정</span><button class="btn btn-sm btn-danger" id="delNode" hidden>🗑 노드 삭제</button></div>
     <div class="sb" id="sideBody"></div>
   </aside>
 </div>
@@ -163,7 +169,7 @@ function draw() {
     const 상태 = S.run?.steps?.find((s) => s.nodeId === n.id);
     const cls = 상태?.status === '완료' ? ' ok' : 상태?.status === '실패' ? ' bad' : 상태?.status === '실행중' ? ' run' : '';
     return `<div class="node${n.id === S.sel ? ' sel' : ''}${cls}" data-id="${esc(n.id)}" style="left:${n.x || 0}px;top:${n.y || 0}px">
-      <div class="h"><span class="ic">${k.ic}</span><span class="tx">${esc(n.name || k.nm)}</span></div>
+      <div class="h"><span class="ic">${k.ic}</span><span class="tx">${esc(n.name || k.nm)}</span>${n.type === 'start' ? '' : `<button class="btn-del-node" data-del="${esc(n.id)}" title="이 노드 삭제">✕</button>`}</div>
       <div class="b">${esc(본문요약(n)).slice(0, 90)}</div>
       ${k.trigger ? '' : '<div class="port in" data-port="in"></div>'}
       ${k.ports ? `<div class="port t" data-port="true"></div><span class="plabel t">참</span><div class="port f" data-port="false"></div><span class="plabel f">거짓</span>` : '<div class="port out" data-port="out"></div>'}
@@ -202,9 +208,20 @@ function 저장(즉시) {
 function 고르기(id) { S.cur = id; S.wf = JSON.parse(JSON.stringify(S.list[id] || 새워크플로())); S.sel = null; S.run = null; drawList(); draw(); 옆판(); 실행목록(); }
 
 // ── 옆 패널(노드 설정 / 워크플로 설정) ──
+function 갱신노드삭제버튼() {
+  const node = S.wf?.nodes?.find((n) => n.id === S.sel);
+  const canDel = !!(node && node.type !== 'start');
+  const btnTop = $('#delNodeTop');
+  if (btnTop) {
+    btnTop.disabled = !canDel;
+    btnTop.style.color = canDel ? 'var(--danger)' : '';
+    btnTop.style.borderColor = canDel ? '#F5C2C4' : '';
+  }
+}
 function 옆판() {
   const wf = S.wf, node = wf?.nodes?.find((n) => n.id === S.sel);
   $('#delNode').hidden = !node || node.type === 'start';
+  갱신노드삭제버튼();
   if (!wf) { $('#sideTitle').textContent = '워크플로'; $('#sideBody').innerHTML = '<div class="hint">왼쪽에서 고르거나 ＋ 새로 를 눌러 만드세요.</div>'; return; }
   if (!node) {
     $('#sideTitle').textContent = '워크플로 설정';
@@ -231,6 +248,7 @@ function 옆판() {
   }
   const k = 종류[node.type] || { nm: node.type, fields: [] };
   $('#sideTitle').textContent = k.nm;
+  const canDelNode = node.type !== 'start';
   $('#sideBody').innerHTML = `<div class="hintbox">${esc(k.desc)}</div>
     <div class="fg"><label class="fl">이 단계 이름 <span class="hint">(다음 단계에서 {{steps.이름}} 으로 씁니다)</span></label><input class="fi" data-f="__name" value="${esc(node.name || k.nm)}"></div>
     ${(k.fields || []).map(([f, label, kind, opts]) => {
@@ -240,7 +258,10 @@ function 옆판() {
       return `<div class="fg"><label class="fl">${esc(label)}</label><input class="fi" type="${kind}" data-f="${f}" value="${esc(v)}"></div>`;
     }).join('')}
     <label style="font-size:12px;display:flex;gap:6px;align-items:center;margin-top:4px"><input type="checkbox" data-f="continueOnFail" ${node.config?.continueOnFail ? 'checked' : ''}> 실패해도 다음 단계로</label>
-    ${node.type === 'ai' ? '<div class="hint" style="margin-top:10px">예) <b>메일 정리</b>: "db/mail.json 을 읽고 오늘 온 메일 중 답해야 할 것만 골라 한 줄씩 요약해라."</div>' : ''}`;
+    ${node.type === 'ai' ? '<div class="hint" style="margin-top:10px">예) <b>메일 정리</b>: "db/mail.json 을 읽고 오늘 온 메일 중 답해야 할 것만 골라 한 줄씩 요약해라."</div>' : ''}
+    ${canDelNode ? `<div style="margin-top:20px;padding-top:14px;border-top:1px solid var(--border-light)"><button class="btn btn-danger btn-sm" id="delNodeBottom" style="width:100%;justify-content:center">🗑 이 노드 삭제하기</button></div>` : ''}`;
+  const btnBtm = $('#delNodeBottom');
+  if (btnBtm) btnBtm.onclick = () => 노드삭제(S.sel);
   for (const el of $('#sideBody').querySelectorAll('[data-f]')) {
     const f = el.dataset.f;
     const 적용 = () => {
@@ -258,6 +279,12 @@ function 옆판() {
 const stage = $('#stage');
 let drag = null, link = null, pan = null;
 stage.addEventListener('pointerdown', (e) => {
+  const delBtn = e.target.closest('[data-del]');
+  if (delBtn) {
+    e.stopPropagation();
+    노드삭제(delBtn.dataset.del);
+    return;
+  }
   const port = e.target.closest('.port'), nodeEl = e.target.closest('.node');
   const pt = () => { const r = stage.getBoundingClientRect(); return { x: (e.clientX - r.left - S.view.x) / S.view.z, y: (e.clientY - r.top - S.view.y) / S.view.z }; };
   if (port && nodeEl) {
@@ -305,7 +332,11 @@ $('#zIn').onclick = () => { S.view.z = Math.min(1.6, S.view.z + 0.1); draw(); };
 $('#zOut').onclick = () => { S.view.z = Math.max(0.4, S.view.z - 0.1); draw(); };
 $('#zFit').onclick = () => { S.view = { x: 40, y: 30, z: 1 }; draw(); };
 document.addEventListener('keydown', (e) => {
-  if ((e.key === 'Delete' || e.key === 'Backspace') && S.sel && document.activeElement === document.body) { 노드삭제(); }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && S.sel) {
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
+    노드삭제(S.sel);
+  }
 });
 
 // ── 노드 추가·삭제 ──
@@ -321,17 +352,32 @@ $('#addNode').onclick = () => {
     S.sel = n.id; closeModal(); 저장(true); draw(); 옆판();
   };
 };
-function 노드삭제() {
-  const n = S.wf?.nodes?.find((x) => x.id === S.sel); if (!n || n.type === 'start') return;
-  S.wf.nodes = S.wf.nodes.filter((x) => x.id !== S.sel);
-  S.wf.edges = (S.wf.edges || []).filter((e) => e.from !== S.sel && e.to !== S.sel);
-  S.sel = null; 저장(true); draw(); 옆판();
+function 노드삭제(targetId) {
+  const nid = targetId || S.sel;
+  const n = S.wf?.nodes?.find((x) => x.id === nid);
+  if (!n) { toast('삭제할 노드를 먼저 선택해 주세요'); return; }
+  if (n.type === 'start') { toast('시작 노드는 삭제할 수 없습니다'); return; }
+  const name = n.name || '노드';
+  S.wf.nodes = S.wf.nodes.filter((x) => x.id !== nid);
+  S.wf.edges = (S.wf.edges || []).filter((e) => e.from !== nid && e.to !== nid);
+  if (S.sel === nid) S.sel = null;
+  저장(true); draw(); 옆판();
+  toast(`"${name}" 노드를 삭제했어요`);
 }
-$('#delNode').onclick = 노드삭제;
+$('#delNode').onclick = () => 노드삭제(S.sel);
+$('#delNodeTop').onclick = () => 노드삭제(S.sel);
 $('#wfName').onchange = () => { if (!S.wf) return; S.wf.name = $('#wfName').value.trim() || '워크플로'; 저장(true); drawList(); };
 $('#wfEnabled').onchange = () => { if (!S.wf) return; S.wf.enabled = $('#wfEnabled').checked; 저장(true); drawList(); };
 $('#newWf').onclick = async () => { const id = uid(); const w = 새워크플로(); await setDoc(doc(db, 'workflows', id), w); S.list[id] = w; 고르기(id); toast('새 워크플로를 만들었어요'); };
-$('#delWf').onclick = async () => { if (!S.cur || !confirm('이 워크플로를 지울까요?')) return; await deleteDoc(doc(db, 'workflows', S.cur)); S.cur = null; S.wf = null; drawList(); draw(); 옆판(); };
+$('#delWf').onclick = async () => {
+  if (!S.cur) return;
+  const name = S.wf?.name || '현재 워크플로';
+  if (!confirm(`워크플로 "${name}" 전체를 완전히 삭제할까요?\n\n※ 개별 노드를 삭제하려면 노드를 클릭한 후 [🗑 노드 삭제]를 이용하세요.`)) return;
+  await deleteDoc(doc(db, 'workflows', S.cur));
+  S.cur = null; S.wf = null;
+  drawList(); draw(); 옆판();
+  toast(`"${name}" 워크플로를 삭제했습니다`);
+};
 $('#wfList').onclick = (e) => { const id = e.target.closest('[data-id]')?.dataset.id; if (id) 고르기(id); };
 $('#askMake').onclick = () => SANCHO.ask(`워크플로를 하나 만들어줘. db/workflows.json 에 아래 형식으로 넣으면 화면에 뜬다.
 형식: { "<id>": { "name": "이름", "enabled": true, "trigger": {"type":"schedule","time":"07:30"}, "nodes": [{"id":"n1","type":"schedule","name":"시작","x":60,"y":120,"config":{"time":"07:30"}}, …], "edges": [{"from":"n1","to":"n2","port":"out"}] } }
