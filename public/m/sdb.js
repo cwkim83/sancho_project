@@ -76,20 +76,27 @@
   // ---- 실시간(onSnapshot): 부모 창이 있으면 부모의 단일 SSE 를 공유하고, 단독 실행일 때만 자체 SSE 를 연다 ----
   const subs = new Set(); let es = null, unsubParent = null;
   function ensureES() {
-    try {
-      if (window.parent && window.parent !== window && typeof window.parent.__sancho_sub_events === 'function') {
-        if (!unsubParent) {
+    // 1) iframe 내부 실행 시: 절대 자체 EventSource를 열지 않고 부모의 단일 SSE 허브를 공유한다.
+    // (브라우저 호스트당 6개 TCP 연결 한도 고갈로 화면이 멈추는 문제를 원천 차단)
+    if (window.parent && window.parent !== window) {
+      if (unsubParent) return;
+      try {
+        if (typeof window.parent.__sancho_sub_events === 'function') {
           unsubParent = window.parent.__sancho_sub_events((m) => {
             for (const s of subs) if (!m.col || s.col === m.col) s.run();
           });
           window.addEventListener('unload', () => { if (unsubParent) { unsubParent(); unsubParent = null; } });
+          return;
         }
-        return;
-      }
-    } catch {}
+      } catch {}
+      // 부모 창이 아직 준비 중이면 200ms 후 다시 연결 시도 (자체 SSE는 절대 열지 않음)
+      setTimeout(ensureES, 200);
+      return;
+    }
 
+    // 2) 브라우저 독립 탭으로 단독 실행될 때만 자체 EventSource를 연다
     if (es) return;
-    try { es = new EventSource(withTok('/api/db/_events')); } catch { return; }
+    try { es = new EventSource(withTok('/api/db/_events?cid=standalone')); } catch { return; }
     es.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } for (const s of subs) if (!m.col || s.col === m.col) s.run(); };
     es.onerror = () => { try { es.close(); } catch {} es = null; setTimeout(ensureES, 3000); };
   }

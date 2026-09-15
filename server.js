@@ -287,6 +287,8 @@ function 관문() {
 let 재시작예약 = false;
 function 재시작() {   // 종료 코드 75 = sancho.bat 에게 "다시 켜라". 직접 node 로 켰으면 그냥 꺼진다.
   if (현재) { 재시작예약 = true; return '지금 하는 일이 끝나면'; }
+  for (const s of 구독자) { try { s.end(); s.destroy(); } catch {} }
+  구독자.clear(); sseMap.clear();
   setTimeout(() => process.exit(75), 500);
   return '지금';
 }
@@ -413,7 +415,13 @@ function 깊은병합(base, patch) {   // updateDoc: 'a.b' 점 경로 · increme
   return out;
 }
 const 구독자 = new Set();   // SSE 로 "컬렉션이 바뀌었다" 만 알린다(내용은 화면이 다시 읽는다)
+const sseMap = new Map();
 const 알림 = (m) => { const line = `data: ${JSON.stringify(m)}\n\n`; for (const r of 구독자) { try { r.write(line); } catch {} } };
+setInterval(() => {
+  for (const r of [...구독자]) {
+    try { r.write(': keepalive\n\n'); } catch { try { r.end(); r.destroy(); } catch {} 구독자.delete(r); }
+  }
+}, 20000);
 function db쓰기(col, id, data, merge) {
   const map = 컬렉션(col), now = new Date().toISOString(), old = map[id];
   map[id] = merge === 'deep' ? 깊은병합(old, data) : merge ? { ...(old || {}), ...data } : { ...data };
@@ -630,7 +638,15 @@ function 워크플로시계() {
 }
 
 // ---------- HTTP ----------
-const send = (res, code, body, type = 'application/json; charset=utf-8') => { res.writeHead(code, { 'content-type': type }); res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body)); };
+const send = (res, code, body, type = 'application/json; charset=utf-8') => {
+  res.writeHead(code, {
+    'content-type': type,
+    'cache-control': 'no-cache, no-store, must-revalidate',
+    'pragma': 'no-cache',
+    'expires': '0'
+  });
+  res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body));
+};
 const readBody = (req) => new Promise((ok) => { let b = ''; req.on('data', (c) => { b += c; }); req.on('end', () => { try { ok(JSON.parse(b || '{}')); } catch { ok({}); } }); });
 
 async function 채팅(req, res) {
@@ -683,7 +699,7 @@ async function 채팅(req, res) {
   현재 = { proc: 시도(), kind: '채팅', startedAt: Date.now() };
 }
 
-createServer(async (req, res) => {
+const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const route = `${req.method} ${url.pathname}`;
   const token = (req.headers.cookie || '').split(';').find(c => c.trim().startsWith('sancho_session='))?.split('=').slice(1).join('=') || req.headers['x-session'];
@@ -771,7 +787,7 @@ createServer(async (req, res) => {
     if ((req.method === 'GET' || req.method === 'HEAD') && url.pathname.startsWith('/m/')) {   // 플랫폼 모듈 화면(public/m/**) — iframe 으로 껍데기 안에 뜬다. HEAD 는 "있나" 확인용(부서 도구함 배지)
       const abs = resolve(join(ROOT, 'public', 'm', decodeURIComponent(url.pathname.slice(3))));
       if (!안에(abs, join(ROOT, 'public', 'm')) || !existsSync(abs) || !statSync(abs).isFile()) return send(res, 404, '없는 화면이에요', 'text/plain; charset=utf-8');
-      res.writeHead(200, { 'content-type': { ...MIME, '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.mjs': 'application/javascript; charset=utf-8', '.woff2': 'font/woff2', '.ico': 'image/x-icon' }[extname(abs).toLowerCase()] || 'application/octet-stream', 'cache-control': 'no-cache' });
+      res.writeHead(200, { 'content-type': { ...MIME, '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.mjs': 'application/javascript; charset=utf-8', '.woff2': 'font/woff2', '.ico': 'image/x-icon' }[extname(abs).toLowerCase()] || 'application/octet-stream', 'cache-control': 'no-cache, no-store, must-revalidate' });
       return createReadStream(abs).pipe(res);
     }
     if (route === 'GET /health') return send(res, 200, { ok: true, busy: 현재 ? 현재.kind : null, version: CLAUDE_VERSION });
@@ -783,10 +799,41 @@ createServer(async (req, res) => {
       const seg = url.pathname.split('/').slice(3).map((s) => decodeURIComponent(s)).filter(Boolean), [c, id] = seg;
       if (!seg.length) return send(res, 200, 컬렉션목록().map((n) => ({ name: n, count: Object.keys(컬렉션(n)).length })));
       if (c === '_events') {   // SSE: 어느 컬렉션이 바뀌었는지
-        res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache', connection: 'keep-alive' });
+        res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache, no-store, must-revalidate', 'pragma': 'no-cache', 'expires': '0', connection: 'keep-alive' });
         res.write('data: {"hello":true}\n\n');
+
+        const ip = req.socket?.remoteAddress || 'local';
+        const cid = url.searchParams.get('cid') || uid || 'def';
+        const clientKey = `${ip}:${cid}`;
+
+        // 동일 클라이언트(IP+cid) 이전 SSE 연결이 남아있으면 즉시 닫아서 브라우저 소켓 회수
+        const prev = sseMap.get(clientKey);
+        if (prev && prev !== res) {
+          try { prev.end(); prev.destroy(); } catch {}
+          구독자.delete(prev);
+        }
+        sseMap.set(clientKey, res);
+
+        // 동일 IP당 최대 2개로 제한 (초과 시 가장 오래된 연결 즉시 종료하여 6개 HTTP 한도 고갈 방지)
+        const ipClients = [...구독자].filter((r) => r._clientIp === ip);
+        if (ipClients.length >= 2) {
+          for (let k = 0; k <= ipClients.length - 2; k++) {
+            const old = ipClients[k];
+            try { old.end(); old.destroy(); } catch {}
+            구독자.delete(old);
+            if (old._clientKey) sseMap.delete(old._clientKey);
+          }
+        }
+
+        res._clientIp = ip;
+        res._clientKey = clientKey;
         구독자.add(res);
-        const del = () => 구독자.delete(res);
+
+        const del = () => {
+          구독자.delete(res);
+          if (sseMap.get(clientKey) === res) sseMap.delete(clientKey);
+          try { res.end(); res.destroy(); } catch {}
+        };
         req.on('close', del); req.on('error', del); res.on('close', del); res.on('error', del);
         return;
       }
@@ -951,7 +998,10 @@ createServer(async (req, res) => {
     send(res, 404, { error: 'not found' });
   } catch (e) { send(res, 500, { error: String(e?.message || e) }); }
   });
-}).on('error', (e) => {
+});
+server.keepAliveTimeout = 4000;
+server.headersTimeout = 6000;
+server.on('error', (e) => {
   if (e.code !== 'EADDRINUSE') throw e;
   console.log(`산초가 이미 켜져 있어요 → 브라우저에서 http://127.0.0.1:${PORT} 를 여세요`);   // sancho.bat 을 두 번 눌러도 놀라지 않게
   process.exit(0);

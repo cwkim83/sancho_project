@@ -314,6 +314,41 @@
 const $ = (s) => document.querySelector(s);
 const col = $('#col'), logEl = $('#log'), input = $('#in'), sendBtn = $('#send'), comp = $('#composer');
 let busy = false, pending = [], showAll = false;   // pending: 첨부 대기 File 목록
+
+// ── 전역 단일 SSE 허브: 모든 모듈(iframe)과 부모 창이 단 1개의 SSE 연결을 공유 ──
+// (브라우저의 호스트당 최대 6개 동시 HTTP 연결 제한으로 각 iframe 이 SSE 를 열면 화면이 영구 정지되는 문제 원천 차단)
+window.__sancho_tab_id = window.__sancho_tab_id || (Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
+window.__sancho_sse_subscribers = window.__sancho_sse_subscribers || new Set();
+window.__sancho_sub_events = function(fn) {
+  window.__sancho_sse_subscribers.add(fn);
+  return () => window.__sancho_sse_subscribers.delete(fn);
+};
+let sharedES = null;
+function initSharedES() {
+  if (sharedES) return;
+  try {
+    const q = '?cid=' + encodeURIComponent(window.__sancho_tab_id) + (tok() ? '&token=' + encodeURIComponent(tok()) : '');
+    sharedES = new EventSource('/api/db/_events' + q);
+    let t = 0;
+    sharedES.onmessage = (e) => {
+      let m; try { m = JSON.parse(e.data); } catch { return; }
+      if (m.col === 'depts' && typeof 부서읽기 === 'function') 부서읽기();
+      if (['messages', 'channels', 'mail', 'approvals'].includes(m.col) && typeof 배지갱신 === 'function') {
+        clearTimeout(t); t = setTimeout(배지갱신, 400);
+      }
+      for (const fn of window.__sancho_sse_subscribers) {
+        try { fn(m); } catch {}
+      }
+    };
+    sharedES.onerror = () => {
+      try { sharedES.close(); } catch {}
+      sharedES = null;
+      setTimeout(initSharedES, 3000);
+    };
+  } catch {}
+}
+initSharedES();
+
 const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 if (window.marked) marked.use({ breaks: true, renderer: { html: (h) => esc(typeof h === 'string' ? h : (h && h.text) || '') } });   // 답에 섞인 날 HTML 은 글자로
 const md = (t) => window.marked ? marked.parse(String(t)) : '<p>' + esc(t).replace(/\n/g, '<br>') + '</p>';
@@ -333,7 +368,16 @@ $('#theme').onchange = (e) => applyTheme(e.target.value);
 const tok = () => localStorage.sancho_token || '';
 const hdr = () => ({ 'content-type': 'application/json', ...(tok() ? { 'x-token': tok() } : {}) });
 async function api(path, body, retried) {
-  const r = await fetch(path, { method: body ? 'POST' : 'GET', headers: hdr(), body: body ? JSON.stringify(body) : undefined });
+  const ctrl = new AbortController();
+  const tm = setTimeout(() => ctrl.abort(), 12000);
+  let r;
+  try {
+    r = await fetch(path, { method: body ? 'POST' : 'GET', headers: hdr(), body: body ? JSON.stringify(body) : undefined, signal: ctrl.signal });
+  } catch (err) {
+    clearTimeout(tm);
+    throw err;
+  }
+  clearTimeout(tm);
   if (r.status === 401 && !retried) {
     // 로그인이 풀렸는지 먼저 본다 — 풀렸으면 토큰을 묻지 말고 로그인 화면으로(화면이 통째로 멈춘 것처럼 보이던 문제)
     const st = await fetch('/api/auth/status').then((x) => x.json()).catch(() => null);
@@ -500,42 +544,49 @@ async function send() {
   const paths = [];
   try { for (const f of files) paths.push(await upload(f)); } catch (e) { addCard('첨부 실패', [e.message], true); 버튼(false); return; }
   addUser(text, paths.map((p, i) => ({ path: p, name: files[i].name })));
-  const r = await fetch('/api/chat', { method: 'POST', headers: hdr(), body: JSON.stringify({ text, files: paths, voice }) });
-  if (!r.ok) { const e = await r.json().catch(() => ({})); addCard('오류', [e.error || ('오류 ' + r.status)], true); 버튼(false); return; }
-  const think = el('think', '<span class="spin">✳</span> 생각 중…');
-  const reader = r.body.getReader(), dec = new TextDecoder();
-  let buf = '', bot = null, acc = '', gotDone = false, raf = 0; const edited = new Map();
-  const render = () => { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; if (bot) bot.innerHTML = md(acc); logEl.scrollTop = logEl.scrollHeight; }); };
+
+  let r;
   try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
-      let i;
-      while ((i = buf.indexOf('\n\n')) >= 0) {
-        const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
-        if (!chunk.startsWith('data: ')) continue;
-        let e; try { e = JSON.parse(chunk.slice(6)); } catch { continue; }
-        if (e.t === 'delta') { acc += e.text; if (!bot) bot = el('bot'); render(); col.appendChild(think); }
-        else if (e.t === 'text') { acc += (acc ? '\n\n' : '') + e.text; if (!bot) bot = el('bot'); render(); col.appendChild(think); }
-        else if (e.t === 'tool') { addTool(e.name, e.input); window.PAISNeural?.pulse?.(); if (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(e.name) && e.input) edited.set(e.input, { path: e.input, name: e.input.split(/[\\/]/).pop() }); col.appendChild(think); }
-        else if (e.t === 'files') for (const f of e.files) edited.set(f.path, f);
-        else if (e.t === 'note') el('note', e.text);
-        else if (e.t === 'done') {
-          gotDone = true; think.remove(); if (e.session) col.dataset.sid = e.session;
-          if (!e.ok) addCard('⚠️ 실패', [e.text], true);
-          else { if (edited.size) fileCard(`파일 ${edited.size}개`, [...edited.values()]); if (e.ms) el('note', '✓ ' + (e.ms / 1000).toFixed(1) + '초'); }
+    r = await fetch('/api/chat', { method: 'POST', headers: hdr(), body: JSON.stringify({ text, files: paths, voice }) });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); addCard('오류', [e.error || ('오류 ' + r.status)], true); return; }
+    const think = el('think', '<span class="spin">✳</span> 생각 중…');
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    let buf = '', bot = null, acc = '', gotDone = false, raf = 0; const edited = new Map();
+    const render = () => { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; if (bot) bot.innerHTML = md(acc); logEl.scrollTop = logEl.scrollHeight; }); };
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf('\n\n')) >= 0) {
+          const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
+          if (!chunk.startsWith('data: ')) continue;
+          let e; try { e = JSON.parse(chunk.slice(6)); } catch { continue; }
+          if (e.t === 'delta') { acc += e.text; if (!bot) bot = el('bot'); render(); col.appendChild(think); }
+          else if (e.t === 'text') { acc += (acc ? '\n\n' : '') + e.text; if (!bot) bot = el('bot'); render(); col.appendChild(think); }
+          else if (e.t === 'tool') { addTool(e.name, e.input); window.PAISNeural?.pulse?.(); if (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(e.name) && e.input) edited.set(e.input, { path: e.input, name: e.input.split(/[\\/]/).pop() }); col.appendChild(think); }
+          else if (e.t === 'files') for (const f of e.files) edited.set(f.path, f);
+          else if (e.t === 'note') el('note', e.text);
+          else if (e.t === 'done') {
+            gotDone = true; think.remove(); if (e.session) col.dataset.sid = e.session;
+            if (!e.ok) addCard('⚠️ 실패', [e.text], true);
+            else { if (edited.size) fileCard(`파일 ${edited.size}개`, [...edited.values()]); if (e.ms) el('note', '✓ ' + (e.ms / 1000).toFixed(1) + '초'); }
+          }
+          else if (e.t === 'selfedit') addCard('🔁 산초 자기 수정', [e.text], !e.ok);
+          logEl.scrollTop = logEl.scrollHeight;
         }
-        else if (e.t === 'selfedit') addCard('🔁 산초 자기 수정', [e.text], !e.ok);
-        logEl.scrollTop = logEl.scrollHeight;
       }
-    }
-  } catch {}
-  think.remove(); if (bot) bot.innerHTML = md(acc);
-  if (!gotDone) el('note', '연결이 끊겼어요 — 재시작 중이면 몇 초 뒤 돌아옵니다');
-  버튼(false); refresh(); 배지갱신();
-  if ((voice || prefs.tts) && acc) speak(acc, voice ? 호출대기시작 : null);
-  else if (voice) 호출대기시작();
+    } catch (readErr) {}
+    think.remove(); if (bot) bot.innerHTML = md(acc);
+    if (!gotDone) el('note', '연결이 끊겼어요 — 재시작 중이면 몇 초 뒤 돌아옵니다');
+    if ((voice || prefs.tts) && acc) speak(acc, voice ? 호출대기시작 : null);
+    else if (voice) 호출대기시작();
+  } catch (netErr) {
+    addCard('⚠️ 연결 오류', ['서버와 통신할 수 없습니다: ' + (netErr.message || '네트워크 오류')], true);
+  } finally {
+    버튼(false); brain(false); refresh(); 배지갱신();
+  }
 }
 
 sendBtn.onclick = () => busy ? (speechSynthesis?.cancel?.(), api('/api/stop', {})) : send();
@@ -752,38 +803,6 @@ async function 부서읽기() {
   depts = ds.map((d) => ({ id: d.id, name: d.data?.name || d.id, icon: d.data?.icon || '🏢', li: d.data?.li || 'building-2', order: Number(d.data?.order) || 99 })).sort((a, b) => a.order - b.order);
   renderNav();
 }
-// 전역 단일 SSE 허브: 모든 모듈(iframe)과 부모 창이 단 1개의 SSE 연결을 공유한다.
-// (브라우저의 호스트당 최대 6개 동시 HTTP 연결 제한으로 각 iframe 이 SSE 를 열면 7번째 메뉴부터 화면이 영구 정지되는 문제 원천 차단)
-window.__sancho_sse_subscribers = window.__sancho_sse_subscribers || new Set();
-window.__sancho_sub_events = function(fn) {
-  window.__sancho_sse_subscribers.add(fn);
-  return () => window.__sancho_sse_subscribers.delete(fn);
-};
-let sharedES = null;
-function initSharedES() {
-  if (sharedES) return;
-  try {
-    sharedES = new EventSource('/api/db/_events' + (tok() ? '?token=' + encodeURIComponent(tok()) : ''));
-    let t = 0;
-    sharedES.onmessage = (e) => {
-      let m; try { m = JSON.parse(e.data); } catch { return; }
-      if (m.col === 'depts') 부서읽기();
-      if (['messages', 'channels', 'mail', 'approvals'].includes(m.col)) {
-        clearTimeout(t); t = setTimeout(배지갱신, 400);
-      }
-      for (const fn of window.__sancho_sse_subscribers) {
-        try { fn(m); } catch {}
-      }
-    };
-    sharedES.onerror = () => {
-      try { sharedES.close(); } catch {}
-      sharedES = null;
-      setTimeout(initSharedES, 3000);
-    };
-  } catch {}
-}
-initSharedES();
-
 // ---- 대시보드 인사말(플랫폼 대시보드 헤더) — 대화가 비어 있을 때 채팅 위에 ----
 let 요약캐시 = null, 요약시각 = 0;
 async function 인사말() {
@@ -844,7 +863,11 @@ const empty = (t) => `<div class="hint" style="padding:4px 8px">${t}</div>`;
 const sessItem = (x, cur) => `<div class="item ${x.id === cur ? 'active' : ''}" data-sid="${esc(x.id)}" title="${esc(x.title)}"><span>${esc(x.title)}</span><span class="t">${ago(x.ts)}</span><span class="acts"><button data-pin="${esc(x.id)}" data-pinned="${x.pinned ? 1 : 0}" title="${x.pinned ? '고정 해제' : '고정 (3개까지)'}">${x.pinned ? '📍' : '📌'}</button><button data-del="${esc(x.id)}" title="목록에서 지우기">✕</button></span></div>`;
 async function refresh() {
   let s;
-  try { s = await api('/api/state'); if (s.error) throw new Error(s.error); } catch { $('#status').innerHTML = '<span class="led" style="background:#c33"></span> 서버 응답 없음 — 재시작 중이면 곧 돌아와요'; return; }
+  try { s = await api('/api/state'); if (s.error) throw new Error(s.error); } catch {
+    $('#status').innerHTML = '<span class="led" style="background:#c33"></span> 서버 재연결 중…';
+    setTimeout(refresh, 3000);
+    return;
+  }
   lastState = s;
   if (s.settings?.owner) { me = { ...me, ...s.settings.owner }; ownerUI(); }
   if (JSON.stringify(s.modules) !== JSON.stringify(있는모듈)) {   // 새 화면이 생기면(자기 수정·업데이트) 메뉴가 바로 켜진다
