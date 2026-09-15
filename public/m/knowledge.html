@@ -12,9 +12,11 @@
   --k-okr: #DB2777; --k-user: #0891B2; --k-dept: #64748B; --k-wiki: #CA8A04; --k-wbs: #0EA5E9;
 }
 :root[data-theme=dark] { --k-okr: #F472B6; --k-user: #22D3EE; --k-dept: #94A3B8; --k-wiki: #FBBF24; --k-wbs: #38BDF8; }
+html, body { height: 100%; overflow: hidden; }
+body { display: flex; flex-direction: column; }
 [hidden] { display: none !important; }
-.content-pad { display: flex; flex-direction: column; min-height: 100%; }
-#pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.content-pad { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
+#pane { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 
 /* ── 지도 ── */
 .k-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
@@ -32,9 +34,8 @@
 .sw.diamond { transform: rotate(45deg); border-radius: 1px; }
 .sw.triangle { clip-path: polygon(50% 0, 100% 100%, 0 100%); }
 .sw.hexagon { clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
-.sw.star { clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); }
-.gwrap { flex: 1; min-height: 420px; display: flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--card); position: relative; box-shadow: var(--shadow); }
-#graph { flex: 1; min-width: 0; background: var(--bg2); }
+.gwrap { flex: 1; min-height: 0; display: flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--card); position: relative; box-shadow: var(--shadow); }
+#graph { flex: 1; min-width: 0; height: 100%; background: var(--bg2); overflow: hidden; }
 .hintbar { position: absolute; left: 12px; bottom: 10px; font-size: 11px; color: var(--text-light); background: var(--card); border: 1px solid var(--border-light); padding: 4px 10px; border-radius: 8px; pointer-events: none; opacity: .92; }
 .gmsg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 30px; font-size: 13px; color: var(--text-light); background: var(--bg2); line-height: 1.8; }
 .side { width: 0; transition: width .15s; background: var(--card); border-left: 1px solid var(--border); overflow-y: auto; overflow-x: hidden; flex: none; }
@@ -52,7 +53,7 @@
 .rel .r .go:hover { color: var(--primary); }
 
 /* ── 노트 ── */
-.nt-wrap { flex: 1; min-height: 0; display: flex; gap: 14px; }
+.nt-wrap { flex: 1; min-height: 0; display: flex; gap: 14px; overflow: hidden; }
 .nt-list { width: 260px; flex: none; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
 .nt-top { display: flex; flex-direction: column; gap: 6px; }
 .nt-items { overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); min-height: 120px; flex: 1; }
@@ -272,12 +273,13 @@ function build() {
   $('gmsg').hidden = vn.length > 0;
   if (!vn.length) $('gmsg').innerHTML = '그릴 기록이 아직 없습니다.<br>프로젝트·회의·노트가 쌓이면 여기에 지도가 그려집니다.';
 
-  if (S.net) { S.net.setData({ nodes: S.nodes, edges: S.edges }); return; }
+  if (S.net) { S.net.setData({ nodes: S.nodes, edges: S.edges }); S.net.redraw(); return; }
   S.net = new vis.Network($('graph'), { nodes: S.nodes, edges: S.edges }, {
     physics: { solver: 'forceAtlas2Based', forceAtlas2Based: { gravitationalConstant: -45, springLength: 100 }, stabilization: { iterations: 140 } },
     interaction: { hover: true },
     nodes: { borderWidth: 0 },
   });
+  S.net.once('stabilizationIterationsDone', () => { S.net.fit(); });
   S.net.on('click', (p) => { p.nodes.length ? focusNode(p.nodes[0]) : clearFocus(); });
 }
 
@@ -448,7 +450,11 @@ document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-a]'); if (!el) return;
   const a = el.dataset.a, v = el.dataset.v;
   switch (a) {
-    case 'tab': V.tab = v; try { localStorage.knowledge_tab = v; } catch {} render(); break;
+    case 'tab':
+      V.tab = v; try { localStorage.knowledge_tab = v; } catch {}
+      render();
+      if (v === 'graph' && S.net) { setTimeout(() => { S.net.setSize('100%', '100%'); S.net.fit(); }, 40); }
+      break;
     case 'tog': V.show[v] = !V.show[v]; paintLegend(); clearFocus(); graphRefresh(); break;
     case 'fit': clearFocus(); if (S.net) S.net.fit({ animation: true }); break;
     case 'relayout': clearFocus(); if (S.net) { S.net.stabilize(160); S.net.fit({ animation: true }); toast('다시 배치했습니다'); } break;
@@ -471,6 +477,7 @@ document.addEventListener('keydown', (e) => {
   if (hit) { try { S.net.focus(hit, { scale: 1.3, animation: true }); } catch {} focusNode(hit); }
   else toast(`"${e.target.value}" 노드를 찾지 못했습니다`);
 });
+window.addEventListener('resize', () => { if (S.net && V.tab === 'graph') { S.net.setSize('100%', '100%'); S.net.redraw(); } });
 
 // ═══════════════ 시작 ═══════════════
 async function boot() {
