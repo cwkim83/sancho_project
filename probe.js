@@ -87,6 +87,6 @@ for (const c of 오류) console.log('  ❌ ' + c.text.slice(0, 400));
 for (const c of 경고.slice(0, 10)) console.log('  ⚠️ ' + c.text.slice(0, 200));
 for (const r of 실패응답.slice(0, 10)) console.log('  🌐 ' + r.slice(0, 200));
 for (const c of 콘솔.filter((c) => c.level === 'log').slice(0, 10)) console.log('  · ' + c.text.slice(0, 200));
-if (시킨결과 !== null) console.log('시킨 JS 결과: ' + JSON.stringify(시킨결과, null, 1).slice(0, 2000));
+if (시킨결과 !== null) console.log('시킨 JS 결과: ' + String(JSON.stringify(시킨결과, null, 1) ?? 시킨결과).slice(0, 2000));
 청소();
 process.exit(오류.length || 실패응답.length ? 1 : 0);

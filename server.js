@@ -711,6 +711,10 @@ const server = createServer(async (req, res) => {
   // 산초는 본디 "내 PC 의 개인 비서" 라서 혼자 쓸 땐 로그인이 걸리적거린다. 여럿이 쓰거나 밖으로 열면 자동으로 꺼진다.
   if (!uid && 로컬접속(req) && !밖으로열림 && 기계설정().localNoLogin !== false) uid = 첫계정();
   if (uid && !이사한.has(uid)) { 이사한.add(uid); 이사(uid); }   // 그 사람 폴더가 비어 있으면 옛 데이터를 한 번 옮겨 준다
+  if (existsSync(join(DATA, 'reqlog.on'))) {   // 진단용: 어느 브라우저가 무엇을 물었고 무엇을 받았는지 (data/reqlog.txt)
+    const 시작 = Date.now(), ua = String(req.headers['user-agent'] || '').slice(-45);
+    res.on('finish', () => { try { appendFileSync(join(DATA, 'reqlog.txt'), `${new Date().toTimeString().slice(0, 8)} ${route} -> ${res.statusCode} ${Date.now() - 시작}ms uid=${uid || '-'} ua=${ua}\n`); } catch {} });
+  }
 
   sessionContext.run(uid, async () => {
     try {

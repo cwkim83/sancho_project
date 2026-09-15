@@ -67,7 +67,8 @@ const th = localStorage.sancho_theme; if (th === 'light' || th === 'dark') docum
 window.addEventListener('message', (e) => { if (e.data?.sancho && e.data.act === 'theme') document.documentElement.dataset.theme = e.data.theme || ''; });
 // 프로젝트 화면(iframe) 안에서 열렸을 때(?embed=1): 뒤로 가기 버튼
 if (new URLSearchParams(location.search).get('embed')) { const b = document.getElementById('back'); b.hidden = false; b.onclick = () => { if (history.length > 1) history.back(); else location.href = '/m/projects.html'; }; }
-const tok = () => localStorage.sancho_token || '';
+// 헤더는 ASCII 만 — 한글 섞인 토큰은 버린다(안 버리면 fetch 가 통째로 터진다)
+const tok = () => { try { const t = localStorage.sancho_token || ''; if (t && !/^[\x20-\x7E]*$/.test(t)) { delete localStorage.sancho_token; return ''; } return t; } catch { return ''; } };
 const hdr = () => ({ 'content-type': 'application/json', ...(tok() ? { 'x-token': tok() } : {}) });
 const api = async (p, body) => (await fetch(p, { method: body ? 'POST' : 'GET', headers: hdr(), body: body ? JSON.stringify(body) : undefined })).json();
 let cur = null, data = null, collapsed = new Set(), allCollapsed = false;

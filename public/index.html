@@ -365,7 +365,9 @@ function applyTheme(v) { if (v === 'dark') document.documentElement.dataset.them
 $('#theme').onchange = (e) => applyTheme(e.target.value);
 
 // ---- 접속 토큰(밖에서 쓸 때): 모든 API 에 헤더로, 이미지·링크엔 쿼리로 ----
-const tok = () => localStorage.sancho_token || '';
+// 헤더에는 ASCII 만 들어갈 수 있다 — 한글 등이 섞인 토큰은 버린다(안 버리면 fetch 자체가 터져 화면 전체가 "연결 오류")
+const asciiTok = (t) => (/^[\x20-\x7E]*$/.test(t) ? t : '');
+const tok = () => { try { const t = localStorage.sancho_token || ''; if (t && !asciiTok(t)) { delete localStorage.sancho_token; return ''; } return t; } catch { return ''; } };
 const hdr = () => ({ 'content-type': 'application/json', ...(tok() ? { 'x-token': tok() } : {}) });
 async function api(path, body, retried) {
   const ctrl = new AbortController();
@@ -382,7 +384,9 @@ async function api(path, body, retried) {
     // 로그인이 풀렸는지 먼저 본다 — 풀렸으면 토큰을 묻지 말고 로그인 화면으로(화면이 통째로 멈춘 것처럼 보이던 문제)
     const st = await fetch('/api/auth/status').then((x) => x.json()).catch(() => null);
     if (st && !st.loggedIn) { location.href = '/login.html?next=' + encodeURIComponent(location.pathname + location.hash); return {}; }
-    const t = prompt('접속 토큰을 입력하세요 (⚙ 설정의 "외부 접속 토큰")'); if (t) { localStorage.sancho_token = t; return api(path, body, true); }
+    const t = prompt('접속 토큰을 입력하세요 (⚙ 설정의 "외부 접속 토큰") — 영문·숫자·기호만');
+    if (t && !asciiTok(t.trim())) { alert('토큰에는 한글을 쓸 수 없습니다. 설정의 "외부 접속 토큰" 값을 그대로 붙여넣으세요.'); return {}; }
+    if (t) { localStorage.sancho_token = t.trim(); return api(path, body, true); }
   }
   return r.json();
 }

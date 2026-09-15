@@ -155,7 +155,7 @@
   async function fetchVault() {
     if (src === 'orb') return;   // 오브 모드에선 그래프를 아예 읽지 않는다(주기 갱신 포함)
     try {
-      const tok = localStorage.getItem('sancho_token') || '';
+      const tok = (localStorage.getItem('sancho_token') || '').replace(/[^\x20-\x7E]/g, '');  // 헤더는 ASCII 만
       const res = await fetch(src === 'code' ? '/api/graph' : '/api/graph', {
         headers: tok ? { 'x-token': tok } : {},
         cache: 'no-store',
@@ -675,7 +675,7 @@
     info.classList.remove('hidden');
     if (!isNote) return; if (n.text) { const b0 = info.querySelector('.ni-body'); if (b0) b0.textContent = n.text; return; }
     try {
-      const tok = localStorage.getItem('sancho_token') || '';
+      const tok = (localStorage.getItem('sancho_token') || '').replace(/[^\x20-\x7E]/g, '');  // 헤더는 ASCII 만
       const r = await fetch('/api/file?path=' + encodeURIComponent(n.id),
         { headers: tok ? { 'x-token': tok } : {} });
       const d = await r.json();
