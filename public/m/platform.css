@@ -106,16 +106,16 @@ a { color: var(--primary); }
 .mod-sub { color: var(--text-light); font-size: 13px; margin-top: 4px; }
 
 /* ── 공용 부품 ── */
-.btn { padding: 7px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--white); cursor: pointer; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; color: var(--text); transition: background .12s, border-color .12s; }
-.btn:hover { background: var(--bg2); border-color: #D5D9E0; }
+.btn { padding: 7px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--white); cursor: pointer; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; color: var(--text); transition: background .12s, border-color .12s, color .12s, box-shadow .12s; }
+.btn:hover { background: var(--bg2); border-color: #D5D9E0; color: var(--text); }
 .btn:disabled { opacity: .5; cursor: default; }
-.btn-primary { background: var(--primary); color: white; border-color: var(--primary); font-weight: 600; }
-.btn-primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
-.btn-danger { color: var(--danger); border-color: #F5C2C4; } .btn-danger:hover { background: #FEF2F2; }
-.btn-ghost { border-color: transparent; background: transparent; } .btn-ghost:hover { background: var(--bg2); }
+.btn-primary, .btn.btn-primary { background: var(--primary) !important; color: #ffffff !important; border-color: var(--primary) !important; font-weight: 600; }
+.btn-primary:hover, .btn.btn-primary:hover { background: var(--primary-hover) !important; border-color: var(--primary-hover) !important; color: #ffffff !important; box-shadow: 0 2px 8px rgba(30,111,217,0.25); }
+.btn-danger, .btn.btn-danger { color: var(--danger); border-color: #F5C2C4; } .btn-danger:hover, .btn.btn-danger:hover { background: #FEF2F2; border-color: var(--danger); color: var(--danger); }
+.btn-ghost, .btn.btn-ghost { border-color: transparent; background: transparent; color: var(--text); } .btn-ghost:hover, .btn.btn-ghost:hover { background: var(--bg2); color: var(--text); }
 .btn-sm { padding: 4px 10px; font-size: 12px; border-radius: 6px; }
-.btn-ai { background: linear-gradient(135deg, #2F7FE6, #7C5CE6); color: #fff; border: 0; font-weight: 600; }
-.btn-ai:hover { filter: brightness(1.06); }
+.btn-ai, .btn.btn-ai { background: linear-gradient(135deg, #2F7FE6, #7C5CE6) !important; color: #ffffff !important; border: 0 !important; font-weight: 600; }
+.btn-ai:hover, .btn.btn-ai:hover { background: linear-gradient(135deg, #236CC8, #6D4CD8) !important; color: #ffffff !important; filter: brightness(1.08); box-shadow: 0 4px 12px rgba(124,92,230,0.35); }
 .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow); }
 .card h3 { font-size: 14px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
 .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
@@ -144,8 +144,10 @@ a { color: var(--primary); }
 .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
 .toolbar .sp { flex: 1; }
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--white); }
-.seg button { border: 0; background: transparent; padding: 6px 12px; font-size: 12.5px; cursor: pointer; color: var(--text-light); }
-.seg button.on { background: var(--primary); color: #fff; font-weight: 600; }
+.seg button { border: 0; background: transparent; padding: 6px 12px; font-size: 12.5px; cursor: pointer; color: var(--text-light); transition: background .12s, color .12s; }
+.seg button:hover { background: var(--bg2); color: var(--text); }
+.seg button.on { background: var(--primary) !important; color: #ffffff !important; font-weight: 600; }
+.seg button.on:hover { background: var(--primary-hover) !important; color: #ffffff !important; }
 .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
 .tab { padding: 9px 14px; font-size: 13px; cursor: pointer; color: var(--text-light); border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .tab:hover { color: var(--text); } .tab.on { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }

@@ -6,8 +6,10 @@
 /* 캘린더 모듈 전용 — 세종 플랫폼 v2 calendar() 화면을 옮기고 색은 전부 변수로 */
 .cal-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
 .cal-legend { display: flex; gap: 6px; font-size: 12px; flex-wrap: wrap; }
-.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border: 1px solid var(--border); border-radius: 20px; background: var(--white); cursor: pointer; user-select: none; color: var(--text-light); }
-.chip.on { color: var(--text); border-color: var(--primary); background: var(--primary-lighter); }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border: 1px solid var(--border); border-radius: 20px; background: var(--white); cursor: pointer; user-select: none; color: var(--text-light); transition: all .15s; }
+.chip:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-lighter); }
+.chip.on { color: var(--text); border-color: var(--primary); background: var(--primary-lighter); font-weight: 500; }
+.chip.on:hover { border-color: var(--primary-hover); background: var(--primary-light); color: var(--primary); }
 .chip .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; opacity: .35; }
 .chip.on .dot { opacity: 1; }
 .dot.blue { background: var(--primary); } .dot.green { background: var(--success); } .dot.orange { background: var(--warning); } .dot.red { background: var(--danger); } .dot.purple { background: var(--purple); } .dot.gray { background: var(--text-lighter); }
