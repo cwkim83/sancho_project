@@ -814,17 +814,8 @@ const server = createServer(async (req, res) => {
         }
         sseMap.set(clientKey, res);
 
-        // 동일 IP당 최대 2개로 제한 (초과 시 가장 오래된 연결 즉시 종료하여 6개 HTTP 한도 고갈 방지)
-        const ipClients = [...구독자].filter((r) => r._clientIp === ip);
-        if (ipClients.length >= 2) {
-          for (let k = 0; k <= ipClients.length - 2; k++) {
-            const old = ipClients[k];
-            try { old.end(); old.destroy(); } catch {}
-            구독자.delete(old);
-            if (old._clientKey) sseMap.delete(old._clientKey);
-          }
-        }
-
+        // IP 로는 세지 않는다 — 한 컴퓨터의 모든 탭이 127.0.0.1 이라 탭을 3개만 열어도
+        // 서로를 끊어 "서버 재연결 중…" 무한 반복이 된다(2026-09-15). 탭당 1개는 위 cid 로 이미 보장된다.
         res._clientIp = ip;
         res._clientKey = clientKey;
         구독자.add(res);

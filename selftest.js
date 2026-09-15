@@ -144,6 +144,21 @@ async function 시험() {
     await Promise.race([읽기, new Promise((r) => setTimeout(r, 3000))]);
     assert.ok(받음.includes('"col":"projects"'), `db 변경 알림(SSE) — 받은 것: ${받음.slice(0, 120)}`);
     ac.abort();
+    // 여러 탭이 같이 열려 있어도 서로 끊지 않는다 — 한 컴퓨터의 탭은 IP 가 모두 같아서, IP 로 세면 "서버 재연결 중…" 무한 반복이 된다(2026-09-15)
+    {
+      const 상태 = {}, 끊기 = new AbortController();
+      const 열기 = (cid) => fetch(`${BASE}/api/db/_events?cid=${cid}`, { signal: 끊기.signal }).then(async (r) => {
+        상태[cid] = '열림'; const rd = r.body.getReader();
+        try { for (;;) { const { done } = await rd.read(); if (done) { 상태[cid] = '끊김'; break; } } } catch {}
+      });
+      for (const cid of ['탭1', '탭2', '탭3', '탭4']) 열기(cid);
+      await new Promise((r) => setTimeout(r, 1200));
+      assert.deepEqual(Object.values(상태), ['열림', '열림', '열림', '열림'], `탭 4개 동시 접속 — ${JSON.stringify(상태)}`);
+      열기('탭1');   // 같은 탭이 새로고침하면 그 탭의 옛 연결만 정리된다
+      await new Promise((r) => setTimeout(r, 800));
+      assert.equal(상태.탭2, '열림', '새로고침이 다른 탭을 끊지 않는다');
+      끊기.abort();
+    }
     // 플랫폼 화면 파일 서빙과 경계
     assert.equal((await fetch(`${BASE}/m/platform.css`)).status, 200, 'platform.css 제공');
     assert.equal((await fetch(`${BASE}/m/sdb.js`)).status, 200, 'sdb.js 제공');
