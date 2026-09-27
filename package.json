@@ -1,0 +1,11 @@
+{
+  "name": "sancho",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "산초 — 챗창 있는 대시보드. 두뇌는 내 Claude Code.",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node selftest.js"
+  }
+}

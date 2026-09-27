@@ -1,0 +1,22 @@
+data/
+.claude/
+node_modules/
+*.log
+log.txt
+log_err.txt
+run_bg.bat
+
+# 임시·패치 스크립트(도구가 만든 것)
+update_*.cjs
+patch_*.cjs
+fix_*.cjs
+temp*.html
+
+Sancho-old-startup.lnk.bak
+
+# 개발 중 임시 스크립트(인증 끄기·디버그 포함) — 공개 저장소에 다시 올라가지 않게 (2026-09-27)
+*.cjs
+bypass_*
+disable_*
+debug*
+사업노트.md

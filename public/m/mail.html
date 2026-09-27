@@ -1,0 +1,213 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>산초 · 메일정리</title>
+<link rel="stylesheet" href="/m/platform.css">
+<script src="/m/sdb.js"></script>
+<style>
+/* 메일정리 — 대시보드 'Cowork AI 브리핑' 배너·핵심 액션·긴급 답변 대기 모양을 옮겼다. 색은 전부 변수 */
+.banner { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; padding: 18px 22px; border-radius: 14px; border: 1px solid var(--border); background: linear-gradient(135deg, var(--primary-lighter), var(--primary-light)); box-shadow: var(--shadow); }
+.banner .ico { font-size: 32px; }
+.banner .tx { flex: 1; min-width: 200px; }
+.banner .tt { font-size: 16px; font-weight: 700; color: var(--primary); }
+.banner .st { font-size: 12px; color: var(--text-light); margin-top: 3px; }
+.banner .bt { display: flex; gap: 8px; flex-wrap: wrap; }
+.kpi-value.red { color: var(--danger); }
+.act { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--border-light); }
+.act:last-child { border-bottom: 0; }
+.nbadge { width: 22px; height: 22px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+.nbadge.hot { background: var(--danger); }
+.act .body { flex: 1; min-width: 0; }
+.act .txt { font-size: 13px; font-weight: 500; }
+.act .sub { font-size: 11px; color: var(--text-light); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.act .btns { display: flex; gap: 4px; flex-wrap: wrap; flex-shrink: 0; }
+.tag { display: inline-block; font-size: 10px; color: var(--primary); font-weight: 600; background: var(--primary-lighter); border: 1px solid var(--primary-light); padding: 1px 6px; border-radius: 4px; margin-left: 4px; vertical-align: middle; }
+.due { font-size: 11px; color: var(--warning); font-weight: 600; margin-left: 6px; }
+.due.late { color: var(--danger); }
+.chips { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--border); background: var(--white); border-radius: 14px; padding: 3px 10px; font-size: 12px; cursor: pointer; color: var(--text-light); }
+.chip:hover { background: var(--bg2); }
+.chip.on { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+.toolbar .fi { width: 220px; } .toolbar .fs { width: auto; }
+.list { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.dhd { padding: 8px 14px; background: var(--bg2); font-size: 12px; font-weight: 700; color: var(--text-light); border-bottom: 1px solid var(--border-light); display: flex; gap: 8px; align-items: center; }
+.mrow { display: grid; grid-template-columns: 22px 64px 150px 1fr auto 56px; gap: 10px; align-items: center; padding: 9px 14px; border-bottom: 1px solid var(--border-light); cursor: pointer; font-size: 13px; }
+.mrow:last-child { border-bottom: 0; }
+.mrow:hover { background: var(--primary-lighter); }
+.mrow.dim { opacity: .5; }
+.mrow.done .subj { text-decoration: line-through; color: var(--text-light); }
+.mrow input { margin: 0; cursor: pointer; }
+.mrow .from { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mrow .subj { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mrow .sum { color: var(--text-light); font-weight: 400; }
+.mrow .when { font-size: 11px; color: var(--text-light); text-align: right; }
+.mrow .pills { display: flex; gap: 4px; align-items: center; }
+.bulk { display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin-bottom: 10px; border-radius: 8px; background: var(--primary-light); font-size: 13px; }
+.kv { display: grid; grid-template-columns: 80px 1fr; gap: 6px 10px; font-size: 13px; margin-bottom: 14px; }
+.kv b { color: var(--text-light); font-weight: 600; font-size: 12px; }
+.box { background: var(--bg2); border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
+.stbar { display: flex; gap: 6px; flex-wrap: wrap; }
+.sec { font-size: 12px; font-weight: 700; color: var(--text-light); margin: 14px 0 6px; }
+@media (max-width: 900px) { .mrow { grid-template-columns: 22px 1fr 56px; } .mrow .from, .mrow .pills { display: none; } .act { flex-wrap: wrap; } }
+</style>
+</head><body><div class="content-pad" id="root"></div>
+<div class="overlay" id="dlg"></div>
+<div class="toast" id="toast"></div>
+<script>
+const { db, doc, collection, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, query, where, orderBy, limit, writeBatch } = window.fb;
+const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const toast = (t, kind = '') => { const el = document.getElementById('toast'); el.textContent = t; el.className = 'toast on ' + kind; clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove('on'), 2200); };
+window.addEventListener('message', (e) => { if (e.data?.sancho && e.data.act === 'theme') document.documentElement.dataset.theme = e.data.theme || ''; });
+let me = null;                                  // 주인(단일 사용자): {uid:'owner', name, title, dept, email}
+window.fb.me().then((u) => { me = u; boot(); });
+
+// ---- 상수 ----
+const CATS = ['업무', '개인', '뉴스레터', '광고', '알림'], URGS = ['긴급', '보통', '낮음'], STS = ['대기', '처리', '보류', '무시'];
+const CAT_C = { 업무: 'blue', 개인: 'green', 뉴스레터: 'purple', 광고: 'gray', 알림: 'orange' };
+const URG_C = { 긴급: 'red', 보통: 'blue', 낮음: 'gray' }, URG_N = { 긴급: 0, 보통: 1, 낮음: 2 };
+const ST_C = { 대기: 'orange', 처리: 'green', 보류: 'purple', 무시: 'gray' };
+const ymd = (d = new Date()) => d.toLocaleDateString('sv-SE');
+const today = () => ymd();
+const monday = () => { const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return ymd(d); };
+const day = (m) => String(m.date || m.createdAt || '').slice(0, 10);
+const hm = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toTimeString().slice(0, 5); };
+const dlabel = (s) => { const d = new Date(s + 'T00:00'); return isNaN(d) ? s || '날짜 없음' : `${s} (${'일월화수목금토'[d.getDay()]})`; };
+const pill = (t, c) => `<span class="b-pill ${c || 'gray'}">${esc(t)}</span>`;
+const st = (m) => STS.includes(m.status) ? m.status : '대기';
+
+// ---- 상태 (UI 취향만 — 자료는 onSnapshot 이 진실) ----
+let mails = [], projects = [], sel = new Set(), openId = null, draftEdit = null;
+const F = { cat: '', urg: '', st: '', q: '', range: 'all' };
+const proj = (id) => projects.find((p) => p.id === id);
+
+// ---- 산초 지시문 ----
+const sortText = () => `Gmail 연결 도구(gmail search_threads / get_thread)로 오늘(${today()}) 받은 메일과 읽지 않은 메일을 읽고 분류해서 산초 데이터 폴더의 db/mail.json 을 갱신해줘. 규칙: (1) 형식은 platform 스킬의 mail 컬렉션 표를 따른다 — 파일은 { "<id>": {…} } 한 JSON, id 는 짧은 영문·숫자, 필드 from, fromName, to, subject, date(ISO), category('업무'|'개인'|'뉴스레터'|'광고'|'알림'), urgency('긴급'|'보통'|'낮음'), summary(두 줄 요약), action(내가 해야 할 일 한 줄, 없으면 ''), due(YYYY-MM-DD 또는 ''), status('대기'), link(https://mail.google.com/mail/u/0/#inbox/<threadId>), threadId, projectId(db/projects.json 의 code 가 제목·본문에 보이면 그 문서 id, 아니면 ''), replyDraft(''), createdAt/updatedAt(지금 ISO). (2) mail.json 에 같은 threadId 가 이미 있으면 건너뛰고 기존 문서는 절대 고치지 않는다. (3) 메일을 보내거나 지우거나 라벨을 바꾸지 마라. (4) 끝나면 새로 넣은 건수·긴급 건수를 한 줄로 보고해.`;
+const scheduleText = () => `schedule.json 에 매일 07:30 에 실행되는 예약을 추가해줘: {"id":"mail-sort","time":"07:30","repeat":"daily","prompt":"[메일 정리] ${sortText().replace(/"/g, "'")}"}. 이미 id mail-sort 가 있으면 time 만 07:30 으로 맞추고 중복으로 넣지 마라. 끝나면 예약 목록을 한 줄로 보고해.`;
+const draftText = (m) => `산초 데이터 폴더의 db/mail.json 에서 문서 "${m.id}"(제목: ${m.subject || ''}, 보낸이: ${m.fromName || ''} <${m.from || ''}>) 에 대한 답장 초안을 써서 그 문서의 replyDraft 필드에만 저장해줘(다른 필드는 건드리지 마라). 요약: ${m.summary || ''}. 해야 할 일: ${m.action || ''}. 필요하면 Gmail 도구로 threadId "${m.threadId || ''}" 원문을 읽어라. 한국어 존댓말, 5문장 이내, 끝에 서명 "${me?.name || ''} ${me?.title || ''}". 실제로 보내지는 마라. 끝나면 한 줄로 보고해.`;
+
+// ---- 필터 ----
+function filtered() {
+  const q = F.q.trim().toLowerCase(), t = today(), mon = monday();
+  return mails.filter((m) => (!F.cat || m.category === F.cat) && (!F.urg || m.urgency === F.urg) && (!F.st || st(m) === F.st)
+    && (F.range === 'all' || (F.range === 'today' ? day(m) === t : day(m) >= mon))
+    && (!q || [m.subject, m.from, m.fromName, m.summary].some((x) => String(x || '').toLowerCase().includes(q))))
+    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+}
+
+// ---- 그리기 ----
+function render() {
+  const t = today(), root = document.getElementById('root');
+  const last = mails.map((m) => m.updatedAt || m.createdAt || '').sort().pop();
+  const kNew = mails.filter((m) => day(m) === t).length, kWait = mails.filter((m) => st(m) === '대기').length;
+  const kUrg = mails.filter((m) => m.urgency === '긴급' && st(m) === '대기').length, kDone = mails.filter((m) => st(m) === '처리' && String(m.updatedAt || '').slice(0, 10) === t).length;
+  const acts = mails.filter((m) => st(m) === '대기' && m.action).sort((a, b) => (URG_N[a.urgency] ?? 1) - (URG_N[b.urgency] ?? 1) || String(a.due || '9').localeCompare(String(b.due || '9')));
+  const rows = filtered();
+  root.innerHTML = `
+  <div class="mod-head"><div><div class="mod-title">메일정리</div><div class="mod-sub">${esc(new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }))} · 산초가 Gmail 을 읽어 분류한 메일을 여기서 처리합니다</div></div></div>
+  <div class="banner"><div class="ico">📬</div><div class="tx"><div class="tt">산초의 메일 정리</div>
+    <div class="st">${last ? `마지막 정리 ${esc(String(last).slice(0, 10))} ${esc(hm(last))} · 전체 ${mails.length}건` : '아직 정리한 메일이 없습니다 — 아래 버튼으로 산초에게 시키세요'}</div></div>
+    <div class="bt"><button class="btn btn-ai" data-act="sort">✳ 지금 정리</button><button class="btn" data-act="schedule">⏰ 매일 아침 정리 예약</button></div></div>
+  <div class="kpi-grid">
+    <div class="kpi"><div class="kpi-label">📥 오늘 신규 메일</div><div class="kpi-value">${kNew}</div><div class="kpi-trend">${esc(t)}</div></div>
+    <div class="kpi"><div class="kpi-label">⚠️ 긴급 답변</div><div class="kpi-value${kUrg ? ' red' : ''}">${kUrg}</div><div class="kpi-trend${kUrg ? ' down' : ''}">${kUrg ? '대기 중' : '없음'}</div></div>
+    <div class="kpi"><div class="kpi-label">🕒 대기</div><div class="kpi-value orange">${kWait}</div><div class="kpi-trend">처리 전</div></div>
+    <div class="kpi"><div class="kpi-label">✅ 오늘 처리</div><div class="kpi-value green">${kDone}</div><div class="kpi-trend">${mails.length ? `전체 ${mails.length}건 중` : '-'}</div></div>
+  </div>
+  ${!mails.length ? `<div class="empty"><h3>정리된 메일이 없습니다</h3>산초가 연결된 Gmail 을 읽어 업무·개인·뉴스레터·광고·알림으로 나누고 긴급도와 해야 할 일을 적어 두면 이 화면에 나타납니다.<br>이 화면은 Gmail 에 직접 접속하지 않습니다 — 채팅창 아래 <b>권한 ▾ → 연결된 앱 허용</b> 을 켜 두셔야 산초가 메일을 읽을 수 있습니다.<br><br><button class="btn btn-ai" data-act="sort">✳ 산초에게 시키기</button></div>` : `
+  ${acts.length ? `<div class="card" style="margin-bottom:14px"><h3>🔥 오늘 핵심 액션 <span style="font-size:11px;color:var(--text-light);font-weight:400">— 대기 중인 메일 ${acts.length}건, 긴급 먼저</span></h3>
+    ${acts.map((m, i) => `<div class="act"><div class="nbadge${m.urgency === '긴급' ? ' hot' : ''}">${i + 1}</div><div class="body">
+      <div class="txt">${esc(m.action)}${m.due ? `<span class="due${m.due < t ? ' late' : ''}">마감 ${esc(m.due)}</span>` : ''}${pill(m.category || '업무', CAT_C[m.category])}${proj(m.projectId) ? `<span class="tag">${esc(proj(m.projectId).code || proj(m.projectId).name)}</span>` : ''}</div>
+      <div class="sub">${esc(m.fromName || m.from || '')} · ${esc(m.subject || '')}</div></div>
+      <div class="btns"><button class="btn btn-sm" data-act="st" data-v="처리" data-id="${esc(m.id)}">처리</button><button class="btn btn-sm" data-act="st" data-v="보류" data-id="${esc(m.id)}">보류</button><button class="btn btn-sm" data-act="st" data-v="무시" data-id="${esc(m.id)}">무시</button>${m.link ? `<a class="btn btn-sm" href="${esc(m.link)}" target="_blank" rel="noopener">메일 열기 ↗</a>` : ''}<button class="btn btn-sm btn-ai" data-act="draft" data-id="${esc(m.id)}">✳ 답장 초안</button></div></div>`).join('')}</div>` : ''}
+  <div class="toolbar">
+    <span class="chips">${['', ...CATS].map((c) => `<button class="chip${F.cat === c ? ' on' : ''}" data-f="cat" data-v="${c}">${c || '전체'}</button>`).join('')}</span>
+    <select class="fs" data-f="urg"><option value="">긴급도 전체</option>${URGS.map((u) => `<option${F.urg === u ? ' selected' : ''}>${u}</option>`).join('')}</select>
+    <select class="fs" data-f="st"><option value="">상태 전체</option>${STS.map((s) => `<option${F.st === s ? ' selected' : ''}>${s}</option>`).join('')}</select>
+    <input class="fi" data-f="q" placeholder="제목 · 보낸이 · 요약 검색" value="${esc(F.q)}">
+    <span class="sp"></span>
+    <div class="seg">${[['today', '오늘'], ['week', '이번 주'], ['all', '전체']].map(([k, l]) => `<button class="${F.range === k ? 'on' : ''}" data-f="range" data-v="${k}">${l}</button>`).join('')}</div>
+  </div>
+  <div id="listbox">${listHtml(rows)}</div>`}`;
+  if (openId) renderModal();
+}
+
+function listHtml(rows) {
+  const t = today(), groups = rows.reduce((g, m) => ((g[day(m)] ||= []).push(m), g), {});
+  return `${sel.size ? `<div class="bulk"><b>${sel.size}건 선택</b><button class="btn btn-sm" data-act="bulk" data-v="처리">처리</button><button class="btn btn-sm" data-act="bulk" data-v="무시">무시</button><span class="sp" style="flex:1"></span><button class="btn btn-sm btn-ghost" data-act="unsel">선택 해제</button></div>` : ''}
+  ${!rows.length ? `<div class="empty">조건에 맞는 메일이 없습니다.</div>` : `<div class="list">${Object.keys(groups).sort().reverse().map((d) => `<div class="dhd">${esc(dlabel(d))}${d === t ? pill('오늘', 'blue') : ''}<span style="font-weight:400">${groups[d].length}건</span></div>
+    ${groups[d].map((m) => `<div class="mrow${st(m) === '무시' ? ' dim' : ''}${st(m) === '처리' ? ' done' : ''}" data-open="${esc(m.id)}">
+      <input type="checkbox" data-sel="${esc(m.id)}"${sel.has(m.id) ? ' checked' : ''}>
+      ${pill(m.category || '업무', CAT_C[m.category])}
+      <span class="from" title="${esc(m.from)}">${esc(m.fromName || m.from || '(보낸이 없음)')}</span>
+      <span class="subj">${m.urgency === '긴급' ? pill('긴급', 'red') + ' ' : ''}${esc(m.subject || '(제목 없음)')}${m.summary ? `<span class="sum"> — ${esc(m.summary)}</span>` : ''}</span>
+      <span class="pills">${proj(m.projectId) ? `<span class="tag">${esc(proj(m.projectId).code || '')}</span>` : ''}${pill(st(m), ST_C[st(m)])}</span>
+      <span class="when">${esc(hm(m.date))}</span></div>`).join('')}`).join('')}</div>`}`;
+}
+
+function renderModal() {
+  const dlg = document.getElementById('dlg'), m = mails.find((x) => x.id === openId);
+  if (!m) { closeModal(); return; }
+  const s = st(m), draft = draftEdit ?? (m.replyDraft || '');
+  dlg.className = 'overlay active';
+  dlg.innerHTML = `<div class="modal wide"><div class="modal-head"><div class="modal-title">${esc(m.subject || '(제목 없음)')}</div><button class="btn btn-sm btn-ghost" data-act="close">✕</button></div>
+  <div class="modal-body">
+    <div class="stbar" style="margin-bottom:14px">${pill(m.category || '업무', CAT_C[m.category])}${pill(m.urgency || '보통', URG_C[m.urgency])}${pill(s, ST_C[s])}${proj(m.projectId) ? `<span class="tag">${esc(proj(m.projectId).code || '')} ${esc(proj(m.projectId).name || '')}</span>` : ''}</div>
+    <div class="kv"><b>보낸이</b><span>${esc(m.fromName || '')} ${m.from ? `&lt;${esc(m.from)}&gt;` : ''}</span><b>받는이</b><span>${esc(m.to || me?.email || '')}</span><b>받은 시각</b><span>${esc(String(m.date || '').replace('T', ' ').slice(0, 16))}</span>${m.due ? `<b>마감</b><span class="due${m.due < today() ? ' late' : ''}" style="margin:0">${esc(m.due)}</span>` : ''}</div>
+    ${m.summary ? `<div class="sec">요약</div><div class="box">${esc(m.summary)}</div>` : ''}
+    ${m.action ? `<div class="sec">해야 할 일</div><div class="box" style="font-weight:600">${esc(m.action)}</div>` : ''}
+    <div class="sec">상태</div><div class="stbar">${STS.map((x) => `<button class="btn btn-sm${x === s ? ' btn-primary' : ''}" data-act="st" data-v="${x}" data-id="${esc(m.id)}">${x}</button>`).join('')}${m.link ? `<a class="btn btn-sm" href="${esc(m.link)}" target="_blank" rel="noopener">메일 열기 ↗</a>` : ''}</div>
+    <div class="sec">프로젝트 연결</div><select class="fs" data-act="proj" data-id="${esc(m.id)}"><option value="">(없음)</option>${projects.filter((p) => !p.hidden || p.id === m.projectId).map((p) => `<option value="${esc(p.id)}"${p.id === m.projectId ? ' selected' : ''}>${esc(p.code || '')} · ${esc(p.name || '')}</option>`).join('')}</select>
+    <div class="sec">답장 초안</div><textarea class="ft" id="draft" rows="6" placeholder="산초에게 초안을 부탁하거나 직접 쓰세요">${esc(draft)}</textarea>
+    <div class="stbar" style="margin-top:6px"><button class="btn btn-sm btn-ai" data-act="draft" data-id="${esc(m.id)}">✳ 산초에게 답장 초안 부탁</button><button class="btn btn-sm" data-act="saveDraft" data-id="${esc(m.id)}"${draftEdit == null ? ' disabled' : ''}>초안 저장</button>${draft ? `<button class="btn btn-sm" data-act="copyDraft">복사</button>` : ''}</div>
+  </div>
+  <div class="modal-foot"><button class="btn" data-act="toTask" data-id="${esc(m.id)}">📋 업무로 등록</button><button class="btn" data-act="toEvent" data-id="${esc(m.id)}">📅 일정으로</button><span style="flex:1"></span><button class="btn" data-act="close">닫기</button></div></div>`;
+}
+function closeModal() { openId = null; draftEdit = null; const d = document.getElementById('dlg'); d.className = 'overlay'; d.innerHTML = ''; }
+
+// ---- 동작 ----
+const ref = (id) => doc(db, 'mail', id);
+async function setStatus(ids, v) { const b = writeBatch(); ids.forEach((id) => b.update(ref(id), { status: v })); await b.commit(); toast(`${ids.length}건 → ${v}`, 'ok'); }
+async function act(el) {
+  const a = el.dataset.act, id = el.dataset.id, m = id && mails.find((x) => x.id === id);
+  try {
+    if (a === 'sort') { SANCHO.ask(sortText(), true); toast('산초에게 메일 정리를 시켰습니다'); }
+    else if (a === 'schedule') { SANCHO.ask(scheduleText(), true); toast('매일 07:30 정리 예약을 산초에게 시켰습니다'); }
+    else if (a === 'draft' && m) { SANCHO.ask(draftText(m), true); toast('답장 초안을 부탁했습니다 — 잠시 후 이 메일에 채워집니다'); }
+    else if (a === 'st' && m) await setStatus([id], el.dataset.v);
+    else if (a === 'bulk') { await setStatus([...sel], el.dataset.v); sel.clear(); render(); }
+    else if (a === 'unsel') { sel.clear(); render(); }
+    else if (a === 'close') closeModal();
+    else if (a === 'proj' && m) { await updateDoc(ref(id), { projectId: el.value }); toast('프로젝트를 연결했습니다', 'ok'); }
+    else if (a === 'saveDraft' && m) { await updateDoc(ref(id), { replyDraft: document.getElementById('draft').value }); draftEdit = null; toast('초안을 저장했습니다', 'ok'); }
+    else if (a === 'copyDraft') { await navigator.clipboard.writeText(document.getElementById('draft').value); toast('복사했습니다', 'ok'); }
+    else if (a === 'toTask' && m) {
+      await addDoc(collection(db, 'tasks'), { title: m.action || m.subject || '메일 처리', projectId: m.projectId || '', assignee: 'owner', due: m.due || '', priority: { 긴급: 'high', 낮음: 'low' }[m.urgency] || 'mid', status: 'todo', memo: [m.summary, m.link].filter(Boolean).join('\n'), source: 'mail', mailId: m.id });
+      toast('업무로 등록했습니다', 'ok');
+    } else if (a === 'toEvent' && m) {
+      await addDoc(collection(db, 'events'), { title: m.action || m.subject || '메일', date: m.due || today(), time: '', endTime: '', endDate: '', allDay: true, category: m.due ? '마감' : '기타', color: m.urgency === '긴급' ? 'red' : 'orange', dept: me?.dept || '', projectId: m.projectId || '', location: '', attendees: [], memo: [m.summary, m.link].filter(Boolean).join('\n'), source: 'user', mailId: m.id });
+      toast(`일정으로 넣었습니다 (${m.due || today()})`, 'ok');
+    }
+  } catch (e) { toast(e.message || '실패했습니다', 'err'); }
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-act]'); if (b && b.tagName !== 'SELECT') { e.stopPropagation(); return act(b); }
+  const f = e.target.closest('[data-f][data-v]'); if (f) { F[f.dataset.f] = f.dataset.v; return render(); }
+  if (e.target.closest('[data-sel]')) return;
+  const r = e.target.closest('.mrow[data-open]'); if (r) { openId = r.dataset.open; draftEdit = null; return renderModal(); }
+  if (e.target.id === 'dlg') closeModal();
+});
+document.addEventListener('change', (e) => {
+  const t = e.target;
+  if (t.dataset.sel) { t.checked ? sel.add(t.dataset.sel) : sel.delete(t.dataset.sel); return render(); }
+  if (t.dataset.act === 'proj') return act(t);
+  if (t.dataset.f && t.dataset.f !== 'q') { F[t.dataset.f] = t.value; render(); }
+});
+document.addEventListener('input', (e) => {
+  if (e.target.dataset.f === 'q') { F.q = e.target.value; const lb = document.getElementById('listbox'); if (lb) lb.innerHTML = listHtml(filtered()); }
+  if (e.target.id === 'draft') { draftEdit = e.target.value; document.querySelector('[data-act=saveDraft]').disabled = false; }
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && openId) closeModal(); });
+
+async function boot() {
+  onSnapshot(collection(db, 'mail'), (s) => { mails = s.docs.map((d) => ({ id: d.id, ...d.data() })); render(); }, (e) => toast('메일을 읽지 못했습니다: ' + e.message, 'err'));
+  onSnapshot(collection(db, 'projects'), (s) => { projects = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.code || '').localeCompare(String(b.code || ''))); render(); });
+}
+</script></body></html>

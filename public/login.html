@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>산초(Sancho) - AI 업무 비서 & 통합 협업 플랫폼</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231976D2'/%3E%3Ctext x='32' y='44' font-size='28' font-weight='bold' text-anchor='middle' fill='white' font-family='Arial'%3ESC%3C/text%3E%3C/svg%3E">
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-glow: rgba(37, 99, 235, 0.5);
+      --accent-cyan: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.4);
+      --text-main: #ffffff;
+      --text-muted: rgba(255, 255, 255, 0.76);
+      --mono-font: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+      --sans-font: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "맑은 고딕", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-user-drag: none;
+    }
+
+    html, body {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      background: #03091f;
+      font-family: var(--sans-font);
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    input, textarea {
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    /* 전체 화면 래퍼 */
+    .login-wrap {
+      position: absolute;
+      inset: 0;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      color: #fff;
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+
+    /* 백그라운드 미디어 스테이지 */
+    .login-stage {
+      position: relative;
+      min-height: 100%;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .login-media {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      overflow: hidden;
+      background-color: #03091f;
+      pointer-events: none;
+    }
+
+    /* 초고화질 AI 융합 배경 이미지 (단일 활성화 & 부드러운 페이드) */
+    .login-shot {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center 38%;
+      opacity: 0;
+      transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-user-drag: none;
+      will-change: opacity;
+    }
+
+    .login-shot.active {
+      opacity: 1;
+    }
+
+    /* 가독성 및 깊이감 보호 다층 스크림 */
+    .login-scrim {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      background:
+        linear-gradient(215deg, rgba(3,9,31,0.2) 0%, rgba(3,9,31,0.52) 42%, rgba(3,9,31,0.86) 78%, rgba(3,9,31,0.97) 100%),
+        linear-gradient(90deg, rgba(3,9,31,0.65) 0%, rgba(3,9,31,0) 55%),
+        linear-gradient(180deg, rgba(3,9,31,0.5) 0%, rgba(3,9,31,0) 25%);
+    }
+
+    /* 12컬럼 메인 그리드 */
+    .login-grid {
+      position: relative;
+      z-index: 2;
+      flex: 1;
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      grid-template-rows: auto 1fr auto;
+      column-gap: 36px;
+      row-gap: 28px;
+      padding: 42px 64px calc(32px + env(safe-area-inset-bottom, 0px)) 64px;
+      max-width: 1640px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* 상단 헤더 */
+    .login-head {
+      grid-column: 1 / 13;
+      grid-row: 1;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-family: var(--mono-font);
+      font-size: 12.5px;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,.9);
+    }
+
+    .brand-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 16px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+
+    .brand-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #38bdf8, #2563eb);
+      box-shadow: 0 0 12px #38bdf8;
+      animation: pulseDot 2.4s infinite ease-in-out;
+    }
+
+    @keyframes pulseDot {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.3); opacity: 0.75; }
+    }
+
+    .brand-title {
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: .2em;
+    }
+
+    .login-head .divider {
+      width: 36px;
+      height: 1px;
+      background: rgba(255,255,255,0.35);
+    }
+
+    .head-subtitle {
+      font-size: 11.5px;
+      color: rgba(255,255,255,0.7);
+      font-weight: 500;
+      letter-spacing: 0.1em;
+    }
+
+    /* 배경 테마 전환 버튼 캡슐 */
+    .bg-switch-group {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(0, 0, 0, 0.45);
+      padding: 4px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+    }
+
+    .bg-btn {
+      border: none;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.65);
+      font-family: inherit;
+      font-size: 11.5px;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .bg-btn:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .bg-btn.active {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: #fff;
+      box-shadow: 0 2px 10px rgba(37, 99, 235, 0.5);
+    }
+
+    /* 좌측 히어로 메인 */
+    .login-hero {
+      grid-column: 1 / 8;
+      grid-row: 2;
+      align-self: center;
+      max-width: 720px;
+      padding-bottom: 24px;
+    }
+
+    .hero-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+      font-size: 12.5px;
+      font-weight: 700;
+      letter-spacing: .26em;
+      text-transform: uppercase;
+      color: var(--accent-cyan);
+      text-shadow: 0 2px 10px rgba(56, 189, 248, 0.4);
+    }
+
+    .hero-eyebrow::before {
+      content: "";
+      width: 36px;
+      height: 2px;
+      border-radius: 2px;
+      background: var(--accent-cyan);
+      box-shadow: 0 0 10px var(--accent-cyan);
+    }
+
+    .login-hero h1 {
+      font-size: clamp(40px, 4.2vw, 62px);
+      font-weight: 900;
+      line-height: 1.15;
+      letter-spacing: -0.03em;
+      color: #fff;
+      word-break: keep-all;
+      text-shadow: 0 4px 24px rgba(0,0,0,0.5);
+    }
+
+    .login-hero h1 em {
+      font-style: normal;
+      background: linear-gradient(135deg, #7dd3fc 0%, #38bdf8 50%, #60a5fa 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 0 30px rgba(56, 189, 248, 0.35);
+    }
+
+    .hero-desc {
+      margin-top: 26px;
+      font-size: 16.5px;
+      line-height: 1.8;
+      color: rgba(255, 255, 255, 0.9);
+      text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+      word-break: keep-all;
+    }
+
+    .hero-desc b {
+      color: #fff;
+      font-weight: 700;
+    }
+
+    .feature-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 32px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 15px;
+      border-radius: 9px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      backdrop-filter: blur(10px);
+      font-size: 13px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.95);
+      transition: all 0.25s ease;
+    }
+
+    .pill:hover {
+      background: rgba(56, 189, 248, 0.18);
+      border-color: rgba(56, 189, 248, 0.5);
+      color: #fff;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(56, 189, 248, 0.25);
+    }
+
+    /* 우측 글래스모피즘 로그인 카드 */
+    .login-panel {
+      grid-column: 8 / 13;
+      grid-row: 1 / 3;
+      align-self: center;
+      justify-self: end;
+      width: 100%;
+      max-width: 430px;
+      position: relative;
+      background: rgba(8, 16, 42, 0.94);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 22px;
+      padding: 38px 36px 32px;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255,255,255,0.08) inset;
+    }
+
+    .panel-cap {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 22px;
+      font-family: var(--mono-font);
+      font-size: 11.5px;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,.65);
+    }
+
+    .panel-cap .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 9px;
+      border-radius: 5px;
+      background: rgba(56, 189, 248, 0.16);
+      color: #7dd3fc;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      font-size: 10.5px;
+      font-weight: 700;
+    }
+
+    .login-panel h2 {
+      color: #fff;
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .panel-sub {
+      color: rgba(255, 255, 255, 0.75);
+      font-size: 14px;
+      line-height: 1.55;
+      margin: 8px 0 26px;
+    }
+
+    /* 폼 입력 필드 */
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12.5px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: rgba(255, 255, 255, 0.88);
+      margin-bottom: 8px;
+    }
+
+    .input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .input-icon {
+      position: absolute;
+      left: 15px;
+      width: 19px;
+      height: 19px;
+      color: rgba(255, 255, 255, 0.45);
+      pointer-events: none;
+      transition: color 0.15s;
+    }
+
+    .form-input {
+      width: 100%;
+      height: 50px;
+      padding: 0 16px 0 46px;
+      border-radius: 11px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      color: #fff;
+      font-family: inherit;
+      font-size: 15px;
+      outline: none;
+      transition: border-color 0.15s, background-color 0.15s, box-shadow 0.15s;
+    }
+
+    .form-input::placeholder {
+      color: rgba(255, 255, 255, 0.38);
+    }
+
+    .form-input:focus {
+      background: rgba(255, 255, 255, 0.14);
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.32);
+    }
+
+    .input-wrapper:focus-within .input-icon {
+      color: #38bdf8;
+    }
+
+    /* 에러 알림 박스 */
+    .error-box {
+      display: none;
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid rgba(239, 68, 68, 0.45);
+      color: #fca5a5;
+      padding: 11px 15px;
+      border-radius: 9px;
+      font-size: 13.5px;
+      line-height: 1.4;
+      margin-bottom: 20px;
+      align-items: center;
+      gap: 10px;
+      animation: shake 0.3s ease;
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-4px); }
+      75% { transform: translateX(4px); }
+    }
+
+    /* 로그인 제출 버튼 */
+    .btn-submit {
+      width: 100%;
+      height: 52px;
+      margin-top: 8px;
+      border: none;
+      border-radius: 11px;
+      background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+      color: #fff;
+      font-family: inherit;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 22px rgba(37, 99, 235, 0.45), 0 1px 0 rgba(255,255,255,0.25) inset;
+      transition: all 0.2s ease;
+    }
+
+    .btn-submit:hover {
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      box-shadow: 0 6px 28px rgba(37, 99, 235, 0.6);
+      transform: translateY(-1.5px);
+    }
+
+    .btn-submit:active {
+      transform: translateY(1px);
+      box-shadow: 0 2px 10px rgba(37, 99, 235, 0.35);
+    }
+
+    .btn-submit:disabled {
+      opacity: 0.65;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .panel-quick {
+      margin-top: 24px;
+      font-size: 12.5px;
+      line-height: 1.65;
+      text-align: center;
+      color: rgba(255, 255, 255, 0.65);
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+      padding-top: 20px;
+    }
+
+    .panel-quick b {
+      color: rgba(255, 255, 255, 0.95);
+    }
+
+    /* 하단 푸터 */
+    .login-foot {
+      grid-column: 1 / 13;
+      grid-row: 3;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      flex-wrap: wrap;
+      gap: 12px 24px;
+      padding-top: 20px;
+      border-top: 1px solid rgba(255, 255, 255, 0.15);
+      font-size: 12px;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.65);
+      text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    }
+
+    .login-foot-mono {
+      font-family: var(--mono-font);
+      font-size: 11px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.55);
+    }
+
+    /* 반응형 레이아웃 */
+    @media (max-width: 1080px) {
+      .login-grid {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto auto auto;
+        padding: 36px 28px;
+        row-gap: 36px;
+      }
+      .login-head {
+        grid-column: 1;
+        grid-row: 1;
+      }
+      .login-hero {
+        grid-column: 1;
+        grid-row: 2;
+        max-width: 100%;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      .hero-eyebrow {
+        justify-content: center;
+      }
+      .feature-pills {
+        justify-content: center;
+      }
+      .login-panel {
+        grid-column: 1;
+        grid-row: 3;
+        justify-self: center;
+        max-width: 450px;
+      }
+      .login-foot {
+        grid-column: 1;
+        grid-row: 4;
+        justify-content: center;
+        text-align: center;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .login-grid {
+        padding: 24px 18px;
+      }
+      .login-panel {
+        padding: 28px 22px 24px;
+        border-radius: 18px;
+      }
+      .login-hero h1 {
+        font-size: 33px;
+      }
+      .hero-desc {
+        font-size: 14.5px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-stage">
+      <!-- 8K AI + 인간 융합 배경 미디어 -->
+      <div class="login-media" aria-hidden="true">
+        <img class="login-shot active" id="bgShot1" alt="AI Assistant Synergy" decoding="async" fetchpriority="high" draggable="false" src="/m/assets/login/ai-hero-1.jpg">
+        <img class="login-shot" id="bgShot2" alt="Future AI Collaboration Hub" decoding="async" loading="lazy" draggable="false" src="/m/assets/login/ai-hero-2.jpg">
+      </div>
+
+      <!-- 명도 대비 스크림 오버레이 -->
+      <div class="login-scrim" aria-hidden="true"></div>
+
+      <!-- 12컬럼 메인 그리드 -->
+      <div class="login-grid">
+        <!-- 상단 헤더 -->
+        <header class="login-head">
+          <div class="brand-badge">
+            <span class="brand-dot"></span>
+            <span class="brand-title">SANCHO</span>
+          </div>
+          <span class="divider"></span>
+          <span class="head-subtitle">Autonomous AI Assistant & Enterprise Workspace</span>
+
+          <!-- 상단 테마 전환기 -->
+          <div class="bg-switch-group" role="group" aria-label="배경 이미지 테마 선택">
+            <button type="button" class="bg-btn active" id="btnBg1" title="테마 1: AI 오케스트레이션 코어">🌌 AI 오케스트레이션</button>
+            <button type="button" class="bg-btn" id="btnBg2" title="테마 2: 차세대 관제 센터">⚡ 차세대 관제 센터</button>
+          </div>
+        </header>
+
+        <!-- 좌측 메인 히어로 섹션 -->
+        <section class="login-hero">
+          <p class="hero-eyebrow">Human & AI Cognitive Synergy</p>
+          <h1>산초(Sancho) <em>AI 업무 비서</em><br>차세대 통합 플랫폼</h1>
+          <p class="hero-desc">
+            <b>WBS 공정표 · 일정 · 팀 메신저 · 회의록 · OKR · 결재 · 지식노트.</b><br>
+            인간의 직관과 인공지능 두뇌가 실시간으로 융합하여 사내 모든 업무를 유기적으로 조율합니다.
+          </p>
+          <div class="feature-pills">
+            <span class="pill">🧠 Claude AI 인지 두뇌</span>
+            <span class="pill">📊 실시간 WBS 공정표</span>
+            <span class="pill">🎙 자동 요약 AI 회의록</span>
+            <span class="pill">🕸 지식 노드 네트워크</span>
+            <span class="pill">🎯 전략 목표 OKR</span>
+            <span class="pill">📝 전자결재 워크플로우</span>
+          </div>
+        </section>
+
+        <!-- 우측 Glassmorphism 로그인 패널 -->
+        <main class="login-panel" aria-labelledby="loginTitle">
+          <div class="panel-cap">
+            <span>Workspace Access</span>
+            <span class="badge">SECURED</span>
+          </div>
+          <h2 id="loginTitle">로그인</h2>
+          <p class="panel-sub">업무 플랫폼 이용을 위해 사내 계정 정보를 입력하세요.</p>
+
+          <div id="errorMsg" class="error-box" role="alert">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            <span id="errorText">아이디 또는 비밀번호가 틀렸습니다.</span>
+          </div>
+
+          <form id="loginForm" autocomplete="on">
+            <div class="form-group" id="nameGroup" style="display:none">
+              <label class="form-label" for="uname">이름</label>
+              <div class="input-wrapper">
+                <input type="text" id="uname" class="form-input" placeholder="예: 홍길동" autocomplete="name">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="loginId">아이디 (ID)</label>
+              <div class="input-wrapper">
+                <input type="text" id="loginId" class="form-input" placeholder="계정 아이디 입력" required autocomplete="username" autofocus>
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="password">비밀번호 (Password)</label>
+              <div class="input-wrapper">
+                <input type="password" id="password" class="form-input" placeholder="비밀번호 입력" required autocomplete="current-password">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+              </div>
+            </div>
+
+            <button type="submit" id="submitBtn" class="btn-submit">
+              <span>로그인</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
+            </button>
+          </form>
+
+          <div class="panel-quick">
+            <span id="quickText">조직/권한 화면에서 구성원 계정을 만들고 관리할 수 있습니다.</span>
+          </div>
+        </main>
+
+        <!-- 하단 푸터 -->
+        <footer class="login-foot">
+          <span>Sancho Platform v0.1 · Autonomous Multi-Agent Workspace</span>
+          <span class="login-foot-mono">Powered by Claude AI · Zero Dependency Architecture</span>
+        </footer>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 모듈 화면(iframe) 안에서 로그인 페이지가 열렸다면, 창 전체를 로그인으로 돌린다
+    // (안 그러면 달력 자리에 로그인 화면이 끼어 있어 "화면이 안 된다" 로 보인다)
+    if (window.top !== window.self) { try { window.top.location.href = '/login.html'; } catch (e) {} }
+    const 다음 = new URLSearchParams(location.search).get('next') || '/';
+
+    // 배경 테마 전환 (단일 고화질 이미지 전환, 렉/드래그/버벅임 제로)
+    const shot1 = document.getElementById('bgShot1');
+    const shot2 = document.getElementById('bgShot2');
+    const btn1 = document.getElementById('btnBg1');
+    const btn2 = document.getElementById('btnBg2');
+
+    function switchBg(idx) {
+      if (idx === 1) {
+        shot1.classList.add('active');
+        shot2.classList.remove('active');
+        btn1.classList.add('active');
+        btn2.classList.remove('active');
+      } else {
+        shot1.classList.remove('active');
+        shot2.classList.add('active');
+        btn1.classList.remove('active');
+        btn2.classList.add('active');
+      }
+      try { localStorage.sancho_login_bg = String(idx); } catch(e) {}
+    }
+
+    btn1.addEventListener('click', () => switchBg(1));
+    btn2.addEventListener('click', () => switchBg(2));
+
+    try {
+      if (localStorage.sancho_login_bg === '2') {
+        switchBg(2);
+      }
+    } catch(e) {}
+
+    // 로그인 폼 처리
+    const form = document.getElementById('loginForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const errorBox = document.getElementById('errorMsg');
+    const errorText = document.getElementById('errorText');
+
+    // 처음 켰는가? (비밀번호 있는 계정이 하나도 없으면 "관리자 계정 만들기" 모드)
+    let setupMode = false;
+    (async () => {
+      try {
+        const st = await (await fetch('/api/auth/status')).json();
+        setupMode = !!st.setup;
+        if (setupMode) {
+          document.getElementById('loginTitle').textContent = '처음 오셨군요 — 관리자 계정 만들기';
+          document.querySelector('.panel-sub').textContent = '이 컴퓨터의 산초를 쓸 계정을 하나 만드세요. 비밀번호는 8자 이상으로.';
+          document.getElementById('nameGroup').style.display = '';
+          document.getElementById('password').setAttribute('autocomplete', 'new-password');
+          document.getElementById('password').placeholder = '새 비밀번호 (8자 이상)';
+          submitBtn.querySelector('span').textContent = '계정 만들고 시작하기';
+          document.getElementById('quickText').innerHTML = '만든 계정으로만 들어올 수 있습니다. 기본 비밀번호는 없습니다.';
+        }
+        if (st.host && st.host !== '127.0.0.1' && st.host !== 'localhost') {
+          document.getElementById('quickText').innerHTML += '<br><b style="color:#ffb4b4">⚠ 이 산초는 네트워크에 열려 있습니다 — 강한 비밀번호를 쓰세요.</b>';
+        }
+      } catch (e) {}
+    })();
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const loginId = document.getElementById('loginId').value.trim();
+      const password = document.getElementById('password').value;
+      const name = (document.getElementById('uname') || {}).value || '';
+
+      errorBox.style.display = 'none';
+      submitBtn.disabled = true;
+      submitBtn.querySelector('span').textContent = setupMode ? '만드는 중...' : '로그인 중...';
+
+      try {
+        const res = await fetch(setupMode ? '/api/auth/setup' : '/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ loginId, password, name })
+        });
+        const json = await res.json();
+        if (res.ok && json.ok) {
+          window.location.href = 다음.startsWith('/') ? 다음 : '/';
+        } else {
+          errorText.textContent = json.error || '아이디 또는 비밀번호가 올바르지 않습니다.';
+          errorBox.style.display = 'flex';
+          submitBtn.disabled = false;
+          submitBtn.querySelector('span').textContent = setupMode ? '계정 만들고 시작하기' : '로그인';
+        }
+      } catch (err) {
+        errorText.textContent = '서버 연결에 실패했습니다. (네트워크 확인)';
+        errorBox.style.display = 'flex';
+        submitBtn.disabled = false;
+        submitBtn.querySelector('span').textContent = '로그인';
+      }
+    });
+  </script>
+</body>
+</html>

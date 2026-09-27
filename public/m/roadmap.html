@@ -1,0 +1,353 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>산초 · 로드맵 · 진척</title>
+<link rel="stylesheet" href="/m/platform.css">
+<script src="/m/sdb.js"></script>
+<style>
+/* 로드맵 · 진척 — 세종 플랫폼 v2 roadmap.html 이식. 자체 색 변수는 버리고 platform.css 변수만 쓴다 */
+.rm-hdr { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 16px; overflow: hidden; }
+.rm-top { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; padding: 18px 20px; border-bottom: 1px solid var(--border); }
+.rm-txt { flex: 1; min-width: 240px; }
+.rm-eyebrow { font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--primary); font-weight: 700; }
+.rm-title { font-size: 21px; font-weight: 800; letter-spacing: -.02em; margin: 5px 0 3px; cursor: text; }
+.rm-title:hover { color: var(--primary); }
+.rm-sub { color: var(--text-light); font-size: 12.5px; }
+.ring { position: relative; width: 108px; height: 108px; flex-shrink: 0; }
+.ring svg { transform: rotate(-90deg); }
+.ring-txt { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.ring-n { font-size: 25px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.ring-l { font-size: 10px; color: var(--text-lighter); margin-top: 3px; }
+.rm-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); }
+.hm { padding: 10px 16px; border-right: 1px solid var(--border-light); }
+.hm:last-child { border-right: 0; }
+.hm-k { font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-lighter); font-weight: 700; }
+.hm-v { font-size: 14px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.phase { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 14px; overflow: hidden; box-shadow: var(--shadow); }
+.ph-h { display: flex; align-items: center; gap: 12px; padding: 11px 16px; background: var(--bg2); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.ph-t { font-size: 15px; font-weight: 800; letter-spacing: -.01em; cursor: text; }
+.ph-t:hover { color: var(--primary); }
+.ph-s { font-size: 12px; color: var(--text-lighter); }
+.ph-bar { margin-left: auto; display: flex; align-items: center; gap: 9px; min-width: 160px; }
+.ph-bar .bar { flex: 1; min-width: 70px; }
+.ph-pct { font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 62px; text-align: right; }
+.it { display: flex; align-items: flex-start; gap: 10px; padding: 9px 16px; border-bottom: 1px solid var(--border-light); }
+.it:last-child { border-bottom: 0; }
+.it:hover { background: var(--primary-lighter); }
+.it.hide { display: none; }
+.st { width: 74px; flex-shrink: 0; text-align: center; padding: 5px 0; border: 1px solid transparent; cursor: pointer; font-size: 11px; }
+.itb { flex: 1; min-width: 0; }
+.it-t { font-size: 13.5px; font-weight: 600; line-height: 1.5; cursor: text; word-break: break-word; }
+.it.done-x .it-t { text-decoration: line-through; color: var(--text-lighter); }
+.it-m { font-size: 11px; color: var(--text-lighter); margin-top: 3px; display: flex; gap: 10px; flex-wrap: wrap; }
+.it-m .late { color: var(--danger); font-weight: 600; }
+.it-menu { position: relative; flex-shrink: 0; }
+.it-menu .pop { top: 28px; right: 0; min-width: 180px; }
+.ph-empty { padding: 16px; text-align: center; color: var(--text-lighter); font-size: 12px; }
+.rm-inp { font: inherit; width: 100%; padding: 3px 7px; border: 1px solid var(--primary); border-radius: 6px; background: var(--white); color: var(--text); }
+/* 인쇄 */
+#printView { display: none; font-size: 12.5px; color: #000; }
+#printView h1 { font-size: 19px; margin-bottom: 4px; } #printView h2 { font-size: 14px; margin: 14px 0 6px; }
+#printView table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+#printView th, #printView td { border: 1px solid #999; padding: 4px 7px; text-align: left; vertical-align: top; }
+#printView th { background: #eee; }
+@media print { body > *:not(#printView) { display: none !important; } #printView { display: block; padding: 10mm; } }
+@media (max-width: 700px) { .ph-bar { width: 100%; margin-left: 0; } }
+</style>
+</head><body><div class="content-pad" id="root"></div>
+<div class="toast" id="toast"></div>
+<div id="printView"></div>
+<div class="overlay" id="modal"><div class="modal">
+  <div class="modal-head"><div class="modal-title" id="mTitle"></div><button class="btn btn-sm btn-ghost" data-close>✕</button></div>
+  <div class="modal-body" id="mBody"></div>
+  <div class="modal-foot"><button class="btn" data-close>취소</button><button class="btn btn-primary" id="mOk">저장</button></div>
+</div></div>
+<script>
+const { db, doc, collection, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, query, where, orderBy, limit, writeBatch } = window.fb;
+const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const toast = (t, kind = '') => { const el = document.getElementById('toast'); el.textContent = t; el.className = 'toast on ' + kind; clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove('on'), 2200); };
+window.addEventListener('message', (e) => { if (e.data?.sancho && e.data.act === 'theme') document.documentElement.dataset.theme = e.data.theme || ''; });
+let me = null;                                  // 주인(단일 사용자): {uid:'owner', name, title, dept, email}
+
+const $ = (s) => document.querySelector(s);
+const v = (s) => ($(s) ? $(s).value : '').trim();
+const S = { doc: null, users: [], ready: false, seeded: false };
+const V = { filter: 'all' };
+
+// 상태 (원본 LABEL / CYCLE / COUNTED — hold·cancel 은 진척 분모에서 뺀다)
+const LABEL = { todo: '대기', wip: '진행중', done: '완료', hold: '보류', cancel: '취소' };
+const PILL = { todo: 'gray', wip: 'orange', done: 'green', hold: 'purple', cancel: 'red' };
+const CYCLE = { todo: 'wip', wip: 'done', done: 'todo', hold: 'wip', cancel: 'todo' };
+const COUNTED = (s) => s !== 'hold' && s !== 'cancel';
+const stOf = (it) => LABEL[it && it.status] ? it.status : 'todo';
+
+const pad = (n) => String(n).padStart(2, '0');
+const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const today = () => ymd(new Date());
+const day = (iso) => !iso ? '' : String(iso).slice(0, 10);
+const uid = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+const clone = (x) => JSON.parse(JSON.stringify(x ?? null));
+const phases = () => Array.isArray(S.doc && S.doc.phases) ? S.doc.phases : [];
+const items = (p) => Array.isArray(p && p.items) ? p.items : [];
+const allItems = () => phases().flatMap(items);
+const uName = (id) => { const u = S.users.find((x) => x.id === id); return (u && u.name) || (id === 'owner' && me ? me.name : '') || id || ''; };
+
+// 처음 열 때 씨앗 문서 (문서가 없으면 화면이 비지 않게 심는다)
+const SEED = { title: '산초 플랫폼 로드맵', phases: [
+  { id: 'ph1', title: '1단계 · 기반 & 개인 비서', period: '2026 9월', items: [
+    { id: 'i1', text: '저장소·껍데기·사용자 설정', status: 'done', owner: 'owner', due: '', at: new Date().toISOString() },
+    { id: 'i2', text: '일정·프로젝트(WBS) 화면', status: 'done', owner: 'owner', due: '', at: new Date().toISOString() },
+    { id: 'i3', text: '메일 정리 화면', status: 'done', owner: 'owner', due: '', at: new Date().toISOString() }] },
+  { id: 'ph2', title: '2단계 · 업무 플랫폼 모듈', period: '2026 9월', items: [
+    { id: 'i4', text: '메신저 · 회의록/녹음', status: 'done', owner: 'owner', due: '', at: new Date().toISOString() },
+    { id: 'i5', text: '전자결재 · 공수(Manday) · 목표(OKR)', status: 'done', owner: 'owner', due: '', at: new Date().toISOString() },
+    { id: 'i6', text: '조직/권한 · 플랫폼 관리 · 지식노트', status: 'done', owner: 'owner', due: '', at: new Date().toISOString() }] },
+  { id: 'ph3', title: '3단계 · 자동화 & 외부 협업', period: '2026 10월', items: [
+    { id: 'i7', text: '스케줄 예약 실행 · 일지 기록', status: 'done', owner: 'owner', due: '', at: new Date().toISOString() },
+    { id: 'i8', text: '타 PC 협업 환경 및 깃허브 로드맵 배포', status: 'wip', owner: 'owner', due: '', at: new Date().toISOString() }] },
+] };
+
+// ── 쓰기 (모르는 필드 보존: updateDoc = 깊은 병합, phases 배열은 통째로 교체) ──
+const REF = () => doc(db, 'roadmap', 'main');
+async function save(patch) { try { await updateDoc(REF(), patch); } catch (e) { toast('저장 실패: ' + e.message, 'err'); } }
+const savePhases = (ps) => save({ phases: ps });
+function mutate(pi, fn) { const ps = clone(phases()); if (!ps[pi]) return; fn(ps[pi], ps); return savePhases(ps); }
+function setStatus(pi, ii, st) {
+  return mutate(pi, (p) => { const its = p.items || []; if (!its[ii]) return; its[ii] = { ...its[ii], status: st, at: new Date().toISOString() }; });
+}
+
+// ── 산초에게 ──
+function askAdd() {
+  const list = phases().map((p, i) => `${i + 1}) ${p.title}`).join(' · ') || '(아직 단계 없음)';
+  SANCHO.ask(`data/db/roadmap.json 의 main 문서에 항목을 추가해줘: 지금 단계는 ${list} 이다. 내가 말한 일감을 알맞은 단계의 phases[].items[] 에 {id(짧은 영문숫자), text(한 줄), status "todo", owner("owner" 또는 users.json 의 id), due("YYYY-MM-DD" 또는 ""), at(빈 문자열)} 로 추가해줘. 알맞은 단계가 없으면 phases 에 {id, title, period, items:[]} 단계를 새로 만들어 뒤에 붙여줘. 기존 항목의 status·at 은 절대 건드리지 말고, 무엇을 어디에 넣었는지 한 줄씩 보고해줘. — 추가할 내용: `);
+}
+function askDone() {
+  const first = phases()[0];
+  SANCHO.ask(`data/db/roadmap.json 의 main 문서에서 "${(first && first.title) || '1단계'}" 의 항목을 완료 처리해줘: 그 단계 phases[].items[] 중 실제로 끝난 것만 status 를 "done" 으로 바꾸고 at 을 오늘(${new Date().toISOString()}) ISO 시각으로 넣어줘. 끝났는지는 산초 저장소(public/m 화면 파일·README·작업기록.md)와 data/db 의 다른 컬렉션을 보고 판단하고, 근거가 없는 항목은 그대로 두고 왜 그대로 뒀는지 알려줘. 보류(hold)·취소(cancel) 항목은 건드리지 말아줘.`);
+}
+
+// ══════════ 화면 ══════════
+function render() {
+  if (!S.ready) return;
+  const root = $('#root');
+  const ps = phases();
+  const all = allItems(), counted = all.filter((i) => COUNTED(stOf(i)));
+  const nDone = counted.filter((i) => stOf(i) === 'done').length;
+  const nWip = all.filter((i) => stOf(i) === 'wip').length;
+  const nTodo = all.filter((i) => stOf(i) === 'todo').length;
+  const pct = counted.length ? Math.round(nDone / counted.length * 100) : 0;
+  const last = all.map((i) => i.at || '').filter(Boolean).sort().pop();
+  const C = 2 * Math.PI * 44;
+  const seg = (k, label) => `<button class="${V.filter === k ? 'on' : ''}" data-act="filter" data-v="${k}">${label}</button>`;
+
+  root.innerHTML = `<div class="mod-head">
+    <div><div class="mod-title">🗺 로드맵 · 진척</div><div class="mod-sub">상태 단추를 누르면 <b>대기 → 진행중 → 완료</b> 로 바뀝니다 · 보류·취소는 ⋯ 메뉴(또는 오른쪽 클릭) · 보류·취소는 진척 분모에서 빠집니다</div></div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-ai" data-act="ai-add">✳ 산초에게 · 로드맵에 추가</button>
+      <button class="btn btn-ai" data-act="ai-done">✳ 산초에게 · 단계 완료 처리</button>
+      <button class="btn" data-act="print">🖨 인쇄 보기</button>
+      <button class="btn btn-primary" data-act="ph-add">＋ 단계 추가</button>
+    </div></div>
+  <div class="rm-hdr">
+    <div class="rm-top">
+      <div class="rm-txt">
+        <div class="rm-eyebrow">${esc((me && me.company) || '우리 회사')} · Roadmap &amp; Progress</div>
+        <div class="rm-title" data-act="title" title="눌러서 제목을 고칩니다">${esc((S.doc && S.doc.title) || '로드맵')}</div>
+        <div class="rm-sub">단계 ${ps.length}개 · 항목 ${all.length}개 (진척 계산 대상 ${counted.length}개)</div>
+      </div>
+      <div class="ring"><svg width="108" height="108" viewBox="0 0 108 108" aria-hidden="true">
+        <circle cx="54" cy="54" r="44" fill="none" stroke="var(--border-light)" stroke-width="10"/>
+        <circle cx="54" cy="54" r="44" fill="none" stroke="var(--success)" stroke-width="10" stroke-linecap="round"
+          stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${(C * (1 - pct / 100)).toFixed(1)}" style="transition:stroke-dashoffset .5s ease"/></svg>
+        <div class="ring-txt"><div class="ring-n">${pct}%</div><div class="ring-l">전체 진척</div></div></div>
+    </div>
+    <div class="rm-meta">
+      <div class="hm"><div class="hm-k">Document</div><div class="hm-v">roadmap / main</div></div>
+      <div class="hm"><div class="hm-k">Done</div><div class="hm-v" style="color:var(--success)">${nDone} / ${counted.length}</div></div>
+      <div class="hm"><div class="hm-k">In Progress</div><div class="hm-v" style="color:var(--warning)">${nWip}</div></div>
+      <div class="hm"><div class="hm-k">Remaining</div><div class="hm-v">${nTodo}</div></div>
+      <div class="hm"><div class="hm-k">Updated</div><div class="hm-v">${esc(day(last) || '—')}</div></div>
+    </div></div>
+  <div class="toolbar"><div class="seg">${seg('all', '전체')}${seg('todo', '대기')}${seg('wip', '진행중')}${seg('done', '완료')}${seg('hold', '보류')}${seg('open', '미완료만')}</div>
+    <span class="sp"></span><span class="fh" style="margin:0">보이는 항목 ${all.filter(show).length} / 전체 ${all.length}</span></div>
+  ${ps.length ? ps.map(phaseHtml).join('') : `<div class="empty"><h3>로드맵이 비어 있습니다</h3>단계를 만들고 항목을 넣으면 진척이 자동으로 계산됩니다.
+    <div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+      <button class="btn btn-primary" data-act="ph-add">＋ 첫 단계 만들기</button>
+      <button class="btn btn-ai" data-act="ai-add">✳ 산초에게: 로드맵 초안 짜줘</button></div></div>`}`;
+}
+const show = (it) => { const s = stOf(it); return V.filter === 'all' || (V.filter === 'open' ? (s === 'todo' || s === 'wip') : s === V.filter); };
+
+function phaseHtml(p, pi) {
+  const its = items(p), counted = its.filter((i) => COUNTED(stOf(i)));
+  const done = counted.filter((i) => stOf(i) === 'done').length;
+  const pct = counted.length ? Math.round(done / counted.length * 100) : 0;
+  const vis = its.filter(show);
+  return `<section class="phase" data-p="${pi}">
+    <div class="ph-h">
+      <span class="ph-t" data-act="ph-title" title="눌러서 단계 이름을 고칩니다">${esc(p.title || '(이름 없는 단계)')}</span>
+      <span class="ph-s">${esc(p.period || '기간 미정')}</span>
+      <span class="ph-bar"><span class="bar"><span class="bar-fill" style="width:${pct}%;background:var(--success)"></span></span>
+        <span class="ph-pct">${done}/${counted.length} · ${pct}%</span></span>
+      <button class="btn btn-sm" data-act="it-add">＋ 항목</button>
+      <span class="it-menu"><button class="btn btn-sm btn-ghost" data-act="ph-menu" title="단계 메뉴">⋯</button>
+        <div class="pop" hidden><div class="um-item" data-act="ph-edit">✎ 단계 수정 (이름·기간)</div><div class="um-item" data-act="ph-up">↑ 단계 위로</div><div class="um-item" data-act="ph-down">↓ 단계 아래로</div>
+          <div class="um-sep"></div><div class="um-item" data-act="ph-del" style="color:var(--danger)">✕ 단계 삭제</div></div></span>
+    </div>
+    ${its.length ? its.map((it, ii) => itemHtml(it, ii)).join('') : '<div class="ph-empty">항목이 없습니다 — 위 ＋ 항목 으로 추가하세요.</div>'}
+    ${its.length && !vis.length ? '<div class="ph-empty">이 조건에 맞는 항목이 없습니다.</div>' : ''}
+  </section>`;
+}
+function itemHtml(it, ii) {
+  const s = stOf(it), late = it.due && it.due < today() && s !== 'done' && COUNTED(s);
+  return `<div class="it ${show(it) ? '' : 'hide'} ${s === 'done' || s === 'cancel' ? 'done-x' : ''}" data-i="${ii}">
+    <button class="st b-pill ${PILL[s]}" data-act="cycle" title="누르면 다음 상태로 바뀝니다 (대기 → 진행중 → 완료)">${LABEL[s]}</button>
+    <div class="itb">
+      <div class="it-t" data-act="it-text" title="눌러서 내용을 고칩니다">${esc(it.text || '(내용 없음)')}</div>
+      <div class="it-m">
+        ${it.owner ? `<span>👤 ${esc(uName(it.owner))}</span>` : ''}
+        ${it.due ? `<span class="${late ? 'late' : ''}">📅 ${esc(it.due)}${late ? ' 지남' : ''}</span>` : ''}
+        ${it.at ? `<span>🕗 ${esc(day(it.at))} 변경</span>` : ''}
+      </div>
+    </div>
+    <span class="it-menu"><button class="btn btn-sm btn-ghost" data-act="it-menu" title="항목 메뉴">⋯</button>
+      <div class="pop" hidden>
+        <div class="um-item" data-act="st" data-v="todo">⬜ 대기</div>
+        <div class="um-item" data-act="st" data-v="wip">🟠 진행중</div>
+        <div class="um-item" data-act="st" data-v="done">✅ 완료</div>
+        <div class="um-item" data-act="st" data-v="hold">⏸ 보류 <span class="fh" style="margin:0">분모 제외</span></div>
+        <div class="um-item" data-act="st" data-v="cancel">⊘ 취소 <span class="fh" style="margin:0">분모 제외</span></div>
+        <div class="um-sep"></div>
+        <div class="um-item" data-act="it-edit">✎ 수정 (내용·담당·기한)</div>
+        <div class="um-item" data-act="it-up">↑ 위로</div><div class="um-item" data-act="it-down">↓ 아래로</div>
+        <div class="um-sep"></div><div class="um-item" data-act="it-del" style="color:var(--danger)">✕ 삭제</div></div></span>
+  </div>`;
+}
+
+// 자리에서 글자 고치기 (제목 · 단계 이름 · 항목 내용)
+function inlineText(el, cur, save) {
+  const inp = document.createElement('input');
+  inp.className = 'rm-inp'; inp.value = cur;
+  el.replaceWith(inp); inp.focus(); inp.select();
+  let fin = false;
+  const done = (ok) => {
+    if (fin) return; fin = true;
+    const val = inp.value.trim(); render();
+    if (ok && val && val !== cur) save(val);
+  };
+  inp.onkeydown = (e) => { if (e.isComposing) return; if (e.key === 'Enter') done(true); else if (e.key === 'Escape') done(false); };
+  inp.onblur = () => done(true);
+}
+
+// ══════════ 동작 ══════════
+const closePops = () => document.querySelectorAll('.it-menu .pop').forEach((p) => { p.hidden = true; });
+const ACT = {
+  'filter': (c, el) => { V.filter = el.dataset.v; render(); },
+  'ai-add': askAdd, 'ai-done': askDone,
+  'print': printView,
+  'title': (c, el) => inlineText(el, (S.doc && S.doc.title) || '', (t) => save({ title: t })),
+  'ph-add': () => openPhaseModal(null),
+  'ph-menu': (c, el) => { const pop = el.nextElementSibling, was = pop.hidden; closePops(); pop.hidden = !was; },
+  'it-menu': (c, el) => { const pop = el.nextElementSibling, was = pop.hidden; closePops(); pop.hidden = !was; },
+  'ph-title': (c, el) => inlineText(el, (c.p && c.p.title) || '', (t) => mutate(c.pi, (p) => { p.title = t; })),
+  'ph-edit': (c) => openPhaseModal(c.pi),
+  'ph-up': (c) => movePhase(c.pi, -1), 'ph-down': (c) => movePhase(c.pi, 1),
+  'ph-del': (c) => { if (!confirm(`"${(c.p && c.p.title) || ''}" 단계를 항목 ${items(c.p).length}개와 함께 삭제하시겠습니까?`)) return; savePhases(clone(phases()).filter((_, i) => i !== c.pi)); },
+  'it-add': (c) => openItemModal(c.pi, null),
+  'it-edit': (c) => openItemModal(c.pi, c.ii),
+  'it-text': (c, el) => inlineText(el, (c.it && c.it.text) || '', (t) => mutate(c.pi, (p) => { p.items[c.ii] = { ...p.items[c.ii], text: t }; })),
+  'cycle': (c) => setStatus(c.pi, c.ii, CYCLE[stOf(c.it)] || 'wip'),
+  'st': (c, el) => setStatus(c.pi, c.ii, el.dataset.v),
+  'it-up': (c) => moveItem(c.pi, c.ii, -1), 'it-down': (c) => moveItem(c.pi, c.ii, 1),
+  'it-del': (c) => { if (!confirm(`"${(c.it && c.it.text) || ''}" 항목을 삭제하시겠습니까?`)) return; mutate(c.pi, (p) => { p.items = items(p).filter((_, i) => i !== c.ii); }); },
+};
+function movePhase(pi, d) { const ps = clone(phases()); const j = pi + d; if (j < 0 || j >= ps.length) return; [ps[pi], ps[j]] = [ps[j], ps[pi]]; savePhases(ps); }
+function moveItem(pi, ii, d) { mutate(pi, (p) => { const its = items(p), j = ii + d; if (j < 0 || j >= its.length) return; [its[ii], its[j]] = [its[j], its[ii]]; p.items = its; }); }
+
+function ctx(el) {
+  const ph = el.closest('[data-p]'), itEl = el.closest('[data-i]');
+  const pi = ph ? Number(ph.dataset.p) : -1, ii = itEl ? Number(itEl.dataset.i) : -1;
+  const p = phases()[pi], it = p ? items(p)[ii] : null;
+  return { pi, ii, p, it };
+}
+$('#root').addEventListener('click', (e) => {
+  const el = e.target.closest('[data-act]'); if (!el) return;
+  const act = el.dataset.act;
+  if (act !== 'it-menu' && act !== 'ph-menu') closePops();
+  ACT[act] && ACT[act](ctx(el), el);
+});
+$('#root').addEventListener('contextmenu', (e) => {      // 오른쪽 클릭 = 항목 메뉴 (보류·취소)
+  const row = e.target.closest('.it'); if (!row) return;
+  e.preventDefault(); closePops();
+  const pop = row.querySelector('.it-menu .pop'); if (pop) pop.hidden = false;
+});
+document.addEventListener('click', (e) => { if (!e.target.closest('.it-menu')) closePops(); });
+
+// ── 모달 셸 (okr.html 과 같은 방식) ──
+let mOnOk = null;
+function openModal(title, html, onOk) {
+  $('#mTitle').textContent = title; $('#mBody').innerHTML = html; mOnOk = onOk;
+  $('#modal').classList.add('active');
+  const first = $('#mBody').querySelector('input,select,textarea'); if (first) first.focus();
+}
+function closeModal() { $('#modal').classList.remove('active'); mOnOk = null; }
+$('#mOk').onclick = () => mOnOk && mOnOk();
+$('#modal').addEventListener('click', (e) => { if (e.target === $('#modal') || e.target.closest('[data-close]')) closeModal(); });
+$('#mBody').addEventListener('keydown', (e) => { if (e.isComposing) return; if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); mOnOk && mOnOk(); } });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeModal(); closePops(); } });
+
+function openPhaseModal(pi) {
+  const p = pi != null ? phases()[pi] : null;
+  openModal(p ? '단계 수정' : '단계 추가', `
+    <div class="fg"><label class="fl">단계 이름</label><input class="fi" id="fT" placeholder="예: 2단계 · 업무 화면" value="${esc(p && p.title)}"></div>
+    <div class="fg"><label class="fl">기간</label><input class="fi" id="fP" placeholder="예: 2026 10월, 2026-10 ~ 12" value="${esc(p && p.period)}"></div>`, async () => {
+    const t = v('#fT'); if (!t) return toast('단계 이름을 입력하세요.', 'err');
+    const ps = clone(phases());
+    if (p) { ps[pi] = { ...ps[pi], title: t, period: v('#fP') }; }
+    else ps.push({ id: uid('ph_'), title: t, period: v('#fP'), items: [] });
+    await savePhases(ps); closeModal(); toast('저장했습니다', 'ok');
+  });
+}
+function openItemModal(pi, ii) {
+  const p = phases()[pi], it = ii != null ? items(p)[ii] : null;
+  const opt = (val, label, sel) => `<option value="${esc(val)}" ${sel ? 'selected' : ''}>${esc(label)}</option>`;
+  const users = S.users.length ? S.users.filter((u) => u.active !== false) : [{ id: 'owner', name: (me && me.name) || '주인', title: '' }];
+  openModal(it ? '항목 수정' : '항목 추가', `
+    <div class="fh" style="margin-bottom:10px">단계: <b>${esc(p && p.title)}</b></div>
+    <div class="fg"><label class="fl">내용</label><input class="fi" id="fT" placeholder="예: 메신저 화면 이식" value="${esc(it && it.text)}"></div>
+    <div class="fg row">
+      <div><label class="fl">담당</label><select class="fs" id="fO">${opt('', '— 지정 안 함 —', !(it && it.owner))}${users.map((u) => opt(u.id, `${u.name} ${u.title || ''}`.trim(), it && it.owner === u.id)).join('')}</select></div>
+      <div><label class="fl">기한</label><input class="fi" type="date" id="fD" value="${esc(it && it.due)}"></div>
+    </div>
+    ${it ? `<div class="fg"><label class="fl">상태</label><select class="fs" id="fS">${Object.keys(LABEL).map((k) => opt(k, LABEL[k], stOf(it) === k)).join('')}</select></div>` : ''}`, async () => {
+    const t = v('#fT'); if (!t) return toast('항목 내용을 입력하세요.', 'err');
+    const ps = clone(phases()); const tp = ps[pi]; if (!tp) return closeModal();
+    tp.items = Array.isArray(tp.items) ? tp.items : [];
+    if (it) { const st = v('#fS') || stOf(it); tp.items[ii] = { ...tp.items[ii], text: t, owner: v('#fO'), due: v('#fD'), status: st, at: st !== stOf(it) ? new Date().toISOString() : (it.at || '') }; }
+    else tp.items.push({ id: uid('i_'), text: t, status: 'todo', owner: v('#fO'), due: v('#fD'), at: '' });
+    await savePhases(ps); closeModal(); toast('저장했습니다', 'ok');
+  });
+}
+
+// ── 인쇄 보기 ──
+function printView() {
+  const all = allItems(), counted = all.filter((i) => COUNTED(stOf(i)));
+  const pct = counted.length ? Math.round(counted.filter((i) => stOf(i) === 'done').length / counted.length * 100) : 0;
+  $('#printView').innerHTML = `<h1>${esc((S.doc && S.doc.title) || '로드맵')}</h1>
+    <p>전체 진척 ${pct}% · 단계 ${phases().length}개 · 항목 ${all.length}개 (진척 대상 ${counted.length}개) · 출력 ${esc(new Date().toLocaleString('ko-KR'))}</p>
+    ${phases().map((p) => { const its = items(p), c = its.filter((i) => COUNTED(stOf(i))); const d = c.filter((i) => stOf(i) === 'done').length;
+      return `<h2>${esc(p.title || '')} — ${esc(p.period || '기간 미정')} (${d}/${c.length} · ${c.length ? Math.round(d / c.length * 100) : 0}%)</h2>
+      <table><tr><th style="width:70px">상태</th><th>내용</th><th style="width:90px">담당</th><th style="width:100px">기한</th><th style="width:100px">마지막 변경</th></tr>
+      ${its.map((it) => `<tr><td>${LABEL[stOf(it)]}</td><td>${esc(it.text || '')}</td><td>${esc(uName(it.owner))}</td><td>${esc(it.due || '')}</td><td>${esc(day(it.at))}</td></tr>`).join('') || '<tr><td colspan="5">항목 없음</td></tr>'}</table>`; }).join('')}`;
+  window.print();
+}
+
+async function boot() {
+  onSnapshot(REF(), async (s) => {
+    if (!s.exists()) {                              // 처음 열 때 — 화면이 비지 않게 씨앗 로드맵을 심는다
+      if (!S.seeded) { S.seeded = true; try { await setDoc(REF(), SEED); toast('처음이라 기본 로드맵을 만들었습니다', 'ok'); } catch (e) { toast('로드맵 생성 실패: ' + e.message, 'err'); } }
+      S.doc = S.doc || clone(SEED);
+    } else S.doc = s.data();
+    S.ready = true; render();
+  }, (e) => { S.ready = true; toast('로드맵 읽기 실패: ' + e.message, 'err'); render(); });
+  onSnapshot(collection(db, 'users'), (s) => { S.users = s.docs.map((d) => ({ id: d.id, ...d.data() })); render(); });
+}
+window.fb.me().then((u) => { me = u; boot(); });
+</script></body></html>
